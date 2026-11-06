@@ -122,12 +122,23 @@ fun WishlistScreen(
                   .clip(RoundedCornerShape(12.dp))
                   .background(JTSurfaceVariant)
               ) {
-                Image(
-                  painter = painterResource(id = product.drawableRes),
-                  contentDescription = product.title,
-                  contentScale = ContentScale.Crop,
-                  modifier = Modifier.fillMaxSize()
-                )
+                if (!product.imageUrl.isNullOrBlank()) {
+                  coil.compose.AsyncImage(
+                    model = product.imageUrl,
+                    contentDescription = product.title,
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(id = product.drawableRes),
+                    error = painterResource(id = product.drawableRes),
+                    modifier = Modifier.fillMaxSize()
+                  )
+                } else {
+                  Image(
+                    painter = painterResource(id = product.drawableRes),
+                    contentDescription = product.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                  )
+                }
               }
 
               Spacer(modifier = Modifier.width(12.dp))

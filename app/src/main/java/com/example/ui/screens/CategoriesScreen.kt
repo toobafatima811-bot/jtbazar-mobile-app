@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import coil.compose.AsyncImage
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -43,6 +44,7 @@ fun CategoriesScreen(
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
+  val categories by MarketplaceRepository.categories.collectAsState()
 
   var showAddressDialog by remember { mutableStateOf(false) }
   var selectedChip by remember { mutableStateOf("All Categories") }
@@ -317,11 +319,11 @@ fun CategoriesScreen(
         }
       }
 
-      // 5. 2-Column Grid of 10 Categories
+      // 5. 2-Column Grid of Categories
       val filteredCategories = if (searchQuery.isBlank()) {
-        MarketplaceRepository.categories
+        categories
       } else {
-        MarketplaceRepository.categories.filter {
+        categories.filter {
           it.title.contains(searchQuery, ignoreCase = true) ||
             it.sampleItems.contains(searchQuery, ignoreCase = true)
         }
@@ -385,12 +387,23 @@ fun CategoryCard(
           .height(98.dp)
           .background(JTSurfaceVariant)
       ) {
-        Image(
-          painter = painterResource(id = category.drawableRes),
-          contentDescription = category.title,
-          contentScale = ContentScale.Crop,
-          modifier = Modifier.fillMaxSize()
-        )
+        if (!category.imageUrl.isNullOrBlank()) {
+          AsyncImage(
+            model = category.imageUrl,
+            contentDescription = category.title,
+            contentScale = ContentScale.Crop,
+            placeholder = painterResource(id = category.drawableRes),
+            error = painterResource(id = category.drawableRes),
+            modifier = Modifier.fillMaxSize()
+          )
+        } else {
+          Image(
+            painter = painterResource(id = category.drawableRes),
+            contentDescription = category.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+          )
+        }
 
         // Badge if present (Fast Delivery, Fresh Home Chefs, Coming Soon)
         if (category.badge != null) {

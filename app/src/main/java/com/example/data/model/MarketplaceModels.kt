@@ -24,7 +24,8 @@ data class Product(
   val discountPercent: Int,
   val rating: Double,
   val reviewCount: Int,
-  @DrawableRes val drawableRes: Int,
+  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.item_ceramic_plate,
+  val imageUrl: String? = null,
   val badge: String? = null,
   val inStockText: String = "In Stock",
   val savingsText: String? = null,
@@ -65,7 +66,8 @@ data class CategoryItem(
   val title: String,
   val countText: String,
   val sampleItems: String,
-  @DrawableRes val drawableRes: Int,
+  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.cat_groceries,
+  val imageUrl: String? = null,
   val badge: String? = null
 )
 
@@ -113,6 +115,7 @@ data class OrderRecord(
   val grandTotal: Int,
   val address: DeliveryAddress,
   val deliveryNote: String,
-  val statusHeader: String = "2 Vendors Processing",
-  val timeline: List<OrderTimelineStep>
+  val statusHeader: String = "Processing Order",
+  val orderStatus: String = "PENDING",
+  val timeline: List<OrderTimelineStep> = emptyList()
 )

@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import coil.compose.AsyncImage
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -64,6 +65,82 @@ fun ProductDetailScreen(
   var craftStoryExpanded by remember { mutableStateOf(true) }
   var deliveryGuaranteeExpanded by remember { mutableStateOf(false) }
   var reviewsExpanded by remember { mutableStateOf(false) }
+
+  var showWriteReviewDialog by remember { mutableStateOf(false) }
+  var reviewRating by remember { mutableIntStateOf(5) }
+  var reviewTitle by remember { mutableStateOf("") }
+  var reviewComment by remember { mutableStateOf("") }
+  val allReviews by MarketplaceRepository.reviews.collectAsState()
+  val productReviews = allReviews.filter { it.productId == product.id }
+
+  if (showWriteReviewDialog) {
+    AlertDialog(
+      onDismissRequest = { showWriteReviewDialog = false },
+      title = { Text("Write a Product Review", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Rating", fontSize = 12.sp, color = JTTextSecondary)
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (i in 1..5) {
+              IconButton(onClick = { reviewRating = i }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                  imageVector = if (i <= reviewRating) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                  contentDescription = "$i Stars",
+                  tint = JTAmber,
+                  modifier = Modifier.size(24.dp)
+                )
+              }
+            }
+          }
+          OutlinedTextField(
+            value = reviewTitle,
+            onValueChange = { reviewTitle = it },
+            label = { Text("Headline / Title") },
+            placeholder = { Text("e.g. Excellent handcraft quality!") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = reviewComment,
+            onValueChange = { reviewComment = it },
+            label = { Text("Your Review Details") },
+            placeholder = { Text("Describe what you liked about this item...") },
+            minLines = 3,
+            maxLines = 5,
+            modifier = Modifier.fillMaxWidth()
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            if (reviewComment.isNotBlank()) {
+              MarketplaceRepository.submitProductReview(
+                productId = product.id,
+                rating = reviewRating,
+                title = reviewTitle.ifBlank { "Verified Review" },
+                comment = reviewComment
+              )
+              showWriteReviewDialog = false
+              reviewTitle = ""
+              reviewComment = ""
+              Toast.makeText(context, "Review submitted! Thank you!", Toast.LENGTH_SHORT).show()
+            } else {
+              Toast.makeText(context, "Please enter your review details", Toast.LENGTH_SHORT).show()
+            }
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
+        ) {
+          Text("Submit Review")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showWriteReviewDialog = false }) {
+          Text("Cancel", color = JTTextSecondary)
+        }
+      }
+    )
+  }
 
   if (showAddressDialog) {
     AddressSelectionSheet(
@@ -267,12 +344,23 @@ fun ProductDetailScreen(
             .clip(RoundedCornerShape(20.dp))
             .background(JTSurfaceVariant)
         ) {
-          Image(
-            painter = painterResource(id = product.drawableRes),
-            contentDescription = product.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-          )
+          if (!product.imageUrl.isNullOrBlank()) {
+            AsyncImage(
+              model = product.imageUrl,
+              contentDescription = product.title,
+              contentScale = ContentScale.Crop,
+              placeholder = painterResource(id = product.drawableRes),
+              error = painterResource(id = product.drawableRes),
+              modifier = Modifier.fillMaxSize()
+            )
+          } else {
+            Image(
+              painter = painterResource(id = product.drawableRes),
+              contentDescription = product.title,
+              contentScale = ContentScale.Crop,
+              modifier = Modifier.fillMaxSize()
+            )
+          }
 
           // Discount Tag
           Column(
@@ -1022,6 +1110,36 @@ fun ProductDetailScreen(
                 modifier = Modifier.padding(top = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
               ) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Text(
+                    text = "${productReviews.size + 2} Verified Customer Reviews",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = JTTextSecondary
+                  )
+                  TextButton(
+                    onClick = { showWriteReviewDialog = true },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                  ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = JTPurplePrimary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Write a Review", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary)
+                  }
+                }
+
+                // Render newly submitted reviews
+                productReviews.forEach { rev ->
+                  ReviewSnippet(
+                    name = rev.userName,
+                    comment = rev.comment,
+                    rating = rev.rating
+                  )
+                }
+
                 ReviewSnippet(
                   name = "Fatima Tariq, Lahore",
                   comment = "SubhanAllah the hand-painted cobalt blue glaze is so gorgeous! Packaged very safely.",

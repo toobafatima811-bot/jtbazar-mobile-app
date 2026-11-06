@@ -149,8 +149,8 @@ fun DiscoverScreen(
         )
       }
 
-      val sampleProducts = MarketplaceRepository.sampleProducts
-      items(sampleProducts) { prod ->
+      val products by MarketplaceRepository.products.collectAsState()
+      items(products) { prod ->
         Surface(
           shape = RoundedCornerShape(14.dp),
           color = JTCardBg,
@@ -169,12 +169,23 @@ fun DiscoverScreen(
                 .clip(RoundedCornerShape(10.dp))
                 .background(JTSurfaceVariant)
             ) {
-              Image(
-                painter = painterResource(id = prod.drawableRes),
-                contentDescription = prod.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-              )
+              if (!prod.imageUrl.isNullOrBlank()) {
+                coil.compose.AsyncImage(
+                  model = prod.imageUrl,
+                  contentDescription = prod.title,
+                  contentScale = ContentScale.Crop,
+                  placeholder = painterResource(id = prod.drawableRes),
+                  error = painterResource(id = prod.drawableRes),
+                  modifier = Modifier.fillMaxSize()
+                )
+              } else {
+                Image(
+                  painter = painterResource(id = prod.drawableRes),
+                  contentDescription = prod.title,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
+                )
+              }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

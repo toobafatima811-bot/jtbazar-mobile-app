@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import coil.compose.AsyncImage
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -646,12 +647,23 @@ fun ProductCard(
           .height(145.dp)
           .background(JTSurfaceVariant)
       ) {
-        Image(
-          painter = painterResource(id = product.drawableRes),
-          contentDescription = product.title,
-          contentScale = ContentScale.Crop,
-          modifier = Modifier.fillMaxSize()
-        )
+        if (!product.imageUrl.isNullOrBlank()) {
+          AsyncImage(
+            model = product.imageUrl,
+            contentDescription = product.title,
+            contentScale = ContentScale.Crop,
+            placeholder = painterResource(id = product.drawableRes),
+            error = painterResource(id = product.drawableRes),
+            modifier = Modifier.fillMaxSize()
+          )
+        } else {
+          Image(
+            painter = painterResource(id = product.drawableRes),
+            contentDescription = product.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+          )
+        }
 
         // Discount tag top left
         if (product.badge != null) {

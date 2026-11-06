@@ -16,6 +16,9 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
+    // Initialize Supabase session persistence
+    com.example.data.supabase.SupabaseAuthService.init(applicationContext)
+
     enableEdgeToEdge(
       statusBarStyle = SystemBarStyle.light(
         android.graphics.Color.WHITE,
