@@ -1,0 +1,6 @@
+{
+  "name": "JTBazar",
+  "description": "Authentic Pakistani marketplace and express fresh food delivery app based in Lahore.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
