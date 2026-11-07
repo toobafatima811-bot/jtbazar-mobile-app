@@ -164,3 +164,9 @@ data class SupabaseNotificationDto(
   val isRead: Boolean = false,
   val createdAt: String
 )
+
+data class SupabaseStoreSettingsDto(
+  val deliveryFee: Int,
+  val codEnabled: Boolean,
+  val returnWindowDays: Int
+)
