@@ -212,7 +212,7 @@ object SupabaseAuthService {
           phone = metadata?.optString("phone", "") ?: "",
           fullName = metadata?.optString("full_name", "JTBazar Customer") ?: "JTBazar Customer"
         )
-        val session = SupabaseSession(accessToken, refreshToken, user)
+        val session = SupabaseSession(accessToken = accessToken, refreshToken = refreshToken, user = user)
         SupabaseClient.setSession(session)
         persistSession(context, session)
         val profile = SupabaseProfile(user.id, user.fullName, user.phone ?: "", user.email ?: "")
