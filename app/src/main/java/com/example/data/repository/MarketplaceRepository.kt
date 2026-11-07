@@ -313,6 +313,7 @@ object MarketplaceRepository {
               title = dto.title,
               vendor = dto.vendor,
               category = dto.category,
+              categoryId = dto.categoryId,
               price = dto.price,
               originalPrice = dto.originalPrice,
               discountPercent = dto.discountPercent,
