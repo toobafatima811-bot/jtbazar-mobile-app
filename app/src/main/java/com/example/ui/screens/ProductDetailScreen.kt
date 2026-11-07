@@ -57,7 +57,7 @@ fun ProductDetailScreen(
   var showAddressDialog by remember { mutableStateOf(false) }
   var quantity by remember { mutableIntStateOf(1) }
   var selectedPaletteName by remember {
-    mutableStateOf(product.palettes.firstOrNull()?.name ?: "Royal Cobalt Blue")
+    mutableStateOf(product.palettes.firstOrNull()?.name ?: "")
   }
   var selectedSizeIndex by remember { mutableIntStateOf(0) }
 
