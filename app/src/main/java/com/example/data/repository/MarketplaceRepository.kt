@@ -63,6 +63,11 @@ object MarketplaceRepository {
 
   fun selectProduct(product: Product) {
     _selectedProduct.value = product
+    scope.launch {
+      SupabaseApiService.fetchProductReviews(product.id).onSuccess { rows ->
+        _reviews.update { current -> current.filterNot { it.productId == product.id } + rows }
+      }.onFailure { _errorMessage.value = it.message }
+    }
   }
 
   // ----------------------------------------------------
@@ -411,7 +416,30 @@ object MarketplaceRepository {
   // REVIEWS & CASES
   // ----------------------------------------------------
   fun submitProductReview(productId: String, rating: Int, title: String, comment: String) {
-    _errorMessage.value = "Reviews must be submitted for a delivered order item. This app does not yet have the required order-item review screen."
+    val user = SupabaseClient.currentUser.value
+    if (user == null) { _errorMessage.value = "Please sign in first."; return }
+    val eligibleOrder = _orders.value.firstOrNull { order ->
+      order.orderStatus == "DELIVERED" && order.items.any { it.product.id == productId }
+    }
+    if (eligibleOrder == null) {
+      _errorMessage.value = "A delivered order containing this product is required before you can review it."
+      return
+    }
+    val review = SupabaseReviewDto(
+      id = "", productId = productId, orderId = eligibleOrder.orderId,
+      userId = user.id, userName = "", rating = rating, title = title,
+      comment = comment, createdAt = ""
+    )
+    scope.launch {
+      SupabaseApiService.submitProductReview(review)
+        .onSuccess {
+          SupabaseApiService.fetchProductReviews(productId).onSuccess { rows ->
+            _reviews.update { current -> current.filterNot { it.productId == productId } + rows }
+          }
+          _errorMessage.value = "Your review has been submitted for moderation."
+        }
+        .onFailure { _errorMessage.value = it.message }
+    }
   }
 
   fun submitReturnRequest(orderId: String, reason: String, description: String) {
