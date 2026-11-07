@@ -18,13 +18,33 @@ object SupabaseApiService {
   // PRODUCTS
   // ----------------------------------------------------
 
-  suspend fun fetchProducts(category:String?=null,isFeatured:Boolean?=null,limit:Int=50):Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO){
-    try{
-      val p=mutableListOf("select=*,category:categories(name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)","publication_status=eq.published","moderation_status=eq.approved","vendor_hidden=eq.false","order=created_at.desc","limit=${limit.coerceIn(1,100)}")
-      if(!category.isNullOrBlank())p.add("category_id=eq.${URLEncoder.encode(category.trim(),"UTF-8")}")
-      if(isFeatured==true)p.add("is_featured=eq.true")
-      SupabaseClient.get("products?${p.joinToString("&")}").mapCatching{json->parseProductsJson(json)}
-    }catch(e:Exception){Log.e(TAG,"fetchProducts error",e);Result.failure(e)}
+  suspend fun fetchProducts(category: String? = null, isFeatured: Boolean? = null, limit: Int = 50): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
+    try {
+      val params = mutableListOf("select=*,category:categories(name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)", "publication_status=eq.published", "moderation_status=eq.approved", "vendor_hidden=eq.false", "order=created_at.desc", "limit=${limit.coerceIn(1, 100)}")
+      if (!category.isNullOrBlank()) params.add("category_id=eq.${URLEncoder.encode(category.trim(), "UTF-8")}")
+      if (isFeatured == true) params.add("is_featured=eq.true")
+      val response = SupabaseClient.get("products?${params.joinToString("&")}")
+      response.mapCatching { json ->
+        val products = JSONArray(json)
+        if (products.length() == 0) return@mapCatching emptyList()
+        val ids = JSONArray()
+        for (i in 0 until products.length()) ids.put(products.getJSONObject(i).optString("id"))
+        val request = JSONObject().put("product_ids", ids).toString()
+        val inventory = SupabaseClient.rpc("get_public_inventory", request).getOrNull()?.let(::JSONArray)
+        val availability = SupabaseClient.rpc("get_public_availability", request).getOrNull()?.let(::JSONArray)
+        val quantities = mutableMapOf<String, Int>()
+        if (inventory != null) for (i in 0 until inventory.length()) {
+          val row = inventory.getJSONObject(i); val id = row.optString("product_id")
+          quantities[id] = (quantities[id] ?: 0) + row.optInt("available_quantity", 0)
+        }
+        val available = mutableMapOf<String, Boolean>()
+        if (availability != null) for (i in 0 until availability.length()) {
+          val row = availability.getJSONObject(i); val id = row.optString("product_id")
+          available[id] = (available[id] ?: false) || row.optBoolean("is_available", false)
+        }
+        parseProductsJson(json, quantities, available, availability != null)
+      }
+    } catch (e: Exception) { Log.e(TAG, "fetchProducts error", e); Result.failure(e) }
   }
 
   suspend fun searchProducts(query:String):Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO){
@@ -33,14 +53,35 @@ object SupabaseApiService {
 
   suspend fun fetchProductById(id:String):Result<SupabaseProductDto> = fetchProducts(limit=100).mapCatching{it.firstOrNull{p->p.id==id}?:throw IOException("Product not found")}
 
-  private fun parseProductsJson(jsonStr:String):List<SupabaseProductDto>{
-    val a=JSONArray(jsonStr);return (0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null
-      val c=o.optJSONObject("category")?:o.optJSONArray("category")?.optJSONObject(0);val seller=o.optJSONObject("seller")?:o.optJSONArray("seller")?.optJSONObject(0)
-      val base=o.optDouble("price",0.0);val discount=o.optDouble("discount_percent",0.0).toInt().coerceIn(0,100);val price=(base*(100-discount)/100.0).toInt()
-      val images=o.optJSONArray("images");var image:String?=null;if(images!=null){val rows=(0 until images.length()).mapNotNull{images.optJSONObject(it)}.sortedWith(compareByDescending<JSONObject>{it.optBoolean("is_primary")}.thenBy{it.optInt("sort_order")});val im=rows.firstOrNull();if(im!=null){val direct=if(im.isNull("image_url"))"" else im.optString("image_url");val path=if(im.isNull("storage_path"))"" else im.optString("storage_path");image=direct.takeIf{it.startsWith("https://")}?:path.takeIf{it.isNotBlank()}?.let{"${SupabaseConfig.storageUrl}/object/public/product-images/${it.replace(" ","%20")}"} }}
-      val colors=mutableListOf<String>();val sizes=mutableListOf<String>();val vs=o.optJSONArray("variants");if(vs!=null)for(j in 0 until vs.length()){val v=vs.optJSONObject(j)?:continue;if(!v.optBoolean("is_active",true))continue;val l=v.optString("option_label");val value=v.optString("option_value");if(l.contains("color",true)||l.contains("colour",true))colors.add(value);if(l.contains("size",true))sizes.add(value)}
-      val highlights=mutableListOf<String>();val specs=o.optJSONArray("specifications");if(specs!=null)for(j in 0 until specs.length()){val v=specs.optJSONObject(j)?:continue;if(v.optString("label").isNotBlank()&&v.optString("value").isNotBlank())highlights.add("${v.optString("label")}: ${v.optString("value")}")}
-      SupabaseProductDto(id=o.optString("id"),title=o.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=c?.optString("name")?:"",price=price,originalPrice=base.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=image,badge=if(discount>0)"$discount% OFF" else null,inStock=false,stockQuantity=0,inStockText="Stock status unavailable",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=o.optString("description",""),highlights=highlights,palettes=colors.distinct(),sizes=sizes.distinct(),isArtisanCollection=false,isFeatured=o.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
+  private fun parseProductsJson(jsonStr: String, quantities: Map<String, Int> = emptyMap(), availability: Map<String, Boolean> = emptyMap(), availabilityKnown: Boolean = false): List<SupabaseProductDto> {
+    val rows = JSONArray(jsonStr)
+    return (0 until rows.length()).mapNotNull { index ->
+      val obj = rows.optJSONObject(index) ?: return@mapNotNull null
+      val category = obj.optJSONObject("category") ?: obj.optJSONArray("category")?.optJSONObject(0)
+      val seller = obj.optJSONObject("seller") ?: obj.optJSONArray("seller")?.optJSONObject(0)
+      val basePrice = obj.optDouble("price", 0.0)
+      val discount = obj.optDouble("discount_percent", 0.0).toInt().coerceIn(0, 100)
+      val price = (basePrice * (100 - discount) / 100.0).toInt()
+      val imageRows = obj.optJSONArray("images")
+      val primaryImage = if (imageRows == null) null else (0 until imageRows.length()).mapNotNull { imageRows.optJSONObject(it) }.sortedWith(compareByDescending<JSONObject> { it.optBoolean("is_primary") }.thenBy { it.optInt("sort_order") }).firstOrNull()
+      val directImage = primaryImage?.optString("image_url", "") ?: ""
+      val storagePath = primaryImage?.optString("storage_path", "") ?: ""
+      val imageUrl = directImage.takeIf { it.startsWith("https://") } ?: storagePath.takeIf { it.isNotBlank() }?.let { "${SupabaseConfig.storageUrl}/object/public/product-images/${it.replace(" ", "%20")}" }
+      val palettes = mutableListOf<String>(); val sizes = mutableListOf<String>(); val variants = obj.optJSONArray("variants")
+      if (variants != null) for (i in 0 until variants.length()) {
+        val variant = variants.optJSONObject(i) ?: continue
+        if (!variant.optBoolean("is_active", true)) continue
+        val label = variant.optString("option_label"); val value = variant.optString("option_value")
+        if (label.contains("color", true) || label.contains("colour", true)) palettes.add(value)
+        if (label.contains("size", true)) sizes.add(value)
+      }
+      val highlights = mutableListOf<String>(); val specs = obj.optJSONArray("specifications")
+      if (specs != null) for (i in 0 until specs.length()) {
+        val spec = specs.optJSONObject(i) ?: continue
+        if (spec.optString("label").isNotBlank() && spec.optString("value").isNotBlank()) highlights.add(spec.optString("label") + ": " + spec.optString("value"))
+      }
+      val id = obj.optString("id"); val known = availabilityKnown && availability.containsKey(id); val stock = known && availability[id] == true
+      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
     }
   }
 
@@ -126,11 +167,11 @@ object SupabaseApiService {
             SupabaseAddressDto(
               id = obj.optString("id", ""),
               userId = obj.optString("user_id", userId),
-              name = obj.optString("name", obj.optString("recipient_name", "")),
+              name = obj.optString("recipient_name", ""),
               phone = obj.optString("phone", ""),
-              addressLine = obj.optString("address_line", obj.optString("address", "")),
-              area = obj.optString("area", ""),
-              city = obj.optString("city", "Lahore"),
+              addressLine = listOf(obj.optString("address_line_1", ""), obj.optString("address_line_2", "")).filter { it.isNotBlank() }.joinToString(", "),
+              area = "",
+              city = obj.optString("city", ""),
               province = obj.optString("province", "Punjab"),
               postalCode = if (obj.has("postal_code")) obj.optString("postal_code") else null,
               tag = obj.optString("tag", "HOME"),
@@ -148,22 +189,19 @@ object SupabaseApiService {
 
   suspend fun saveAddress(address: SupabaseAddressDto): Result<String> = withContext(Dispatchers.IO) {
     val json = JSONObject().apply {
-      if (address.id.isNotBlank()) put("id", address.id)
+      if (address.id.isNotBlank() && !address.id.startsWith("addr_")) put("id", address.id)
       put("user_id", address.userId)
-      put("name", address.name)
+      put("recipient_name", address.name)
       put("phone", address.phone)
-      put("address_line", address.addressLine)
-      put("area", address.area)
+      put("address_line_1", address.addressLine)
       put("city", address.city)
       put("province", address.province)
-      put("tag", address.tag)
+      if (!address.postalCode.isNullOrBlank()) put("postal_code", address.postalCode)
       put("is_default", address.isDefault)
     }
-    if (address.id.isNotBlank()) {
-      SupabaseClient.patch("customer_addresses?id=eq.${address.id}", json.toString())
-    } else {
-      SupabaseClient.post("customer_addresses", json.toString())
-    }
+    if (address.id.isNotBlank() && !address.id.startsWith("addr_")) {
+      SupabaseClient.patch("customer_addresses?id=eq.${address.id}&user_id=eq.${address.userId}", json.toString())
+    } else SupabaseClient.post("customer_addresses", json.toString())
   }
 
   // ----------------------------------------------------
