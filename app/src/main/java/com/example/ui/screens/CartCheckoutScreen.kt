@@ -373,7 +373,7 @@ fun CartCheckoutScreen(
                 )
               } else {
                 Text(
-                  text = "No delivery address selected. Please add your Lahore or Pakistan delivery address to proceed with Cash on Delivery.",
+                  text = "No delivery address selected. Please add your delivery address to proceed with Cash on Delivery.",
                   fontSize = 12.sp,
                   color = JTRed,
                   fontWeight = FontWeight.Medium
@@ -938,12 +938,7 @@ private fun VendorItemsCard(
               }
             }
 
-            val subtitleText = when (cartItem.product.id) {
-              "prod_multani_plate" -> "Glazed Clay • Multan City"
-              "prod_shan_biryani" -> "Rs. 380 each"
-              "prod_pure_honey" -> "100% Natural Organic"
-              else -> cartItem.product.category
-            }
+            val subtitleText = cartItem.product.category
             Text(
               text = subtitleText,
               fontSize = 10.sp,
