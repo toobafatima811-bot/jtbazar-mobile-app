@@ -80,6 +80,10 @@ fun AccountScreen(
   var authPhone by remember { mutableStateOf("") }
   var authLoading by remember { mutableStateOf(false) }
   var authError by remember { mutableStateOf<String?>(null) }
+  var showOtpDialog by remember { mutableStateOf(false) }
+  var pendingSignupEmail by remember { mutableStateOf("") }
+  var signupOtp by remember { mutableStateOf("") }
+  var otpError by remember { mutableStateOf<String?>(null) }
 
   // Edit Profile form states
   var editFullName by remember { mutableStateOf(userProfile?.fullName ?: selectedAddress?.name ?: "") }
@@ -229,8 +233,18 @@ fun AccountScreen(
                   val res = SupabaseAuthService.signUp(authEmail, authPassword, authFullName, authPhone, context)
                   authLoading = false
                   if (res.isSuccess) {
-                    showAuthDialog = false
-                    Toast.makeText(context, "Account created! Welcome to JTBazar!", Toast.LENGTH_SHORT).show()
+                    val createdSession = res.getOrNull()
+                    if (createdSession?.accessToken.isNullOrBlank()) {
+                      // Website requires email OTP before a new account is considered signed in.
+                      pendingSignupEmail = authEmail.trim()
+                      signupOtp = ""
+                      otpError = null
+                      showAuthDialog = false
+                      showOtpDialog = true
+                    } else {
+                      showAuthDialog = false
+                      Toast.makeText(context, "Account created. You are signed in.", Toast.LENGTH_SHORT).show()
+                    }
                   } else {
                     authError = res.exceptionOrNull()?.message ?: "Registration failed"
                   }
@@ -266,6 +280,70 @@ fun AccountScreen(
           enabled = !authLoading
         ) {
           Text(if (authTab == 2) "Back to Sign In" else "Cancel", color = JTTextSecondary)
+        }
+      }
+    )
+  }
+
+  if (showOtpDialog) {
+    AlertDialog(
+      onDismissRequest = { showOtpDialog = false },
+      title = { Text("Verify your email", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Enter the six-digit code sent to $pendingSignupEmail. Check your spam or junk folder too.")
+          OutlinedTextField(
+            value = signupOtp,
+            onValueChange = { signupOtp = it.filter(Char::isDigit).take(6); otpError = null },
+            label = { Text("6-digit verification code") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          if (otpError != null) {
+            Text(otpError!!, color = JTRed, fontSize = 12.sp)
+          }
+        }
+      },
+      confirmButton = {
+        Button(
+          enabled = signupOtp.length == 6 && !authLoading,
+          onClick = {
+            authLoading = true
+            otpError = null
+            coroutineScope.launch {
+              val result = SupabaseAuthService.verifySignupOtp(pendingSignupEmail, signupOtp, context)
+              authLoading = false
+              if (result.isSuccess) {
+                showOtpDialog = false
+                signupOtp = ""
+                Toast.makeText(context, "Email verified. Welcome to JTBazar!", Toast.LENGTH_LONG).show()
+              } else {
+                otpError = result.exceptionOrNull()?.message ?: "Verification failed"
+              }
+            }
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
+        ) {
+          if (authLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+          else Text("Verify email")
+        }
+      },
+      dismissButton = {
+        Row {
+          TextButton(
+            enabled = !authLoading,
+            onClick = {
+              authLoading = true
+              otpError = null
+              coroutineScope.launch {
+                val result = SupabaseAuthService.resendSignupOtp(pendingSignupEmail)
+                authLoading = false
+                if (result.isSuccess) otpError = "A new code was requested. Check inbox and spam."
+                else otpError = result.exceptionOrNull()?.message ?: "Could not resend code"
+              }
+            }
+          ) { Text("Resend code") }
+          TextButton(onClick = { showOtpDialog = false }, enabled = !authLoading) { Text("Cancel") }
         }
       }
     )
