@@ -67,13 +67,13 @@ object SupabaseApiService {
       val directImage = primaryImage?.optString("image_url", "") ?: ""
       val storagePath = primaryImage?.optString("storage_path", "") ?: ""
       val imageUrl = directImage.takeIf { it.startsWith("https://") } ?: storagePath.takeIf { it.isNotBlank() }?.let { "${SupabaseConfig.storageUrl}/object/public/product-images/${it.replace(" ", "%20")}" }
-      val palettes = mutableListOf<String>(); val sizes = mutableListOf<String>(); val variants = obj.optJSONArray("variants")
+      val palettes = mutableListOf<String>(); val sizes = mutableListOf<String>(); val variantIds = mutableMapOf<String, String>(); val variants = obj.optJSONArray("variants")
       if (variants != null) for (i in 0 until variants.length()) {
         val variant = variants.optJSONObject(i) ?: continue
         if (!variant.optBoolean("is_active", true)) continue
         val label = variant.optString("option_label"); val value = variant.optString("option_value")
-        if (label.contains("color", true) || label.contains("colour", true)) palettes.add(value)
-        if (label.contains("size", true)) sizes.add(value)
+        if (label.contains("color", true) || label.contains("colour", true)) { palettes.add(value); variantIds["color:" + value] = variant.optString("id") }
+        if (label.contains("size", true)) { sizes.add(value); variantIds["size:" + value] = variant.optString("id") }
       }
       val highlights = mutableListOf<String>(); val specs = obj.optJSONArray("specifications")
       if (specs != null) for (i in 0 until specs.length()) {
@@ -81,7 +81,7 @@ object SupabaseApiService {
         if (spec.optString("label").isNotBlank() && spec.optString("value").isNotBlank()) highlights.add(spec.optString("label") + ": " + spec.optString("value"))
       }
       val id = obj.optString("id"); val known = availabilityKnown && availability.containsKey(id); val stock = known && availability[id] == true
-      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
+      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
     }
   }
 
@@ -204,6 +204,10 @@ object SupabaseApiService {
     } else SupabaseClient.post("customer_addresses", json.toString())
   }
 
+  suspend fun deleteAddress(addressId: String, userId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    SupabaseClient.delete("customer_addresses?id=eq.$addressId&user_id=eq.$userId")
+  }
+
   // ----------------------------------------------------
   // ORDERS
   // ----------------------------------------------------
@@ -212,7 +216,7 @@ object SupabaseApiService {
     try{SupabaseClient.get("orders?customer_id=eq.$userId&select=*&order=created_at.desc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;val ad=o.optJSONObject("shipping_address_snapshot")?:JSONObject();SupabaseOrderDto(id=o.optString("id"),orderNumber=o.optString("order_number"),userId=o.optString("customer_id",userId),subtotal=o.optDouble("subtotal").toInt(),discount=o.optDouble("discount_amount").toInt(),deliveryFee=o.optDouble("delivery_fee").toInt(),grandTotal=o.optDouble("total").toInt(),paymentMethod=o.optString("payment_method","cod").uppercase(),paymentStatus=o.optString("payment_status","pending").uppercase(),orderStatus=o.optString("order_status","pending").uppercase(),deliveryNote=if(o.isNull("delivery_note"))null else o.optString("delivery_note"),addressName=ad.optString("recipient_name",o.optString("customer_name","")),addressPhone=ad.optString("phone",o.optString("customer_phone","")),addressLine=ad.optString("address_line_1",""),addressArea=ad.optString("address_line_2",""),addressCity=ad.optString("city",""),createdAt=o.optString("created_at",""))}}}catch(e:Exception){Log.e(TAG,"fetchOrders error",e);Result.failure(e)}
   }
   suspend fun fetchOrderItems(orderId:String):Result<List<SupabaseOrderItemDto>> = withContext(Dispatchers.IO){
-    try{SupabaseClient.get("order_items?order_id=eq.$orderId&select=*&order=created_at.asc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;val v=o.optJSONObject("variant_snapshot")?:JSONObject();SupabaseOrderItemDto(id=o.optString("id"),orderId=o.optString("order_id"),productId=o.optString("product_id",""),productTitle=o.optString("product_name_snapshot",""),unitPrice=o.optDouble("unit_price").toInt(),quantity=o.optInt("quantity",1),totalPrice=o.optDouble("line_total").toInt(),selectedPalette=v.optString("value").takeIf{v.optString("label").contains("color",true)},selectedSize=v.optString("value").takeIf{v.optString("label").contains("size",true)})}}}catch(e:Exception){Log.e(TAG,"fetchOrderItems error",e);Result.failure(e)}
+    try{SupabaseClient.get("order_items?order_id=eq.$orderId&select=*&order=created_at.asc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;val v=o.optJSONObject("variant_snapshot")?:JSONObject();SupabaseOrderItemDto(id=o.optString("id"),orderId=o.optString("order_id"),productId=o.optString("product_id",""),productTitle=o.optString("product_name_snapshot",""),unitPrice=o.optDouble("unit_price").toInt(),quantity=o.optInt("quantity",1),totalPrice=o.optDouble("line_total").toInt(),selectedPalette=v.optString("value").takeIf{v.optString("label").contains("color",true)},selectedSize=v.optString("value").takeIf{v.optString("label").contains("size",true)},variantId=o.optString("variant_id").takeIf{it.isNotBlank()})}}}catch(e:Exception){Log.e(TAG,"fetchOrderItems error",e);Result.failure(e)}
   }
   suspend fun createOrder(order:SupabaseOrderDto,items:List<SupabaseOrderItemDto>):Result<String> = withContext(Dispatchers.IO){
     try{val address=JSONObject().apply{put("recipient_name",order.addressName);put("phone",order.addressPhone);put("address_line_1",order.addressLine);if(order.addressArea.isNotBlank())put("address_line_2",order.addressArea);put("city",order.addressCity);put("province",order.addressProvince);if(!order.postalCode.isNullOrBlank())put("postal_code",order.postalCode)}
@@ -230,7 +234,7 @@ object SupabaseApiService {
 
   suspend fun fetchProductReviews(productId: String): Result<List<SupabaseReviewDto>> = withContext(Dispatchers.IO) {
     try {
-      val res = SupabaseClient.get("product_reviews?product_id=eq.$productId&select=*&order=created_at.desc")
+      val res = SupabaseClient.get("product_reviews?product_id=eq.$productId&status=eq.approved&select=*&order=created_at.desc")
       res.mapCatching { jsonStr ->
         val arr = JSONArray(jsonStr)
         val list = mutableListOf<SupabaseReviewDto>()
@@ -240,10 +244,10 @@ object SupabaseApiService {
             SupabaseReviewDto(
               id = obj.optString("id", ""),
               productId = obj.optString("product_id", productId),
-              userId = obj.optString("user_id", ""),
-              userName = obj.optString("user_name", "Verified Buyer"),
-              rating = obj.optInt("rating", 5),
-              title = obj.optString("title", "Great product"),
+              userId = obj.optString("buyer_id", ""),
+              userName = "",
+              rating = obj.optInt("rating", 0),
+              title = obj.optString("title", ""),
               comment = obj.optString("comment", obj.optString("description", "")),
               createdAt = obj.optString("created_at", "")
             )
@@ -258,45 +262,31 @@ object SupabaseApiService {
   }
 
   suspend fun submitProductReview(review: SupabaseReviewDto): Result<String> = withContext(Dispatchers.IO) {
-    val json = JSONObject().apply {
-      put("product_id", review.productId)
-      put("user_id", review.userId)
-      put("user_name", review.userName)
-      put("rating", review.rating)
-      put("title", review.title)
-      put("comment", review.comment)
-    }
-    SupabaseClient.post("product_reviews", json.toString())
+    Result.failure(IllegalStateException("Reviews must be submitted for a delivered order item."))
   }
 
-  // ----------------------------------------------------
   // CASES: RETURNS & COMPLAINTS
   // ----------------------------------------------------
 
   suspend fun submitReturnRequest(req: SupabaseReturnRequestDto): Result<String> = withContext(Dispatchers.IO) {
-    val json = JSONObject().apply {
-      put("order_id", req.orderId)
-      put("user_id", req.userId)
-      put("reason", req.reason)
-      put("description", req.description)
-      put("status", "PENDING")
-      if (!req.evidenceUrl.isNullOrBlank()) put("evidence_url", req.evidenceUrl)
-    }
-    SupabaseClient.post("marketplace_cases", json.toString())
+    Result.failure(IllegalStateException("Returns must reference a delivered order item and include required evidence."))
   }
 
   suspend fun submitComplaint(complaint: SupabaseComplaintDto): Result<String> = withContext(Dispatchers.IO) {
-    val json = JSONObject().apply {
-      if (!complaint.orderId.isNullOrBlank()) put("order_id", complaint.orderId)
-      put("user_id", complaint.userId)
-      put("subject", complaint.subject)
-      put("message", complaint.message)
-      put("status", "OPEN")
-    }
-    SupabaseClient.post("marketplace_cases", json.toString())
+    try {
+      val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in to contact support.")
+      val email = user.email?.takeIf { it.isNotBlank() } ?: throw IOException("A verified account email is required.")
+      val body = JSONObject().apply {
+        put("user_id", user.id)
+        put("requester_name", user.fullName ?: "Customer")
+        put("requester_email", email)
+        put("subject", complaint.subject)
+        put("message", complaint.message)
+      }
+      SupabaseClient.post("customer_support_tickets", body.toString())
+    } catch (e: Exception) { Result.failure(e) }
   }
 
-  // ----------------------------------------------------
   // NOTIFICATIONS
   // ----------------------------------------------------
 
@@ -313,9 +303,9 @@ object SupabaseApiService {
               id = obj.optString("id", ""),
               userId = obj.optString("user_id", userId),
               title = obj.optString("title", "Notification"),
-              message = obj.optString("message", ""),
-              type = obj.optString("type", "GENERAL"),
-              isRead = obj.optBoolean("is_read", false),
+              message = obj.optString("body", ""),
+              type = obj.optString("kind", "store"),
+              isRead = !obj.isNull("read_at"),
               createdAt = obj.optString("created_at", "")
             )
           )
