@@ -42,7 +42,7 @@ fun DiscoverScreen(
     containerColor = Color.White,
     topBar = {
       JTBazarTopBar(
-        title = "Discover Lahore Bazar",
+        title = "Discover",
         onCartClick = onCartClick,
         onAvatarClick = onAccountClick,
         cartCount = cartCount,
@@ -58,88 +58,6 @@ fun DiscoverScreen(
       contentPadding = PaddingValues(16.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-      // 1. Artisan Spotlight
-      item {
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTPurplePrimary,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(16.dp)) {
-            Surface(
-              shape = RoundedCornerShape(8.dp),
-              color = JTAmberContainer
-            ) {
-              Text(
-                text = "ARTISAN HERITAGE",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = JTAmberDark,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-              )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-              text = "Multan Kashigari Blue Pottery",
-              fontSize = 17.sp,
-              fontWeight = FontWeight.Bold,
-              color = Color.White
-            )
-            Text(
-              text = "Generations of potters turning indigenous Indus clay into hand-glazed heirloom ceramics.",
-              fontSize = 11.sp,
-              color = Color.White.copy(alpha = 0.85f),
-              lineHeight = 15.sp
-            )
-          }
-        }
-      }
-
-      // 2. Lahore Food Heritage
-      item {
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = Color(0xFFFFF9ED),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Box(
-              modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFFDE68A)),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = Icons.Filled.Fastfood,
-                contentDescription = null,
-                tint = JTAmberDark,
-                modifier = Modifier.size(24.dp)
-              )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-              Text(
-                text = "Lahori Street Food & Nashta",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTTextPrimary
-              )
-              Text(
-                text = "Piping hot Halwa Puri, Nihari & fresh parathas from Gulberg & Anarkali vendors.",
-                fontSize = 11.sp,
-                color = JTTextSecondary,
-                lineHeight = 14.sp
-              )
-            }
-          }
-        }
-      }
-
       // 3. Featured Pick
       item {
         Text(
@@ -197,13 +115,13 @@ fun DiscoverScreen(
                   model = prod.imageUrl,
                   contentDescription = prod.title,
                   contentScale = ContentScale.Crop,
-                  placeholder = painterResource(id = prod.drawableRes),
-                  error = painterResource(id = prod.drawableRes),
+                  placeholder = painterResource(id = com.example.R.drawable.ic_launcher_background),
+                  error = painterResource(id = com.example.R.drawable.ic_launcher_background),
                   modifier = Modifier.fillMaxSize()
                 )
               } else {
                 Image(
-                  painter = painterResource(id = prod.drawableRes),
+                  painter = painterResource(id = com.example.R.drawable.ic_launcher_background),
                   contentDescription = prod.title,
                   contentScale = ContentScale.Crop,
                   modifier = Modifier.fillMaxSize()
