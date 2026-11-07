@@ -52,6 +52,11 @@ object MarketplaceRepository {
     _currentLocation.value = loc
   }
 
+  private val _homepageHeroes = MutableStateFlow<List<SupabaseHomepageHeroDto>>(emptyList())
+  val homepageHeroes: StateFlow<List<SupabaseHomepageHeroDto>> = _homepageHeroes.asStateFlow()
+  private val _homepagePromotions = MutableStateFlow<List<SupabasePromotionDto>>(emptyList())
+  val homepagePromotions: StateFlow<List<SupabasePromotionDto>> = _homepagePromotions.asStateFlow()
+
   // ----------------------------------------------------
   // PRODUCTS STATE (REAL SUPABASE CATALOG ONLY)
   // ----------------------------------------------------
@@ -290,6 +295,14 @@ object MarketplaceRepository {
           _returnWindowDays.value = it.returnWindowDays
         }.onFailure { _errorMessage.value = it.message }
 
+        // Fetch the same published homepage content used by the website.
+        SupabaseApiService.fetchHomepageHeroes()
+          .onSuccess { _homepageHeroes.value = it }
+          .onFailure { _homepageHeroes.value = emptyList(); Log.w(TAG, "Homepage heroes unavailable: ${it.message}") }
+        SupabaseApiService.fetchActivePromotions()
+          .onSuccess { _homepagePromotions.value = it }
+          .onFailure { _homepagePromotions.value = emptyList(); Log.w(TAG, "Homepage promotions unavailable: ${it.message}") }
+
         // 1. Fetch live products from Supabase
         val productResult = SupabaseApiService.fetchProducts(limit = 100)
         if (productResult.isSuccess) {
@@ -300,6 +313,7 @@ object MarketplaceRepository {
               title = dto.title,
               vendor = dto.vendor,
               category = dto.category,
+              categoryId = dto.categoryId,
               price = dto.price,
               originalPrice = dto.originalPrice,
               discountPercent = dto.discountPercent,

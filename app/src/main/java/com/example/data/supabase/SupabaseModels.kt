@@ -30,6 +30,7 @@ data class SupabaseProductDto(
   val id: String,
   val title: String,
   val vendor: String = "JTBazar Official",
+  val categoryId: String = "",
   val category: String,
   val price: Int,
   val originalPrice: Int = price,
@@ -170,4 +171,31 @@ data class SupabaseStoreSettingsDto(
   val deliveryFee: Int,
   val codEnabled: Boolean,
   val returnWindowDays: Int
+)
+
+
+/** Published homepage hero content configured by the JTBazar website/admin tools. */
+data class SupabaseHomepageHeroDto(
+  val id: String,
+  val title: String,
+  val subtitle: String? = null,
+  val ctaText: String? = null,
+  val ctaDestination: String? = null,
+  val imageUrl: String,
+  val mobileImageUrl: String? = null,
+  val imageAltText: String? = null,
+  val displayOrder: Int = 0
+)
+
+/** Approved seller promotion content configured in the marketplace. */
+data class SupabasePromotionDto(
+  val id: String,
+  val title: String,
+  val description: String? = null,
+  val bannerImageUrl: String? = null,
+  val bannerImageUrls: List<String> = emptyList(),
+  val ctaText: String? = null,
+  val ctaDestination: String? = null,
+  val displayPosition: String = "",
+  val priority: Int = 0
 )

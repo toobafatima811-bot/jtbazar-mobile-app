@@ -20,7 +20,7 @@ object SupabaseApiService {
 
   suspend fun fetchProducts(category: String? = null, isFeatured: Boolean? = null, limit: Int = 50): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
     try {
-      val params = mutableListOf("select=*,category:categories(name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)", "publication_status=eq.published", "moderation_status=eq.approved", "vendor_hidden=eq.false", "order=created_at.desc", "limit=${limit.coerceIn(1, 100)}")
+      val params = mutableListOf("select=*,category:categories(id,name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)", "publication_status=eq.published", "moderation_status=eq.approved", "vendor_hidden=eq.false", "order=created_at.desc", "limit=${limit.coerceIn(1, 100)}")
       if (!category.isNullOrBlank()) params.add("category_id=eq.${URLEncoder.encode(category.trim(), "UTF-8")}")
       if (isFeatured == true) params.add("is_featured=eq.true")
       val response = SupabaseClient.get("products?${params.joinToString("&")}")
@@ -48,7 +48,7 @@ object SupabaseApiService {
   }
 
   suspend fun searchProducts(query:String):Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO){
-    try{val q=URLEncoder.encode(query.trim(),"UTF-8");val url="products?select=*,category:categories(name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)&publication_status=eq.published&moderation_status=eq.approved&vendor_hidden=eq.false&or=(name.ilike.*$q*,description.ilike.*$q*,short_description.ilike.*$q*)&limit=30";SupabaseClient.get(url).mapCatching{parseProductsJson(it)}}catch(e:Exception){Result.failure(e)}
+    try{val q=URLEncoder.encode(query.trim(),"UTF-8");val url="products?select=*,category:categories(id,name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)&publication_status=eq.published&moderation_status=eq.approved&vendor_hidden=eq.false&or=(name.ilike.*$q*,description.ilike.*$q*,short_description.ilike.*$q*)&limit=30";SupabaseClient.get(url).mapCatching{parseProductsJson(it)}}catch(e:Exception){Result.failure(e)}
   }
 
   suspend fun fetchProductById(id:String):Result<SupabaseProductDto> = fetchProducts(limit=100).mapCatching{it.firstOrNull{p->p.id==id}?:throw IOException("Product not found")}
@@ -81,7 +81,7 @@ object SupabaseApiService {
         if (spec.optString("label").isNotBlank() && spec.optString("value").isNotBlank()) highlights.add(spec.optString("label") + ": " + spec.optString("value"))
       }
       val id = obj.optString("id"); val known = availabilityKnown && availability.containsKey(id); val stock = known && availability[id] == true
-      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
+      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
     }
   }
 
@@ -98,6 +98,63 @@ object SupabaseApiService {
         )
       }
     } catch (e: Exception) { Result.failure(e) }
+  }
+
+  // LIVE HOMEPAGE CONTENT (same published rows as the website)
+  suspend fun fetchHomepageHeroes(): Result<List<SupabaseHomepageHeroDto>> = withContext(Dispatchers.IO) {
+    try {
+      SupabaseClient.get("homepage_heroes?select=id,title,subtitle,cta_text,cta_destination,image_url,mobile_image_url,image_alt_text,display_order&status=eq.published&order=display_order.asc")
+        .mapCatching { json ->
+          val rows = JSONArray(json)
+          (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val image = row.optString("image_url").takeIf { it.startsWith("https://") } ?: return@mapNotNull null
+            SupabaseHomepageHeroDto(
+              id = row.optString("id"),
+              title = row.optString("title"),
+              subtitle = row.optString("subtitle").takeIf { it.isNotBlank() },
+              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() },
+              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() },
+              imageUrl = image,
+              mobileImageUrl = row.optString("mobile_image_url").takeIf { it.startsWith("https://") },
+              imageAltText = row.optString("image_alt_text").takeIf { it.isNotBlank() },
+              displayOrder = row.optInt("display_order", index)
+            )
+          }
+        }
+    } catch (e: Exception) {
+      Log.e(TAG, "fetchHomepageHeroes error", e)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun fetchActivePromotions(position: String? = null): Result<List<SupabasePromotionDto>> = withContext(Dispatchers.IO) {
+    try {
+      val positionFilter = position?.takeIf { it.isNotBlank() }?.let { "&display_position=eq.${URLEncoder.encode(it, "UTF-8")}" } ?: ""
+      SupabaseClient.get("promotions?select=id,title,description,banner_image_url,banner_image_urls,cta_text,cta_destination,display_position,priority&status=eq.approved&order=priority.desc$positionFilter")
+        .mapCatching { json ->
+          val rows = JSONArray(json)
+          (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val images = row.optJSONArray("banner_image_urls")
+            val urls = if (images == null) emptyList() else (0 until images.length()).mapNotNull { images.optString(it).takeIf { url -> url.startsWith("https://") } }
+            SupabasePromotionDto(
+              id = row.optString("id"),
+              title = row.optString("title"),
+              description = row.optString("description").takeIf { it.isNotBlank() },
+              bannerImageUrl = row.optString("banner_image_url").takeIf { it.startsWith("https://") },
+              bannerImageUrls = urls,
+              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() },
+              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() },
+              displayPosition = row.optString("display_position"),
+              priority = row.optInt("priority")
+            )
+          }
+        }
+    } catch (e: Exception) {
+      Log.e(TAG, "fetchActivePromotions error", e)
+      Result.failure(e)
+    }
   }
 
   // CATEGORIES

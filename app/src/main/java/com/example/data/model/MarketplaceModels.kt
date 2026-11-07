@@ -19,6 +19,7 @@ data class Product(
   val title: String,
   val vendor: String,
   val category: String,
+  val categoryId: String = "",
   val price: Int,
   val originalPrice: Int,
   val discountPercent: Int,

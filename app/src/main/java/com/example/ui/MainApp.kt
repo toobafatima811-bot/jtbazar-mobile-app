@@ -24,6 +24,7 @@ enum class AppScreen {
   SPLASH,
   HOME,
   CATEGORIES,
+  CATEGORY_PRODUCTS,
   DISCOVER,
   WISHLIST,
   ACCOUNT,
@@ -43,6 +44,7 @@ fun MainApp() {
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
+  var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
 
   fun navigateTo(screen: AppScreen) {
     previousScreen = currentScreen
@@ -52,6 +54,7 @@ fun MainApp() {
   fun navigateBack() {
     when (currentScreen) {
       AppScreen.PRODUCT_DETAIL -> currentScreen = previousScreen
+      AppScreen.CATEGORY_PRODUCTS -> currentScreen = AppScreen.CATEGORIES
       AppScreen.CART_CHECKOUT -> currentScreen = AppScreen.HOME
       AppScreen.ORDER_TRACKING -> currentScreen = AppScreen.HOME
       AppScreen.SPLASH -> currentScreen = AppScreen.HOME
@@ -262,14 +265,8 @@ fun MainApp() {
         AppScreen.CATEGORIES -> {
           CategoriesScreen(
             onCategorySelect = { category ->
-              val matchingProd = MarketplaceRepository.products.value.find {
-                it.category.contains(category.title.split(" ")[0], ignoreCase = true)
-              } ?: MarketplaceRepository.products.value.firstOrNull()
-              if (matchingProd != null) {
-                selectedProduct = matchingProd
-                MarketplaceRepository.selectProduct(matchingProd)
-                navigateTo(AppScreen.PRODUCT_DETAIL)
-              }
+              selectedCategory = category
+              navigateTo(AppScreen.CATEGORY_PRODUCTS)
             },
             onCartClick = {
               navigateTo(AppScreen.CART_CHECKOUT)
@@ -278,6 +275,24 @@ fun MainApp() {
               currentScreen = AppScreen.ACCOUNT
             }
           )
+        }
+
+        AppScreen.CATEGORY_PRODUCTS -> {
+          val category = selectedCategory
+          if (category != null) {
+            CategoryProductsScreen(
+              category = category,
+              onBack = { navigateBack() },
+              onProductClick = { product ->
+                selectedProduct = product
+                MarketplaceRepository.selectProduct(product)
+                navigateTo(AppScreen.PRODUCT_DETAIL)
+              },
+              onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) }
+            )
+          } else {
+            navigateBack()
+          }
         }
 
         AppScreen.DISCOVER -> {
