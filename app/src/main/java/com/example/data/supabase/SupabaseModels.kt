@@ -77,7 +77,7 @@ data class SupabaseAddressDto(
   val addressLine: String,
   val area: String,
   val city: String = "",
-  val province: String = "Punjab",
+  val province: String = "",
   val postalCode: String? = null,
   val tag: String = "HOME",
   val isDefault: Boolean = false
