@@ -73,6 +73,10 @@ fun ProductDetailScreen(
   val allReviews by MarketplaceRepository.reviews.collectAsState()
   val productReviews = allReviews.filter { it.productId == product.id }
 
+  LaunchedEffect(product.id) {
+    MarketplaceRepository.selectProduct(product)
+  }
+
   if (showWriteReviewDialog) {
     AlertDialog(
       onDismissRequest = { showWriteReviewDialog = false },
