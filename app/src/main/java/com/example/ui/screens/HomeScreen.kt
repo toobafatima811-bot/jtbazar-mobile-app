@@ -47,6 +47,7 @@ fun HomeScreen(
   modifier: Modifier = Modifier
 ) {
   val products by MarketplaceRepository.products.collectAsState()
+  val categories by MarketplaceRepository.categories.collectAsState()
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
@@ -103,25 +104,7 @@ fun HomeScreen(
         )
       }
 
-      // 2. Instant Delivery Banner
-      item {
-        InstantDeliveryBanner(
-          area = currentLocation,
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-        )
-      }
-
-      // 3. Grand Bachat Offer Promotional Card
-      item {
-        GrandBachatPromoCard(
-          onShopNow = { onExploreCategoriesClick() },
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-      }
+      // Homepage promotions will render only after live promotions are fetched from Supabase.
 
       // 4. Shop by Category (Horizontal Row)
       item {
@@ -157,49 +140,62 @@ fun HomeScreen(
 
           Spacer(modifier = Modifier.height(10.dp))
 
-          LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-          ) {
-            val quickCategories = listOf(
-              Triple("Food &\nGroceries", Icons.Filled.ShoppingBag, Color(0xFFF1EBF9)),
-              Triple("Homemade\nFood", Icons.Filled.Restaurant, Color(0xFFFEF3C7)),
-              Triple("Fast Food", Icons.Filled.Fastfood, Color(0xFFEDE9FE)),
-              Triple("Bags & Accs", Icons.Filled.Work, Color(0xFFFCE7F3)),
-              Triple("Home &\nLiving", Icons.Filled.Weekend, Color(0xFFE0E7FF))
+          if (categories.isEmpty()) {
+            Text(
+              text = "No active collections available",
+              color = JTTextSecondary,
+              fontSize = 12.sp,
+              modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
             )
-
-            items(quickCategories) { (name, icon, bg) ->
-              Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                  .width(66.dp)
-                  .clickable { onExploreCategoriesClick() }
-              ) {
-                Box(
+          } else {
+            LazyRow(
+              contentPadding = PaddingValues(horizontal = 16.dp),
+              horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+              items(categories, key = { it.id }) { category ->
+                Column(
+                  horizontalAlignment = Alignment.CenterHorizontally,
                   modifier = Modifier
-                    .size(54.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(bg),
-                  contentAlignment = Alignment.Center
+                    .width(76.dp)
+                    .clickable { onExploreCategoriesClick() }
                 ) {
-                  Icon(
-                    imageVector = icon,
-                    contentDescription = name,
-                    tint = JTPurplePrimary,
-                    modifier = Modifier.size(24.dp)
+                  Box(
+                    modifier = Modifier
+                      .size(58.dp)
+                      .clip(RoundedCornerShape(16.dp))
+                      .background(JTSurfaceVariant),
+                    contentAlignment = Alignment.Center
+                  ) {
+                    if (!category.imageUrl.isNullOrBlank()) {
+                      AsyncImage(
+                        model = category.imageUrl,
+                        contentDescription = category.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                      )
+                    } else {
+                      Image(
+                        painter = painterResource(id = category.drawableRes),
+                        contentDescription = category.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                      )
+                    }
+                  }
+                  Spacer(modifier = Modifier.height(6.dp))
+                  Text(
+                    text = category.title,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = JTTextPrimary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 13.sp,
+                    maxLines = 2
                   )
+                  if (!category.badge.isNullOrBlank()) {
+                    Text(category.badge, fontSize = 9.sp, color = JTTextSecondary)
+                  }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                  text = name,
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.Medium,
-                  color = JTTextPrimary,
-                  textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                  lineHeight = 13.sp,
-                  maxLines = 2
-                )
               }
             }
           }
@@ -258,8 +254,9 @@ fun HomeScreen(
       // 6. 2x2 Grid of Popular Products
       item {
         Spacer(modifier = Modifier.height(10.dp))
+        val homeProducts = products.filter { it.isFeatured }.ifEmpty { products }
         val displayProducts = if (searchQuery.isBlank()) {
-          products
+          homeProducts.take(4)
         } else {
           products.filter {
             it.title.contains(searchQuery, ignoreCase = true) ||
@@ -359,17 +356,6 @@ fun HomeScreen(
             }
           }
         }
-      }
-
-      // 7. Lahore Special: Authentic Homemade Kitchens in Your Town
-      item {
-        Spacer(modifier = Modifier.height(20.dp))
-        LahoreSpecialKitchenCard(
-          onBrowse = { onExploreCategoriesClick() },
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        )
       }
 
       // 8. Trust Badges

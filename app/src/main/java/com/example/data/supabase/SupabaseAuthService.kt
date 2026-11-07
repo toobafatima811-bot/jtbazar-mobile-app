@@ -150,25 +150,102 @@ object SupabaseAuthService {
         )
 
         if (token.isNotBlank()) {
+          // Supabase only returns a session after email confirmation is complete
+          // (or when email confirmation is disabled).
           SupabaseClient.setSession(session)
           persistSession(context, session)
+
+          val profile = SupabaseProfile(
+            id = userId,
+            fullName = metaName,
+            phone = metaPhone,
+            email = userEmail
+          )
+          _userProfile.value = profile
+          upsertProfile(profile)
+        } else {
+          // Account is pending email verification. Do not mark it as signed in,
+          // persist an empty token, or create a customer profile before OTP.
+          Log.d(TAG, "Signup created pending email verification for $userEmail")
         }
-
-        val profile = SupabaseProfile(
-          id = userId,
-          fullName = metaName,
-          phone = metaPhone,
-          email = userEmail
-        )
-        _userProfile.value = profile
-
-        // Also ensure profile record in profiles table
-        upsertProfile(profile)
 
         Result.success(session)
       }
     } catch (e: Exception) {
       Log.e(TAG, "signUp error", e)
+      Result.failure(e)
+    }
+  }
+
+  /**
+   * Verify the six-digit signup code using the same Supabase flow as the website.
+   */
+  suspend fun verifySignupOtp(
+    email: String,
+    token: String,
+    context: Context? = null
+  ): Result<SupabaseSession> = withContext(Dispatchers.IO) {
+    try {
+      val body = JSONObject().apply {
+        put("email", email.trim())
+        put("token", token.trim())
+        put("type", "signup")
+      }
+      val request = Request.Builder()
+        .url("${SupabaseConfig.authUrl}/verify")
+        .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+        .build()
+      SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
+        val responseBody = response.body?.string() ?: ""
+        if (!response.isSuccessful) {
+          return@withContext Result.failure(IOException(parseErrorMessage(responseBody, "Email verification failed")))
+        }
+        val json = JSONObject(responseBody)
+        val accessToken = json.optString("access_token", "")
+        val refreshToken = json.optString("refresh_token", "")
+        val userObj = json.optJSONObject("user") ?: throw IOException("Verification response did not include a user.")
+        if (accessToken.isBlank()) throw IOException("Email verification did not create a session.")
+        val metadata = userObj.optJSONObject("user_metadata")
+        val user = SupabaseUser(
+          id = userObj.optString("id"),
+          email = userObj.optString("email", email),
+          phone = metadata?.optString("phone", "") ?: "",
+          fullName = metadata?.optString("full_name", "JTBazar Customer") ?: "JTBazar Customer"
+        )
+        val session = SupabaseSession(accessToken = accessToken, refreshToken = refreshToken, user = user)
+        SupabaseClient.setSession(session)
+        persistSession(context, session)
+        val profile = SupabaseProfile(user.id, user.fullName, user.phone ?: "", user.email ?: "")
+        _userProfile.value = profile
+        upsertProfile(profile)
+        Result.success(session)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "verifySignupOtp error", e)
+      Result.failure(e)
+    }
+  }
+
+  /**
+   * Resend the signup confirmation code, matching the website's resend behavior.
+   */
+  suspend fun resendSignupOtp(email: String): Result<Unit> = withContext(Dispatchers.IO) {
+    try {
+      val body = JSONObject().apply {
+        put("type", "signup")
+        put("email", email.trim())
+      }
+      val request = Request.Builder()
+        .url("${SupabaseConfig.authUrl}/resend")
+        .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+        .build()
+      SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
+        val responseBody = response.body?.string() ?: ""
+        if (response.isSuccessful) Result.success(Unit)
+        else Result.failure(IOException(parseErrorMessage(responseBody, "Could not resend verification code")))
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "resendSignupOtp error", e)
       Result.failure(e)
     }
   }

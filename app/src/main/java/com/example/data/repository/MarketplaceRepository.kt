@@ -322,6 +322,7 @@ object MarketplaceRepository {
               sizes = dto.sizes.map { SizeOption(it, "Option") },
               variantIds = dto.variantIds,
               isArtisanCollection = dto.isArtisanCollection,
+              isFeatured = dto.isFeatured,
               isWishlisted = false
             )
           }
