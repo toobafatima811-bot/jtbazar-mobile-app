@@ -127,6 +127,11 @@ object MarketplaceRepository {
     }
   }
 
+  fun adjustQuantity(itemId: String, delta: Int) {
+    val current = _cartItems.value.firstOrNull { it.id == itemId } ?: return
+    updateQuantity(itemId, current.quantity + delta)
+  }
+
   fun updateQuantity(itemId: String, quantity: Int) {
     if (quantity <= 0) {
       removeFromCart(itemId)
