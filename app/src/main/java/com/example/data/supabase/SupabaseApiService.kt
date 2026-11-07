@@ -192,8 +192,8 @@ object SupabaseApiService {
               userId = obj.optString("user_id", userId),
               name = obj.optString("recipient_name", ""),
               phone = obj.optString("phone", ""),
-              addressLine = listOf(obj.optString("address_line_1", ""), obj.optString("address_line_2", "")).filter { it.isNotBlank() }.joinToString(", "),
-              area = "",
+              addressLine = obj.optString("address_line_1", ""),
+              area = obj.optString("address_line_2", ""),
               city = obj.optString("city", ""),
               province = obj.optString("province", "Punjab"),
               postalCode = if (obj.has("postal_code")) obj.optString("postal_code") else null,
@@ -217,6 +217,7 @@ object SupabaseApiService {
       put("recipient_name", address.name)
       put("phone", address.phone)
       put("address_line_1", address.addressLine)
+      if (address.area.isNotBlank()) put("address_line_2", address.area)
       put("city", address.city)
       put("province", address.province)
       if (!address.postalCode.isNullOrBlank()) put("postal_code", address.postalCode)
