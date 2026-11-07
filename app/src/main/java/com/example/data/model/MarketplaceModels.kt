@@ -24,7 +24,7 @@ data class Product(
   val discountPercent: Int,
   val rating: Double,
   val reviewCount: Int,
-  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.item_ceramic_plate,
+  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.ic_launcher_background,
   val imageUrl: String? = null,
   val badge: String? = null,
   val inStockText: String = "In Stock",
@@ -39,6 +39,7 @@ data class Product(
   val highlights: List<String> = emptyList(),
   val palettes: List<PaletteOption> = emptyList(),
   val sizes: List<SizeOption> = emptyList(),
+  val variantIds: Map<String, String> = emptyMap(),
   val isArtisanCollection: Boolean = false,
   val isWishlisted: Boolean = false
 )
@@ -48,7 +49,8 @@ data class CartItem(
   val product: Product,
   var quantity: Int,
   val selectedPalette: String? = null,
-  val selectedSize: String? = null
+  val selectedSize: String? = null,
+  val variantId: String? = null
 ) {
   val totalPrice: Int
     get() = product.price * quantity
