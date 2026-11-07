@@ -580,12 +580,12 @@ fun OrderTrackingScreen(
             )
           }
 
-          if (activeOrder.orderStatus == "PENDING") {
+          if (activeOrder.orderStatus == "PENDING" || activeOrder.orderStatus == "CONFIRMED") {
             OutlinedButton(
               onClick = {
-                val success = MarketplaceRepository.cancelOrder(activeOrder.orderId)
-                if (success) {
-                  Toast.makeText(context, "Order #" + activeOrder.orderNumber + " cancelled", Toast.LENGTH_SHORT).show()
+                MarketplaceRepository.cancelOrder(activeOrder.orderId) { success ->
+                  val message = if (success) "Order #" + activeOrder.orderNumber + " cancelled" else "The server could not cancel this order."
+                  Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
               },
               shape = RoundedCornerShape(12.dp),
