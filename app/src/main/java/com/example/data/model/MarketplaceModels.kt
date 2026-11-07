@@ -41,6 +41,7 @@ data class Product(
   val sizes: List<SizeOption> = emptyList(),
   val variantIds: Map<String, String> = emptyMap(),
   val isArtisanCollection: Boolean = false,
+  val isFeatured: Boolean = false,
   val isWishlisted: Boolean = false
 )
 
