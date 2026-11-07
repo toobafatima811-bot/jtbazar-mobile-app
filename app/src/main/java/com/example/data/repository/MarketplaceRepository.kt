@@ -202,15 +202,17 @@ object MarketplaceRepository {
             tag = newAddress.tag,
             isDefault = newAddress.isDefault
           )
-        )
+        ).onSuccess { loadUserData(userId) }.onFailure { _errorMessage.value = it.message }
       }
     }
   }
 
   fun deleteAddress(addressId: String) {
     _addresses.update { list -> list.filterNot { it.id == addressId } }
-    if (_selectedAddress.value?.id == addressId) {
-      _selectedAddress.value = _addresses.value.firstOrNull()
+    if (_selectedAddress.value?.id == addressId) _selectedAddress.value = _addresses.value.firstOrNull()
+    val userId = SupabaseClient.currentUserId
+    if (userId != null && !addressId.startsWith("addr_")) scope.launch {
+      SupabaseApiService.deleteAddress(addressId, userId).onFailure { _errorMessage.value = it.message }
     }
   }
 
@@ -395,7 +397,7 @@ object MarketplaceRepository {
   }
 
   fun submitReturnRequest(orderId: String, reason: String, description: String) {
-    val userId = SupabaseClient.currentUserId ?: "cust_user"
+    val userId = SupabaseClient.currentUserId ?: run { _errorMessage.value = "Please sign in first."; return }
     val req = SupabaseReturnRequestDto(
       id = "ret_${System.currentTimeMillis()}",
       orderId = orderId,
@@ -459,7 +461,10 @@ object MarketplaceRepository {
             OrderRecord(
               orderId = dto.id,
               date = dto.createdAt,
-              items = emptyList(),
+              items = SupabaseApiService.fetchOrderItems(dto.id).getOrNull().orEmpty().map { line ->
+                val product = Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0, imageUrl=line.imageUrl)
+                CartItem(id=line.id, product=product, quantity=line.quantity, selectedPalette=line.selectedPalette, selectedSize=line.selectedSize)
+              },
               subtotal = dto.subtotal,
               discount = dto.discount,
               deliveryFee = dto.deliveryFee,
@@ -535,7 +540,8 @@ object MarketplaceRepository {
   // DRAWABLE ASSET RESOLUTION (FALLBACK FOR REMOTE IMAGES)
   // ----------------------------------------------------
   private fun resolveDrawable(category: String, id: String): Int {
-    return when {
+    return R.drawable.ic_launcher_background
+    /* return when {
       id.contains("biryani", ignoreCase = true) -> R.drawable.item_biryani
       id.contains("honey", ignoreCase = true) -> R.drawable.item_honey
       id.contains("leather", ignoreCase = true) -> R.drawable.item_leather_bag
@@ -545,7 +551,7 @@ object MarketplaceRepository {
       category.contains("living", ignoreCase = true) -> R.drawable.item_ceramic_plate
       category.contains("bag", ignoreCase = true) -> R.drawable.item_leather_bag
       else -> R.drawable.item_ceramic_plate
-    }
+    } */
   }
 
   private fun resolveCategoryDrawable(title: String): Int {
