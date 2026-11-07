@@ -57,7 +57,7 @@ fun ProductDetailScreen(
   var showAddressDialog by remember { mutableStateOf(false) }
   var quantity by remember { mutableIntStateOf(1) }
   var selectedPaletteName by remember {
-    mutableStateOf(product.palettes.firstOrNull()?.name ?: "Royal Cobalt Blue")
+    mutableStateOf(product.palettes.firstOrNull()?.name ?: "")
   }
   var selectedSizeIndex by remember { mutableIntStateOf(0) }
 
@@ -72,6 +72,10 @@ fun ProductDetailScreen(
   var reviewComment by remember { mutableStateOf("") }
   val allReviews by MarketplaceRepository.reviews.collectAsState()
   val productReviews = allReviews.filter { it.productId == product.id }
+
+  LaunchedEffect(product.id) {
+    MarketplaceRepository.selectProduct(product)
+  }
 
   if (showWriteReviewDialog) {
     AlertDialog(
@@ -124,7 +128,7 @@ fun ProductDetailScreen(
               showWriteReviewDialog = false
               reviewTitle = ""
               reviewComment = ""
-              Toast.makeText(context, "Review submitted! Thank you!", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, "Review request checked against your delivered orders.", Toast.LENGTH_SHORT).show()
             } else {
               Toast.makeText(context, "Please enter your review details", Toast.LENGTH_SHORT).show()
             }
@@ -733,7 +737,7 @@ fun ProductDetailScreen(
                 color = JTTextSecondary
               )
               Text(
-                text = "Lahore",
+                text = currentLocation,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTTextPrimary
@@ -1117,7 +1121,7 @@ fun ProductDetailScreen(
                   verticalAlignment = Alignment.CenterVertically
                 ) {
                   Text(
-                    text = "${productReviews.size + 2} Verified Customer Reviews",
+                    text = "${productReviews.size} Verified Customer Reviews",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = JTTextSecondary

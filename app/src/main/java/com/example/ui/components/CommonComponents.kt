@@ -316,7 +316,7 @@ fun AddressSelectionSheet(
   var phone by remember { mutableStateOf("") }
   var addressLine by remember { mutableStateOf("") }
   var area by remember { mutableStateOf("Gulberg III") }
-  var city by remember { mutableStateOf("Lahore") }
+  var city by remember { mutableStateOf("") }
   var tag by remember { mutableStateOf("HOME") }
 
   AlertDialog(

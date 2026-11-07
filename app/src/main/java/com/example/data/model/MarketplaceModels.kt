@@ -24,21 +24,22 @@ data class Product(
   val discountPercent: Int,
   val rating: Double,
   val reviewCount: Int,
-  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.item_ceramic_plate,
+  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.ic_launcher_background,
   val imageUrl: String? = null,
   val badge: String? = null,
-  val inStockText: String = "In Stock",
+  val inStockText: String = "Availability not verified",
   val savingsText: String? = null,
-  val vendorVerified: Boolean = true,
-  val vendorRating: String = "98% Positive Seller",
-  val vendorSales: String = "4.2k Sales",
-  val vendorAvatarText: String = "MC",
-  val deliveryText: String = "Delivery to Lahore in 2–3 business days",
+  val vendorVerified: Boolean = false,
+  val vendorRating: String = "",
+  val vendorSales: String = "",
+  val vendorAvatarText: String = "",
+  val deliveryText: String = "Delivered by JTBazar",
   val paymentInfo: String = "Cash on Delivery (COD) & Online Bank Transfer Supported",
   val craftStory: String = "",
   val highlights: List<String> = emptyList(),
   val palettes: List<PaletteOption> = emptyList(),
   val sizes: List<SizeOption> = emptyList(),
+  val variantIds: Map<String, String> = emptyMap(),
   val isArtisanCollection: Boolean = false,
   val isWishlisted: Boolean = false
 )
@@ -48,7 +49,8 @@ data class CartItem(
   val product: Product,
   var quantity: Int,
   val selectedPalette: String? = null,
-  val selectedSize: String? = null
+  val selectedSize: String? = null,
+  val variantId: String? = null
 ) {
   val totalPrice: Int
     get() = product.price * quantity
@@ -66,7 +68,7 @@ data class CategoryItem(
   val title: String,
   val countText: String,
   val sampleItems: String,
-  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.cat_groceries,
+  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.ic_launcher_background,
   val imageUrl: String? = null,
   val badge: String? = null
 )
@@ -83,10 +85,10 @@ data class DeliveryAddress(
   val phone: String,
   val addressLine: String,
   val area: String,
-  val city: String = "Lahore",
+  val city: String = "",
   val province: String = "Punjab",
   val tag: String = "HOME",
-  val isDefault: Boolean = true
+  val isDefault: Boolean = false
 ) {
   val fullDisplayAddress: String
     get() = "$addressLine, $area, $city, $province"
@@ -117,5 +119,6 @@ data class OrderRecord(
   val deliveryNote: String,
   val statusHeader: String = "Processing Order",
   val orderStatus: String = "PENDING",
-  val timeline: List<OrderTimelineStep> = emptyList()
+  val timeline: List<OrderTimelineStep> = emptyList(),
+  val orderNumber: String = orderId
 )

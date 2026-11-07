@@ -50,19 +50,12 @@ fun HomeScreen(
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
-  val countdownSeconds by MarketplaceRepository.countdownSeconds.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
 
   var showAddressDialog by remember { mutableStateOf(false) }
   var searchQuery by remember { mutableStateOf("") }
   var isSearching by remember { mutableStateOf(false) }
-
-  // Format countdown seconds into HH:MM:SS
-  val hours = countdownSeconds / 3600
-  val minutes = (countdownSeconds % 3600) / 60
-  val seconds = countdownSeconds % 60
-  val timerText = String.format("%02d:%02d:%02d", hours, minutes, seconds)
 
   if (showAddressDialog) {
     AddressSelectionSheet(
@@ -213,7 +206,7 @@ fun HomeScreen(
         }
       }
 
-      // 5. Popular in Lahore Section Header
+      // 5. Popular Products Section Header
       item {
         Spacer(modifier = Modifier.height(18.dp))
         Row(
@@ -241,24 +234,12 @@ fun HomeScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Column {
               Text(
-                text = "Popular in Lahore",
+                text = "Popular Products",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = JTTextPrimary
               )
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                  text = "Ends in ",
-                  fontSize = 11.sp,
-                  color = JTTextSecondary
-                )
-                Text(
-                  text = timerText,
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = JTRed
-                )
-              }
+
             }
           }
 
@@ -516,7 +497,7 @@ fun InstantDeliveryBanner(
           color = JTTextPrimary
         )
         Text(
-          text = "Free delivery on orders over Rs. 1,999",
+          text = "Centralized delivery by JTBazar",
           fontSize = 10.sp,
           color = JTTextSecondary
         )
@@ -770,24 +751,9 @@ fun ProductCard(
         modifier = Modifier.padding(10.dp)
       ) {
         // Tag badge (e.g. In Stock, Vendor: Karigar Leather, Verified Food Seller)
-        val tagText = when (product.id) {
-          "prod_shan_biryani" -> "In Stock"
-          "prod_leather_bag" -> "Vendor: Karigar Leather"
-          "prod_pure_honey" -> "Verified Food Seller"
-          else -> product.category
-        }
-        val tagBg = when (product.id) {
-          "prod_shan_biryani" -> JTPurpleContainer
-          "prod_leather_bag" -> JTSurfaceVariant
-          "prod_pure_honey" -> JTAmberContainer
-          else -> JTPurpleContainer
-        }
-        val tagColor = when (product.id) {
-          "prod_shan_biryani" -> JTPurplePrimary
-          "prod_leather_bag" -> JTTextSecondary
-          "prod_pure_honey" -> JTAmberDark
-          else -> JTPurplePrimary
-        }
+        val tagText = product.inStockText.ifBlank { product.category }
+        val tagBg = JTPurpleContainer
+        val tagColor = JTPurplePrimary
 
         Surface(
           shape = RoundedCornerShape(6.dp),

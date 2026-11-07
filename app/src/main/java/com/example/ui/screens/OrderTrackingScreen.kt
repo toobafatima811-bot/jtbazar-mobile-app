@@ -263,7 +263,7 @@ fun OrderTrackingScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Order #${activeOrder.orderId}",
+                  text = "Order #" + activeOrder.orderNumber,
                   fontWeight = FontWeight.Bold,
                   fontSize = 12.sp,
                   color = JTTextPrimary
@@ -276,9 +276,9 @@ fun OrderTrackingScreen(
                 modifier = Modifier
                   .clickable {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("Order ID", activeOrder.orderId)
+                    val clip = ClipData.newPlainText("Order Number", activeOrder.orderNumber)
                     clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Copied Order ID: #${activeOrder.orderId}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Copied Order Number: #" + activeOrder.orderNumber, Toast.LENGTH_SHORT).show()
                   }
                   .testTag("copy_order_id_button")
               ) {
@@ -459,7 +459,7 @@ fun OrderTrackingScreen(
                 letterSpacing = 0.5.sp
               )
               Text(
-                text = "3 Items In Bag",
+                text = activeOrder.items.size.toString() + " Items In Bag",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTPurplePrimary
@@ -500,7 +500,7 @@ fun OrderTrackingScreen(
                     color = JTTextPrimary
                   )
                   Text(
-                    text = "${activeOrder.address.addressLine}, Near Main Market",
+                    text = activeOrder.address.addressLine,
                     fontSize = 11.sp,
                     color = JTTextSecondary
                   )
@@ -525,29 +525,22 @@ fun OrderTrackingScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3 Thumbnail preview cards
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-              OrderThumbItem(
-                imageRes = R.drawable.thumb_glazed_bowl,
-                name = "Glazed Bowl",
-                qty = "Qty: 1",
-                modifier = Modifier.weight(1f)
-              )
-              OrderThumbItem(
-                imageRes = R.drawable.thumb_dry_fruits,
-                name = "Dry Fruits 500g",
-                qty = "Qty: 1",
-                modifier = Modifier.weight(1f)
-              )
-              OrderThumbItem(
-                imageRes = R.drawable.thumb_pure_honey,
-                name = "Pure Honey",
-                qty = "Qty: 1",
-                modifier = Modifier.weight(1f)
-              )
+            // Actual order lines returned by Supabase; no sample products.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              activeOrder.items.forEach { item ->
+                Row(
+                  modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp)).padding(10.dp),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(item.product.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = JTTextPrimary)
+                    Text("Qty: " + item.quantity.toString(), fontSize = 10.sp, color = JTTextSecondary)
+                  }
+                  Text("PKR " + String.format("%,d", item.totalPrice), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary)
+                }
+              }
+              if (activeOrder.items.isEmpty()) Text("Order items are not available yet.", fontSize = 11.sp, color = JTTextSecondary)
             }
           }
         }
@@ -587,12 +580,12 @@ fun OrderTrackingScreen(
             )
           }
 
-          if (activeOrder.orderStatus == "PENDING") {
+          if (activeOrder.orderStatus == "PENDING" || activeOrder.orderStatus == "CONFIRMED") {
             OutlinedButton(
               onClick = {
-                val success = MarketplaceRepository.cancelOrder(activeOrder.orderId)
-                if (success) {
-                  Toast.makeText(context, "Order #${activeOrder.orderId} cancelled", Toast.LENGTH_SHORT).show()
+                MarketplaceRepository.cancelOrder(activeOrder.orderId) { success ->
+                  val message = if (success) "Order #" + activeOrder.orderNumber + " cancelled" else "The server could not cancel this order."
+                  Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
               },
               shape = RoundedCornerShape(12.dp),
@@ -685,7 +678,7 @@ fun OrderTrackingScreen(
                   color = JTTextPrimary
                 )
                 Text(
-                  text = "24/7 dedicated Lahore team",
+                  text = "JTBazar central delivery team",
                   fontSize = 10.sp,
                   color = JTTextSecondary
                 )
@@ -934,7 +927,7 @@ private fun InvoiceDialog(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null, tint = JTPurplePrimary)
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Order Invoice #${order.orderId}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("Order Invoice #" + order.orderNumber, fontSize = 16.sp, fontWeight = FontWeight.Bold)
       }
     },
     text = {
