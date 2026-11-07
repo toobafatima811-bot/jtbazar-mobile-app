@@ -84,7 +84,7 @@ fun AccountScreen(
   // Edit Profile form states
   var editFullName by remember { mutableStateOf(userProfile?.fullName ?: selectedAddress?.name ?: "") }
   var editPhone by remember { mutableStateOf(userProfile?.phone ?: selectedAddress?.phone ?: "") }
-  var editCity by remember { mutableStateOf(userProfile?.city ?: selectedAddress?.city ?: "Lahore") }
+  var editCity by remember { mutableStateOf(userProfile?.city ?: selectedAddress?.city ?: "") }
 
   // Complaint / Support form states
   var complaintSubject by remember { mutableStateOf("") }
@@ -507,7 +507,7 @@ fun AccountScreen(
               MarketplaceRepository.submitReturnRequest(returnOrderId.trim(), returnReason, returnDescription)
               showReturnDialog = false
               returnDescription = ""
-              Toast.makeText(context, "Return request submitted! Case ID generated.", Toast.LENGTH_LONG).show()
+              Toast.makeText(context, "Return requests require the delivered order item and supporting evidence. This app flow is not ready yet.", Toast.LENGTH_LONG).show()
             } else {
               Toast.makeText(context, "Please enter order number and description", Toast.LENGTH_SHORT).show()
             }
@@ -859,7 +859,7 @@ fun AccountScreen(
             AccountMenuItem(
               icon = Icons.Outlined.AssignmentReturn,
               title = "Return & Refund Requests",
-              subtitle = "7-Day hassle-free return policy on damaged items",
+              subtitle = "Return requests within 7 calendar days of delivery",
               onClick = { showReturnDialog = true }
             )
             HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
