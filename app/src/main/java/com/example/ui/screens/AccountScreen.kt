@@ -468,29 +468,36 @@ fun AccountScreen(
       confirmButton = {
         Button(
           onClick = {
-            val userId = SupabaseClient.currentUserId ?: "cust_user"
+            val userId = SupabaseClient.currentUserId
+            if (userId.isNullOrBlank()) {
+              Toast.makeText(context, "Please sign in again to update your profile.", Toast.LENGTH_LONG).show()
+              return@Button
+            }
             val newProfile = SupabaseProfile(
               id = userId,
-              fullName = editFullName.ifBlank { "JTBazar Customer" },
-              phone = editPhone,
-              email = userProfile?.email ?: "customer@jtbazar.pk",
-              city = editCity
+              fullName = editFullName.trim(),
+              phone = editPhone.trim(),
+              email = currentSession?.user?.email ?: userProfile?.email.orEmpty(),
+              city = editCity.trim()
             )
+            if (newProfile.fullName.isBlank()) {
+              Toast.makeText(context, "Please enter your full name.", Toast.LENGTH_SHORT).show()
+              return@Button
+            }
             coroutineScope.launch {
-              SupabaseAuthService.upsertProfile(newProfile)
-              // Also update selected address name and phone if one exists
-              selectedAddress?.let { addr ->
-                MarketplaceRepository.addOrUpdateAddress(
-                  addr.copy(
-                    name = newProfile.fullName,
-                    phone = newProfile.phone,
-                    city = newProfile.city
+              val result = SupabaseAuthService.upsertProfile(newProfile)
+              if (result.isSuccess) {
+                selectedAddress?.let { addr ->
+                  MarketplaceRepository.addOrUpdateAddress(
+                    addr.copy(name = newProfile.fullName, phone = newProfile.phone, city = newProfile.city)
                   )
-                )
+                }
+                showEditProfileDialog = false
+                Toast.makeText(context, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(context, result.exceptionOrNull()?.message ?: "Profile update failed.", Toast.LENGTH_LONG).show()
               }
             }
-            showEditProfileDialog = false
-            Toast.makeText(context, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
           },
           colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
         ) {
@@ -962,8 +969,12 @@ fun AccountScreen(
               onClick = {
                 if (isLoggedIn) {
                   coroutineScope.launch {
-                    SupabaseAuthService.signOut(context)
-                    Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+                    val result = SupabaseAuthService.signOut(context)
+                    if (result.isSuccess) {
+                      Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+                    } else {
+                      Toast.makeText(context, result.exceptionOrNull()?.message ?: "Sign out failed", Toast.LENGTH_LONG).show()
+                    }
                   }
                 } else {
                   showAuthDialog = true
