@@ -32,6 +32,13 @@ object MarketplaceRepository {
   private val _errorMessage = MutableStateFlow<String?>(null)
   val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+  private val _deliveryFee = MutableStateFlow(0)
+  val deliveryFee: StateFlow<Int> = _deliveryFee.asStateFlow()
+  private val _codEnabled = MutableStateFlow(false)
+  val codEnabled: StateFlow<Boolean> = _codEnabled.asStateFlow()
+  private val _returnWindowDays = MutableStateFlow(7)
+  val returnWindowDays: StateFlow<Int> = _returnWindowDays.asStateFlow()
+
   // Countdown seconds for daily promotion
   private val _countdownSeconds = MutableStateFlow(0)
   val countdownSeconds: StateFlow<Int> = _countdownSeconds.asStateFlow()
@@ -247,6 +254,13 @@ object MarketplaceRepository {
       _errorMessage.value = null
 
       try {
+        val settings = SupabaseApiService.fetchStoreSettings()
+        settings.onSuccess {
+          _deliveryFee.value = it.deliveryFee
+          _codEnabled.value = it.codEnabled
+          _returnWindowDays.value = it.returnWindowDays
+        }.onFailure { _errorMessage.value = it.message }
+
         // 1. Fetch live products from Supabase
         val productResult = SupabaseApiService.fetchProducts(limit = 100)
         if (productResult.isSuccess) {
