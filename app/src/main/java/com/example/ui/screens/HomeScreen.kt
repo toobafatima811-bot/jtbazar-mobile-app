@@ -213,7 +213,7 @@ fun HomeScreen(
         }
       }
 
-      // 5. Popular in Lahore Section Header
+      // 5. Popular Products Section Header
       item {
         Spacer(modifier = Modifier.height(18.dp))
         Row(
@@ -770,24 +770,9 @@ fun ProductCard(
         modifier = Modifier.padding(10.dp)
       ) {
         // Tag badge (e.g. In Stock, Vendor: Karigar Leather, Verified Food Seller)
-        val tagText = when (product.id) {
-          "prod_shan_biryani" -> "In Stock"
-          "prod_leather_bag" -> "Vendor: Karigar Leather"
-          "prod_pure_honey" -> "Verified Food Seller"
-          else -> product.category
-        }
-        val tagBg = when (product.id) {
-          "prod_shan_biryani" -> JTPurpleContainer
-          "prod_leather_bag" -> JTSurfaceVariant
-          "prod_pure_honey" -> JTAmberContainer
-          else -> JTPurpleContainer
-        }
-        val tagColor = when (product.id) {
-          "prod_shan_biryani" -> JTPurplePrimary
-          "prod_leather_bag" -> JTTextSecondary
-          "prod_pure_honey" -> JTAmberDark
-          else -> JTPurplePrimary
-        }
+        val tagText = product.inStockText.ifBlank { product.category }
+        val tagBg = JTPurpleContainer
+        val tagColor = JTPurplePrimary
 
         Surface(
           shape = RoundedCornerShape(6.dp),
