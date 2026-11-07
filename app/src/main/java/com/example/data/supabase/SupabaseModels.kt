@@ -124,6 +124,7 @@ data class SupabaseOrderItemDto(
 data class SupabaseReviewDto(
   val id: String,
   val productId: String,
+  val orderId: String? = null,
   val userId: String,
   val userName: String,
   val rating: Int,
