@@ -294,7 +294,7 @@ fun AccountScreen(
           Text("Enter the six-digit code sent to $pendingSignupEmail. Check your spam or junk folder too.")
           OutlinedTextField(
             value = signupOtp,
-            onValueChange = { signupOtp = it.filter(Char::isDigit).take(6); otpError = null },
+            onValueChange = { signupOtp = it.filter { char -> char.isDigit() }.take(6); otpError = null },
             label = { Text("6-digit verification code") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
