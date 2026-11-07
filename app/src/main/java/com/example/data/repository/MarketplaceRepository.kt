@@ -84,29 +84,41 @@ object MarketplaceRepository {
   }
 
   fun addToCart(product: Product, quantity: Int = 1, palette: String? = null, size: String? = null) {
+    val variantId = if (!size.isNullOrBlank()) product.variantIds["size:" + size]
+      else if (!palette.isNullOrBlank()) product.variantIds["color:" + palette] else null
+    var localId = ""
     _cartItems.update { current ->
       val existingIndex = current.indexOfFirst {
-        it.product.id == product.id && it.selectedPalette == palette && it.selectedSize == size
+        it.product.id == product.id && it.variantId == variantId
       }
       if (existingIndex >= 0) {
         current.toMutableList().also { list ->
           val item = list[existingIndex]
+          localId = item.id
           list[existingIndex] = item.copy(quantity = item.quantity + quantity)
         }
       } else {
-        current + CartItem(
-          id = "cart_${System.currentTimeMillis()}",
+        val newItem = CartItem(
+          id = "cart_" + System.currentTimeMillis(),
           product = product,
           quantity = quantity,
           selectedPalette = palette,
           selectedSize = size,
-          variantId = if (!size.isNullOrBlank()) product.variantIds["size:" + size] else if (!palette.isNullOrBlank()) product.variantIds["color:" + palette] else null
+          variantId = variantId
         )
+        localId = newItem.id
+        current + newItem
       }
     }
     updateCartCount()
-
-    // Cart entries remain local until their selected variant can be mapped to a real variant UUID.
+    val userId = SupabaseClient.currentUserId
+    if (userId != null) scope.launch {
+      SupabaseApiService.addToCart(userId, product.id, quantity, variantId)
+        .onSuccess { remoteId ->
+          _cartItems.update { rows -> rows.map { if (it.id == localId) it.copy(id = remoteId) else it } }
+        }
+        .onFailure { _errorMessage.value = it.message }
+    }
   }
 
   fun updateQuantity(itemId: String, quantity: Int) {
