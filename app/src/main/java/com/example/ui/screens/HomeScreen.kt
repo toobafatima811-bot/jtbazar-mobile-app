@@ -437,6 +437,54 @@ fun HomeScreen(
         }
       }
 
+      // New arrivals: same latest-published catalog ordering as the website.
+      item {
+        val newArrivals = products.take(4)
+        Column(modifier = Modifier.fillMaxWidth().padding(top = 22.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column {
+              Text("NEW ARRIVALS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
+              Text("Fresh additions to the store.", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+              Text("Recently added live listings.", fontSize = 11.sp, color = JTTextSecondary)
+            }
+            Text(
+              "Browse catalog  →",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = JTOrangeDark,
+              modifier = Modifier.clickable { onExploreCategoriesClick() }.padding(4.dp)
+            )
+          }
+          Spacer(Modifier.height(10.dp))
+          if (newArrivals.isNotEmpty()) {
+            Column(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+              verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              newArrivals.chunked(2).forEach { rowItems ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                  rowItems.forEach { product ->
+                    Box(Modifier.weight(1f)) {
+                      ProductCard(
+                        product = product,
+                        onProductClick = { onProductClick(product) },
+                        onAddToCart = { MarketplaceRepository.addToCart(product) },
+                        onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) }
+                      )
+                    }
+                  }
+                  if (rowItems.size == 1) Spacer(Modifier.weight(1f))
+                }
+              }
+            }
+          }
+        }
+      }
+
       // 8. Trust Badges
       item {
         Spacer(modifier = Modifier.height(8.dp))
