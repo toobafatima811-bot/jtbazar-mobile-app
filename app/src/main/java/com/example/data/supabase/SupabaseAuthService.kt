@@ -320,6 +320,64 @@ object SupabaseAuthService {
   }
 
   /**
+   * Send a passwordless email OTP for an existing account, matching the website.
+   * shouldCreateUser=false prevents accidentally creating accounts from the login screen.
+   */
+  suspend fun sendLoginOtp(email: String): Result<Unit> = withContext(Dispatchers.IO) {
+    try {
+      val body = JSONObject().put("email", email.trim()).put("create_user", false)
+      val request = Request.Builder()
+        .url("${SupabaseConfig.authUrl}/otp")
+        .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+        .build()
+      SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
+        val responseBody = response.body?.string() ?: ""
+        if (response.isSuccessful) Result.success(Unit)
+        else Result.failure(IOException(parseErrorMessage(responseBody, "Could not send sign-in code")))
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "sendLoginOtp error", e)
+      Result.failure(e)
+    }
+  }
+
+  /** Verify an existing customer's passwordless email OTP. */
+  suspend fun verifyLoginOtp(email: String, token: String, context: Context? = null): Result<SupabaseSession> = withContext(Dispatchers.IO) {
+    try {
+      val body = JSONObject().put("email", email.trim()).put("token", token.trim()).put("type", "email")
+      val request = Request.Builder()
+        .url("${SupabaseConfig.authUrl}/verify")
+        .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+        .build()
+      SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
+        val responseBody = response.body?.string() ?: ""
+        if (!response.isSuccessful) return@withContext Result.failure(IOException(parseErrorMessage(responseBody, "Sign-in code verification failed")))
+        val json = JSONObject(responseBody)
+        val accessToken = json.optString("access_token", "")
+        val refreshToken = json.optString("refresh_token", "")
+        val userObj = json.optJSONObject("user") ?: throw IOException("Verification response did not include a user.")
+        if (accessToken.isBlank()) throw IOException("Verification did not create a session.")
+        val metadata = userObj.optJSONObject("user_metadata")
+        val user = SupabaseUser(
+          id = userObj.optString("id"),
+          email = userObj.optString("email", email),
+          phone = metadata?.optString("phone", "") ?: "",
+          fullName = metadata?.optString("full_name", "JTBazar Customer") ?: "JTBazar Customer"
+        )
+        val session = SupabaseSession(accessToken, refreshToken, user)
+        SupabaseClient.setSession(session)
+        persistSession(context, session)
+        val profile = fetchProfile(user.id).getOrNull() ?: SupabaseProfile(user.id, user.fullName, user.phone ?: "", user.email ?: "")
+        _userProfile.value = profile
+        Result.success(session)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "verifyLoginOtp error", e)
+      Result.failure(e)
+    }
+  }
+
+  /**
    * Sign out current customer
    */
   suspend fun signOut(context: Context? = null): Result<Unit> = withContext(Dispatchers.IO) {

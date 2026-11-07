@@ -84,6 +84,9 @@ fun AccountScreen(
   var pendingSignupEmail by remember { mutableStateOf("") }
   var signupOtp by remember { mutableStateOf("") }
   var otpError by remember { mutableStateOf<String?>(null) }
+  var showLoginOtpDialog by remember { mutableStateOf(false) }
+  var loginOtp by remember { mutableStateOf("") }
+  var loginOtpError by remember { mutableStateOf<String?>(null) }
 
   // Edit Profile form states
   var editFullName by remember { mutableStateOf(userProfile?.fullName ?: selectedAddress?.name ?: "") }
@@ -197,11 +200,33 @@ fun AccountScreen(
           }
 
           if (authTab == 0) {
-            TextButton(
-              onClick = { authTab = 2; authError = null },
-              contentPadding = PaddingValues(0.dp)
-            ) {
-              Text("Forgot Password?", color = JTPurplePrimary, fontSize = 11.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              TextButton(onClick = { authTab = 2; authError = null }, contentPadding = PaddingValues(0.dp)) {
+                Text("Forgot Password?", color = JTPurplePrimary, fontSize = 11.sp)
+              }
+              Spacer(Modifier.weight(1f))
+              TextButton(
+                enabled = !authLoading,
+                onClick = {
+                  if (authEmail.isBlank()) authError = "Enter your email address first."
+                  else {
+                    authLoading = true
+                    authError = null
+                    coroutineScope.launch {
+                      val result = SupabaseAuthService.sendLoginOtp(authEmail)
+                      authLoading = false
+                      if (result.isSuccess) {
+                        pendingSignupEmail = authEmail.trim()
+                        loginOtp = ""
+                        loginOtpError = null
+                        showAuthDialog = false
+                        showLoginOtpDialog = true
+                      } else authError = result.exceptionOrNull()?.message ?: "Could not send sign-in code"
+                    }
+                  }
+                },
+                contentPadding = PaddingValues(0.dp)
+              ) { Text("Sign in with email code", color = JTPurplePrimary, fontSize = 10.sp) }
             }
           } else if (authTab == 2) {
             Text(
@@ -349,6 +374,65 @@ fun AccountScreen(
     )
   }
 
+  if (showLoginOtpDialog) {
+    AlertDialog(
+      onDismissRequest = { if (!authLoading) showLoginOtpDialog = false },
+      title = { Text("Sign in verification", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Enter the six-digit sign-in code sent to $pendingSignupEmail.")
+          OutlinedTextField(
+            value = loginOtp,
+            onValueChange = { loginOtp = it.filter(Char::isDigit).take(6); loginOtpError = null },
+            label = { Text("6-digit sign-in code") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          if (loginOtpError != null) Text(loginOtpError!!, color = JTRed, fontSize = 12.sp)
+        }
+      },
+      confirmButton = {
+        Button(
+          enabled = loginOtp.length == 6 && !authLoading,
+          onClick = {
+            authLoading = true
+            loginOtpError = null
+            coroutineScope.launch {
+              val result = SupabaseAuthService.verifyLoginOtp(pendingSignupEmail, loginOtp, context)
+              authLoading = false
+              if (result.isSuccess) {
+                showLoginOtpDialog = false
+                loginOtp = ""
+                Toast.makeText(context, "Welcome back to JTBazar!", Toast.LENGTH_LONG).show()
+              } else loginOtpError = result.exceptionOrNull()?.message ?: "Code verification failed"
+            }
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
+        ) {
+          if (authLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+          else Text("Verify and sign in")
+        }
+      },
+      dismissButton = {
+        Row {
+          TextButton(
+            enabled = !authLoading,
+            onClick = {
+              authLoading = true
+              loginOtpError = null
+              coroutineScope.launch {
+                val result = SupabaseAuthService.sendLoginOtp(pendingSignupEmail)
+                authLoading = false
+                loginOtpError = if (result.isSuccess) "A new code was requested." else result.exceptionOrNull()?.message ?: "Could not resend code"
+              }
+            }
+          ) { Text("Resend code") }
+          TextButton(onClick = { showLoginOtpDialog = false }, enabled = !authLoading) { Text("Cancel") }
+        }
+      }
+    )
+  }
+
   // ----------------------------------------------------
   // EDIT PROFILE DIALOG
   // ----------------------------------------------------
@@ -384,29 +468,36 @@ fun AccountScreen(
       confirmButton = {
         Button(
           onClick = {
-            val userId = SupabaseClient.currentUserId ?: "cust_user"
+            val userId = SupabaseClient.currentUserId
+            if (userId.isNullOrBlank()) {
+              Toast.makeText(context, "Please sign in again to update your profile.", Toast.LENGTH_LONG).show()
+              return@Button
+            }
             val newProfile = SupabaseProfile(
               id = userId,
-              fullName = editFullName.ifBlank { "JTBazar Customer" },
-              phone = editPhone,
-              email = userProfile?.email ?: "customer@jtbazar.pk",
-              city = editCity
+              fullName = editFullName.trim(),
+              phone = editPhone.trim(),
+              email = currentSession?.user?.email ?: userProfile?.email.orEmpty(),
+              city = editCity.trim()
             )
+            if (newProfile.fullName.isBlank()) {
+              Toast.makeText(context, "Please enter your full name.", Toast.LENGTH_SHORT).show()
+              return@Button
+            }
             coroutineScope.launch {
-              SupabaseAuthService.upsertProfile(newProfile)
-              // Also update selected address name and phone if one exists
-              selectedAddress?.let { addr ->
-                MarketplaceRepository.addOrUpdateAddress(
-                  addr.copy(
-                    name = newProfile.fullName,
-                    phone = newProfile.phone,
-                    city = newProfile.city
+              val result = SupabaseAuthService.upsertProfile(newProfile)
+              if (result.isSuccess) {
+                selectedAddress?.let { addr ->
+                  MarketplaceRepository.addOrUpdateAddress(
+                    addr.copy(name = newProfile.fullName, phone = newProfile.phone, city = newProfile.city)
                   )
-                )
+                }
+                showEditProfileDialog = false
+                Toast.makeText(context, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(context, result.exceptionOrNull()?.message ?: "Profile update failed.", Toast.LENGTH_LONG).show()
               }
             }
-            showEditProfileDialog = false
-            Toast.makeText(context, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
           },
           colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
         ) {
@@ -619,7 +710,7 @@ fun AccountScreen(
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Text(
-            "JTBazar Lahore Support Team operates 9 AM – 10 PM PKT.",
+            "Our customer support team is available 9 AM – 10 PM PKT.",
             fontSize = 11.sp,
             color = JTTextSecondary
           )
@@ -761,29 +852,20 @@ fun AccountScreen(
 
             Column(modifier = Modifier.weight(1f)) {
               Text(
-                text = userProfile?.fullName ?: if (isLoggedIn) "JTBazar Customer" else "Guest Customer",
+                text = userProfile?.fullName ?: if (isLoggedIn) "JTBazar Customer" else "Welcome to JTBazar",
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 16.sp,
                 color = JTTextPrimary
               )
               Text(
-                text = userProfile?.email ?: if (isLoggedIn) (currentSession?.user?.email ?: "Verified Account") else "Sign in to sync your cart & orders",
+                text = userProfile?.email ?: if (isLoggedIn) (currentSession?.user?.email ?: "Verified Account") else "Sign in or create an account",
                 fontSize = 12.sp,
                 color = JTTextSecondary
               )
               Spacer(modifier = Modifier.height(4.dp))
-              Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Surface(
-                  shape = RoundedCornerShape(6.dp),
-                  color = if (isLoggedIn) JTPurpleContainer else JTAmberContainer
-                ) {
-                  Text(
-                    text = if (isLoggedIn) "Supabase connected" else "Guest Account",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isLoggedIn) JTPurplePrimary else JTAmberDark,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                  )
+              if (isLoggedIn) {
+                Surface(shape = RoundedCornerShape(6.dp), color = JTPurpleContainer) {
+                  Text("Verified account", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                 }
               }
             }
@@ -887,8 +969,12 @@ fun AccountScreen(
               onClick = {
                 if (isLoggedIn) {
                   coroutineScope.launch {
-                    SupabaseAuthService.signOut(context)
-                    Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+                    val result = SupabaseAuthService.signOut(context)
+                    if (result.isSuccess) {
+                      Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+                    } else {
+                      Toast.makeText(context, result.exceptionOrNull()?.message ?: "Sign out failed", Toast.LENGTH_LONG).show()
+                    }
                   }
                 } else {
                   showAuthDialog = true
@@ -1039,7 +1125,7 @@ fun AccountScreen(
             color = JTTextSecondary
           )
           Text(
-            text = "Connected to Supabase (xrrhbnnzjqkqnqdvayjw) • Lahore, Pakistan",
+            text = "Securely connected to JTBazar",
             fontSize = 10.sp,
             color = JTTextTertiary
           )
