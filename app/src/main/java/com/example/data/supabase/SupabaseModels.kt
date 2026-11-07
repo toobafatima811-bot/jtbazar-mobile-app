@@ -30,6 +30,7 @@ data class SupabaseProductDto(
   val id: String,
   val title: String,
   val vendor: String = "JTBazar Official",
+  val categoryId: String = "",
   val category: String,
   val price: Int,
   val originalPrice: Int = price,
