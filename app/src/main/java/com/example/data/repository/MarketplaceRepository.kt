@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 
 /**
  * Central Data Repository for JTBazar.
@@ -130,22 +131,28 @@ object MarketplaceRepository {
       list.map { if (it.id == itemId) it.copy(quantity = quantity) else it }
     }
     updateCartCount()
-
-
+    val userId = SupabaseClient.currentUserId
+    if (userId != null && !itemId.startsWith("cart_")) scope.launch {
+      SupabaseApiService.updateCartQuantity(itemId, quantity).onFailure { _errorMessage.value = it.message }
+    }
   }
 
   fun removeFromCart(itemId: String) {
     _cartItems.update { list -> list.filterNot { it.id == itemId } }
     updateCartCount()
-
-
+    val userId = SupabaseClient.currentUserId
+    if (userId != null && !itemId.startsWith("cart_")) scope.launch {
+      SupabaseApiService.removeCartItem(itemId).onFailure { _errorMessage.value = it.message }
+    }
   }
 
   fun clearCart() {
     _cartItems.value = emptyList()
     updateCartCount()
-
-
+    val userId = SupabaseClient.currentUserId
+    if (userId != null) scope.launch {
+      SupabaseApiService.clearCart(userId).onFailure { _errorMessage.value = it.message }
+    }
   }
 
   // ----------------------------------------------------
@@ -338,6 +345,7 @@ object MarketplaceRepository {
       } catch (e: Exception) {
         Log.e(TAG, "Backend sync error: ${e.message}", e)
         _errorMessage.value = e.message
+        SupabaseClient.currentUserId?.let { loadUserData(it) }
       } finally {
         _isLoading.value = false
       }
@@ -365,7 +373,7 @@ object MarketplaceRepository {
         val saved = SupabaseApiService.fetchOrders(userId).getOrThrow().firstOrNull { it.id == createdId } ?: throw IllegalStateException("Order created but could not be reloaded.")
         val savedItems = SupabaseApiService.fetchOrderItems(saved.id).getOrThrow().map { line ->
           val product = items.firstOrNull { it.product.id == line.productId }?.product ?: Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0)
-          CartItem(id=line.id, product=product, quantity=line.quantity, selectedPalette=line.selectedPalette, selectedSize=line.selectedSize)
+          CartItem(id=line.id, product=product, quantity=line.quantity, selectedPalette=line.selectedPalette, selectedSize=line.selectedSize, variantId=line.variantId)
         }
         val record = OrderRecord(orderId=saved.id, date=saved.createdAt, items=savedItems, subtotal=saved.subtotal, discount=saved.discount, deliveryFee=saved.deliveryFee, grandTotal=saved.grandTotal, address=DeliveryAddress(id="order-address", name=saved.addressName, phone=saved.addressPhone, addressLine=saved.addressLine, area=saved.addressArea, city=saved.addressCity, province=address.province, isDefault=false), deliveryNote=saved.deliveryNote ?: "", statusHeader=saved.orderStatus, orderStatus=saved.orderStatus)
         _activeOrder.value = record
@@ -382,75 +390,42 @@ object MarketplaceRepository {
   }
   fun cancelOrder(orderId: String, onComplete: ((Boolean) -> Unit)? = null): Boolean {
     val existing = _orders.value.find { it.orderId == orderId }
-    if (existing != null && existing.orderStatus == "PENDING") {
-      val cancelled = existing.copy(
-        orderStatus = "CANCELLED",
-        statusHeader = "Order Cancelled by Customer",
-        timeline = existing.timeline.map {
-          if (it.state == StepState.IN_PROGRESS) it.copy(state = StepState.PENDING, description = "Cancelled by customer") else it
-        }
-      )
-      _orders.update { list -> list.map { if (it.orderId == orderId) cancelled else it } }
-      if (_activeOrder.value?.orderId == orderId) {
-        _activeOrder.value = cancelled
-      }
-
-      scope.launch {
-        val res = SupabaseApiService.cancelOrder(orderId)
-        onComplete?.invoke(res.isSuccess)
-      }
-      return true
+    if (existing == null || existing.orderStatus !in listOf("PENDING", "CONFIRMED")) {
+      onComplete?.invoke(false)
+      return false
     }
-    onComplete?.invoke(false)
-    return false
+    scope.launch {
+      val result = SupabaseApiService.cancelOrder(orderId)
+      if (result.isSuccess && result.getOrNull() == true) {
+        SupabaseClient.currentUserId?.let { loadUserData(it) }
+        onComplete?.invoke(true)
+      } else {
+        _errorMessage.value = result.exceptionOrNull()?.message ?: "Order cancellation was not accepted."
+        onComplete?.invoke(false)
+      }
+    }
+    return true
   }
 
   // ----------------------------------------------------
   // REVIEWS & CASES
   // ----------------------------------------------------
   fun submitProductReview(productId: String, rating: Int, title: String, comment: String) {
-    val userId = SupabaseClient.currentUserId ?: run { _errorMessage.value = "Please sign in first."; return }
-    val userName = SupabaseClient.currentUser.value?.fullName ?: "Verified Buyer"
-    val review = SupabaseReviewDto(
-      id = "rev_${System.currentTimeMillis()}",
-      productId = productId,
-      userId = userId,
-      userName = userName,
-      rating = rating,
-      title = title,
-      comment = comment,
-      createdAt = "Just now"
-    )
-    _errorMessage.value = "Reviews must be submitted against a delivered order item. This app needs the order-specific review flow."
+    _errorMessage.value = "Reviews must be submitted for a delivered order item. This app does not yet have the required order-item review screen."
   }
 
   fun submitReturnRequest(orderId: String, reason: String, description: String) {
-    val userId = SupabaseClient.currentUserId ?: run { _errorMessage.value = "Please sign in first."; return }
-    val req = SupabaseReturnRequestDto(
-      id = "ret_${System.currentTimeMillis()}",
-      orderId = orderId,
-      userId = userId,
-      reason = reason,
-      description = description,
-      status = "PENDING",
-      createdAt = "Just now"
-    )
-    _errorMessage.value = "A return must reference the delivered order item and include required product evidence. This app needs the order-specific return flow."
+    _errorMessage.value = "Return requests must be linked to the exact delivered order item and include product evidence. This app does not yet have the required evidence upload screen."
   }
 
   fun submitComplaint(orderId: String?, subject: String, message: String) {
-    val userId = SupabaseClient.currentUserId ?: "cust_user"
-    val complaint = SupabaseComplaintDto(
-      id = "comp_${System.currentTimeMillis()}",
-      orderId = orderId,
-      userId = userId,
-      subject = subject,
-      message = message,
-      status = "OPEN",
-      createdAt = "Just now"
-    )
+    val user = SupabaseClient.currentUser.value
+    if (user == null) { _errorMessage.value = "Please sign in to contact support."; return }
+    val complaint = SupabaseComplaintDto(id="", orderId=orderId, userId=user.id, subject=subject, message=message, createdAt="")
     scope.launch {
-      SupabaseApiService.submitComplaint(complaint).onFailure { _errorMessage.value = it.message }
+      SupabaseApiService.submitComplaint(complaint)
+        .onSuccess { _errorMessage.value = "Your support request has been submitted." }
+        .onFailure { _errorMessage.value = it.message }
     }
   }
 
@@ -460,6 +435,33 @@ object MarketplaceRepository {
   fun loadUserData(userId: String) {
     scope.launch {
       try {
+        // Load persisted cart and wishlist for this signed-in customer.
+        val cartRes = SupabaseApiService.fetchCart(userId)
+        if (cartRes.isSuccess) {
+          val rows = JSONArray(cartRes.getOrNull() ?: "[]")
+          val mappedCart = (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val productId = row.optString("product_id")
+            val product = _products.value.firstOrNull { it.id == productId } ?: return@mapNotNull null
+            val variantId = row.optString("variant_id").takeIf { it.isNotBlank() }
+            val selectedOption = product.variantIds.entries.firstOrNull { it.value == variantId }?.key
+            CartItem(
+              id = row.optString("id"), product = product, quantity = row.optInt("quantity", 1),
+              selectedPalette = selectedOption?.takeIf { it.startsWith("color:") }?.removePrefix("color:"),
+              selectedSize = selectedOption?.takeIf { it.startsWith("size:") }?.removePrefix("size:"),
+              variantId = variantId
+            )
+          }
+          _cartItems.value = mappedCart
+          updateCartCount()
+        }
+        val wishlistRes = SupabaseApiService.fetchWishlist(userId)
+        if (wishlistRes.isSuccess) {
+          val rows = JSONArray(wishlistRes.getOrNull() ?: "[]")
+          val ids = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("product_id") }.toSet()
+          _products.update { list -> list.map { it.copy(isWishlisted = ids.contains(it.id)) } }
+        }
+
         // 1. Load addresses
         val addrRes = SupabaseApiService.fetchAddresses(userId)
         if (addrRes.isSuccess) {
