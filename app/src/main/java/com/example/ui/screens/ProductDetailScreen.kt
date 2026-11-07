@@ -733,7 +733,7 @@ fun ProductDetailScreen(
                 color = JTTextSecondary
               )
               Text(
-                text = "Lahore",
+                text = currentLocation,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTTextPrimary
@@ -1117,7 +1117,7 @@ fun ProductDetailScreen(
                   verticalAlignment = Alignment.CenterVertically
                 ) {
                   Text(
-                    text = "${productReviews.size + 2} Verified Customer Reviews",
+                    text = "${productReviews.size} Verified Customer Reviews",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = JTTextSecondary
