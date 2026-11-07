@@ -124,7 +124,7 @@ fun ProductDetailScreen(
               showWriteReviewDialog = false
               reviewTitle = ""
               reviewComment = ""
-              Toast.makeText(context, "Review submitted! Thank you!", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, "Review request checked against your delivered orders.", Toast.LENGTH_SHORT).show()
             } else {
               Toast.makeText(context, "Please enter your review details", Toast.LENGTH_SHORT).show()
             }
