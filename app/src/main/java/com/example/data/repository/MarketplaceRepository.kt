@@ -549,22 +549,10 @@ object MarketplaceRepository {
               orderStatus = dto.orderStatus,
               timeline = listOf(
                 OrderTimelineStep(
-                  title = "Order Placed",
-                  timestamp = "Registered",
-                  description = "Order registered with JTBazar centralized hub.",
+                  title = "Order status: " + dto.orderStatus,
+                  timestamp = dto.createdAt,
+                  description = "Latest order status saved by JTBazar.",
                   state = StepState.COMPLETED
-                ),
-                OrderTimelineStep(
-                  title = "Central Delivery & Dispatch",
-                  timestamp = "JTBazar Fleet",
-                  description = "Centralized delivery team processing package.",
-                  state = if (dto.orderStatus == "PENDING") StepState.IN_PROGRESS else StepState.COMPLETED
-                ),
-                OrderTimelineStep(
-                  title = "Delivered & COD Collected",
-                  timestamp = "Doorstep",
-                  description = "Cash on Delivery payment received upon handover.",
-                  state = if (dto.orderStatus == "DELIVERED") StepState.COMPLETED else StepState.PENDING
                 )
               )
             )
