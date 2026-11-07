@@ -911,7 +911,7 @@ fun AccountScreen(
             AccountMenuItem(
               icon = Icons.Outlined.LocalShipping,
               title = "Shipping & Delivery Policy",
-              subtitle = "Express Lahore delivery in 24–48 hours",
+              subtitle = "Central delivery across supported locations",
               onClick = {
                 policyTitle = "Shipping & Delivery Policy"
                 policyContent = "JTBazar manages centralized delivery. We collect products from participating vendors and deliver orders through the JTBazar delivery operation. Delivery fee and availability are confirmed at checkout. General return requests must be submitted within 7 calendar days of delivery, subject to the published return conditions."
@@ -923,10 +923,10 @@ fun AccountScreen(
             AccountMenuItem(
               icon = Icons.Outlined.AssignmentReturn,
               title = "Return & Refund Policy",
-              subtitle = "7-Day guarantee for defective or broken goods",
+              subtitle = "Request within 7 calendar days of delivery",
               onClick = {
                 policyTitle = "Return & Refund Policy"
-                policyContent = "Under our 7-Day Buyer Protection policy, any damaged, broken, or incorrect items will be replaced or refunded. Please initiate a return request from the 'Return & Refund Requests' section with item details."
+                policyContent = "JTBazar accepts eligible general return requests within 7 calendar days of delivery. The request must relate to the original order and include the information and evidence required by the return process. Refund or replacement is subject to review under the published return conditions."
                 showPolicyDialog = true
               }
             )
@@ -935,10 +935,10 @@ fun AccountScreen(
             AccountMenuItem(
               icon = Icons.Outlined.Info,
               title = "About JTBazar & Contact Us",
-              subtitle = "Lahore headquarters, email & helpline",
+              subtitle = "JTBazar marketplace and customer support",
               onClick = {
                 policyTitle = "About JTBazar"
-                policyContent = "JTBazar is Pakistan's premier multi-category marketplace celebrating authentic Pakistani crafts, fresh groceries, and daily essentials. \n\nOffice: Main Boulevard, Gulberg III, Lahore, Pakistan\nEmail: jtbazar2423@gmail.com\nHelpline: +92 300 4821902"
+                policyContent = "JTBazar is a centralized multi-vendor marketplace in Pakistan. Customers place orders through JTBazar, and the JTBazar team coordinates vendor collection and customer delivery. For support, use the contact details published on the JTBazar website."
                 showPolicyDialog = true
               }
             )
