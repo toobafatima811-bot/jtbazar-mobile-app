@@ -516,7 +516,7 @@ fun InstantDeliveryBanner(
           color = JTTextPrimary
         )
         Text(
-          text = "Free delivery on orders over Rs. 1,999",
+          text = "Centralized delivery by JTBazar",
           fontSize = 10.sp,
           color = JTTextSecondary
         )
