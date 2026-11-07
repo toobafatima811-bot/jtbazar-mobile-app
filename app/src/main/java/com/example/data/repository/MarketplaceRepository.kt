@@ -92,7 +92,8 @@ object MarketplaceRepository {
           product = product,
           quantity = quantity,
           selectedPalette = palette,
-          selectedSize = size
+          selectedSize = size,
+          variantId = if (!size.isNullOrBlank()) product.variantIds["size:" + size] else if (!palette.isNullOrBlank()) product.variantIds["color:" + palette] else null
         )
       }
     }
@@ -276,6 +277,7 @@ object MarketplaceRepository {
               highlights = dto.highlights,
               palettes = dto.palettes.map { PaletteOption(it, 0xFF1E40AF) },
               sizes = dto.sizes.map { SizeOption(it, "Option") },
+              variantIds = dto.variantIds,
               isArtisanCollection = dto.isArtisanCollection,
               isWishlisted = false
             )
