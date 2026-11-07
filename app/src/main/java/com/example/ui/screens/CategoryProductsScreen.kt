@@ -22,6 +22,7 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.ui.theme.*
 
 /** Native category listing: shows only products assigned to the selected live category. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryProductsScreen(
   category: CategoryItem,
