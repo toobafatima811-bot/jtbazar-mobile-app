@@ -104,16 +104,6 @@ fun HomeScreen(
         )
       }
 
-      // 2. Instant Delivery Banner
-      item {
-        InstantDeliveryBanner(
-          area = currentLocation,
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-        )
-      }
-
       // Homepage promotions will render only after live promotions are fetched from Supabase.
 
       // 4. Shop by Category (Horizontal Row)
@@ -365,17 +355,6 @@ fun HomeScreen(
             }
           }
         }
-      }
-
-      // 7. Lahore Special: Authentic Homemade Kitchens in Your Town
-      item {
-        Spacer(modifier = Modifier.height(20.dp))
-        LahoreSpecialKitchenCard(
-          onBrowse = { onExploreCategoriesClick() },
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        )
       }
 
       // 8. Trust Badges
