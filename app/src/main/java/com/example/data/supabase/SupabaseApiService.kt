@@ -267,6 +267,7 @@ object SupabaseApiService {
             SupabaseReviewDto(
               id = obj.optString("id", ""),
               productId = obj.optString("product_id", productId),
+              orderId = obj.optString("order_id", ""),
               userId = obj.optString("buyer_id", ""),
               userName = "",
               rating = obj.optInt("rating", 0),
@@ -285,7 +286,18 @@ object SupabaseApiService {
   }
 
   suspend fun submitProductReview(review: SupabaseReviewDto): Result<String> = withContext(Dispatchers.IO) {
-    Result.failure(IllegalStateException("Reviews must be submitted for a delivered order item."))
+    try {
+      val orderId = review.orderId?.takeIf { it.isNotBlank() } ?: throw IOException("A delivered order is required to submit a review.")
+      val body = JSONObject().apply {
+        put("product_id", review.productId)
+        put("order_id", orderId)
+        put("buyer_id", review.userId)
+        put("rating", review.rating.coerceIn(1, 5))
+        if (review.title.isNotBlank()) put("title", review.title)
+        if (review.comment.isNotBlank()) put("comment", review.comment)
+      }
+      SupabaseClient.post("product_reviews", body.toString())
+    } catch (e: Exception) { Result.failure(e) }
   }
 
   // CASES: RETURNS & COMPLAINTS
