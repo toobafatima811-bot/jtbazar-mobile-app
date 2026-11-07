@@ -33,11 +33,11 @@ object MarketplaceRepository {
   val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
   // Countdown seconds for daily promotion
-  private val _countdownSeconds = MutableStateFlow(4 * 3600 + 18 * 60 + 18)
+  private val _countdownSeconds = MutableStateFlow(0)
   val countdownSeconds: StateFlow<Int> = _countdownSeconds.asStateFlow()
 
   // Selected Location (Default to Lahore, updated when user picks an address)
-  private val _currentLocation = MutableStateFlow("Lahore, Pakistan")
+  private val _currentLocation = MutableStateFlow("Select delivery address")
   val currentLocation: StateFlow<String> = _currentLocation.asStateFlow()
 
   fun setLocation(loc: String) {
@@ -98,13 +98,7 @@ object MarketplaceRepository {
     }
     updateCartCount()
 
-    // Sync to Supabase if customer is authenticated
-    val userId = SupabaseClient.currentUserId
-    if (userId != null) {
-      scope.launch {
-        SupabaseApiService.addToCart(userId, product.id, quantity, palette, size)
-      }
-    }
+    // Cart entries remain local until their selected variant can be mapped to a real variant UUID.
   }
 
   fun updateQuantity(itemId: String, quantity: Int) {
@@ -117,36 +111,21 @@ object MarketplaceRepository {
     }
     updateCartCount()
 
-    val userId = SupabaseClient.currentUserId
-    if (userId != null) {
-      scope.launch {
-        SupabaseApiService.updateCartQuantity(itemId, quantity)
-      }
-    }
+
   }
 
   fun removeFromCart(itemId: String) {
     _cartItems.update { list -> list.filterNot { it.id == itemId } }
     updateCartCount()
 
-    val userId = SupabaseClient.currentUserId
-    if (userId != null) {
-      scope.launch {
-        SupabaseApiService.removeCartItem(itemId)
-      }
-    }
+
   }
 
   fun clearCart() {
     _cartItems.value = emptyList()
     updateCartCount()
 
-    val userId = SupabaseClient.currentUserId
-    if (userId != null) {
-      scope.launch {
-        SupabaseApiService.clearCart(userId)
-      }
-    }
+
   }
 
   // ----------------------------------------------------
@@ -400,7 +379,7 @@ object MarketplaceRepository {
   // REVIEWS & CASES
   // ----------------------------------------------------
   fun submitProductReview(productId: String, rating: Int, title: String, comment: String) {
-    val userId = SupabaseClient.currentUserId ?: "cust_user"
+    val userId = SupabaseClient.currentUserId ?: run { _errorMessage.value = "Please sign in first."; return }
     val userName = SupabaseClient.currentUser.value?.fullName ?: "Verified Buyer"
     val review = SupabaseReviewDto(
       id = "rev_${System.currentTimeMillis()}",
@@ -412,10 +391,7 @@ object MarketplaceRepository {
       comment = comment,
       createdAt = "Just now"
     )
-    _reviews.update { listOf(review) + it }
-    scope.launch {
-      SupabaseApiService.submitProductReview(review)
-    }
+    _errorMessage.value = "Reviews must be submitted against a delivered order item. This app needs the order-specific review flow."
   }
 
   fun submitReturnRequest(orderId: String, reason: String, description: String) {
@@ -429,9 +405,7 @@ object MarketplaceRepository {
       status = "PENDING",
       createdAt = "Just now"
     )
-    scope.launch {
-      SupabaseApiService.submitReturnRequest(req)
-    }
+    _errorMessage.value = "A return must reference the delivered order item and include required product evidence. This app needs the order-specific return flow."
   }
 
   fun submitComplaint(orderId: String?, subject: String, message: String) {
@@ -446,7 +420,7 @@ object MarketplaceRepository {
       createdAt = "Just now"
     )
     scope.launch {
-      SupabaseApiService.submitComplaint(complaint)
+      SupabaseApiService.submitComplaint(complaint).onFailure { _errorMessage.value = it.message }
     }
   }
 
@@ -483,7 +457,7 @@ object MarketplaceRepository {
           val orderDtoList = ordersRes.getOrNull().orEmpty()
           val mappedOrders = orderDtoList.map { dto ->
             OrderRecord(
-              orderId = dto.orderNumber,
+              orderId = dto.id,
               date = dto.createdAt,
               items = emptyList(),
               subtotal = dto.subtotal,
@@ -554,7 +528,7 @@ object MarketplaceRepository {
     _cartItems.value = emptyList()
     _cartCount.value = 0
     _notifications.value = emptyList()
-    _currentLocation.value = "Lahore, Pakistan"
+    _currentLocation.value = "Select delivery address"
   }
 
   // ----------------------------------------------------
@@ -592,16 +566,6 @@ object MarketplaceRepository {
 
   init {
     updateCartCount()
-
-    // Countdown timer ticker
-    scope.launch {
-      while (true) {
-        delay(1000)
-        _countdownSeconds.update { curr ->
-          if (curr > 0) curr - 1 else 4 * 3600 + 18 * 60 + 18
-        }
-      }
-    }
 
     // Observe customer authentication session
     scope.launch {
