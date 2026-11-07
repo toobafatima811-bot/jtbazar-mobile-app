@@ -582,21 +582,7 @@ object MarketplaceRepository {
     } */
   }
 
-  private fun resolveCategoryDrawable(title: String): Int {
-    return when {
-      title.contains("groceries", ignoreCase = true) -> R.drawable.cat_groceries
-      title.contains("homemade", ignoreCase = true) -> R.drawable.cat_homemade
-      title.contains("fast", ignoreCase = true) -> R.drawable.cat_fastfood
-      title.contains("bag", ignoreCase = true) -> R.drawable.cat_bags
-      title.contains("living", ignoreCase = true) -> R.drawable.cat_homeliving
-      title.contains("kitchen", ignoreCase = true) -> R.drawable.cat_kitchen
-      title.contains("stationery", ignoreCase = true) -> R.drawable.cat_stationery
-      title.contains("wellness", ignoreCase = true) -> R.drawable.cat_wellness
-      title.contains("lighting", ignoreCase = true) -> R.drawable.cat_lighting
-      title.contains("artisan", ignoreCase = true) -> R.drawable.cat_artisan
-      else -> R.drawable.cat_groceries
-    }
-  }
+  private fun resolveCategoryDrawable(title: String): Int = R.drawable.ic_launcher_background
 
   init {
     updateCartCount()
