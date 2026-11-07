@@ -254,8 +254,9 @@ fun HomeScreen(
       // 6. 2x2 Grid of Popular Products
       item {
         Spacer(modifier = Modifier.height(10.dp))
+        val homeProducts = products.filter { it.isFeatured }.ifEmpty { products }
         val displayProducts = if (searchQuery.isBlank()) {
-          products
+          homeProducts.take(4)
         } else {
           products.filter {
             it.title.contains(searchQuery, ignoreCase = true) ||
