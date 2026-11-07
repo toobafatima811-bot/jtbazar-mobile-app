@@ -50,19 +50,12 @@ fun HomeScreen(
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
-  val countdownSeconds by MarketplaceRepository.countdownSeconds.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
 
   var showAddressDialog by remember { mutableStateOf(false) }
   var searchQuery by remember { mutableStateOf("") }
   var isSearching by remember { mutableStateOf(false) }
-
-  // Format countdown seconds into HH:MM:SS
-  val hours = countdownSeconds / 3600
-  val minutes = (countdownSeconds % 3600) / 60
-  val seconds = countdownSeconds % 60
-  val timerText = String.format("%02d:%02d:%02d", hours, minutes, seconds)
 
   if (showAddressDialog) {
     AddressSelectionSheet(
@@ -241,24 +234,12 @@ fun HomeScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Column {
               Text(
-                text = "Popular in Lahore",
+                text = "Popular Products",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = JTTextPrimary
               )
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                  text = "Ends in ",
-                  fontSize = 11.sp,
-                  color = JTTextSecondary
-                )
-                Text(
-                  text = timerText,
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = JTRed
-                )
-              }
+
             }
           }
 
