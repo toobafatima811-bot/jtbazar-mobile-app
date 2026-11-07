@@ -33,11 +33,11 @@ object MarketplaceRepository {
   val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
   // Countdown seconds for daily promotion
-  private val _countdownSeconds = MutableStateFlow(0)
+  private val _countdownSeconds = MutableStateFlow(4 * 3600 + 18 * 60 + 18)
   val countdownSeconds: StateFlow<Int> = _countdownSeconds.asStateFlow()
 
   // Selected Location (Default to Lahore, updated when user picks an address)
-  private val _currentLocation = MutableStateFlow("Select delivery address")
+  private val _currentLocation = MutableStateFlow("Lahore, Pakistan")
   val currentLocation: StateFlow<String> = _currentLocation.asStateFlow()
 
   fun setLocation(loc: String) {
@@ -338,157 +338,39 @@ object MarketplaceRepository {
   // ----------------------------------------------------
   // ORDER PLACEMENT (CENTRALIZED JTBAZAR COD MODEL)
   // ----------------------------------------------------
-  fun placeCurrentOrder(
-    deliveryNote: String = "",
-    onComplete: ((Result<OrderRecord>) -> Unit)? = null
-  ): OrderRecord? {
+  fun placeCurrentOrder(deliveryNote: String = "", onComplete: ((Result<OrderRecord>) -> Unit)? = null): OrderRecord? {
     val items = _cartItems.value
-    if (items.isEmpty()) {
-      onComplete?.invoke(Result.failure(IllegalStateException("Shopping cart is empty")))
-      return null
-    }
-
+    if (items.isEmpty()) { onComplete?.invoke(Result.failure(IllegalStateException("Shopping cart is empty"))); return null }
     val address = _selectedAddress.value
-    if (address == null) {
-      onComplete?.invoke(Result.failure(IllegalStateException("Delivery address is required")))
-      return null
-    }
-
-    if (_isPlacingOrder.value) {
-      // Prevent duplicate submissions
-      return null
-    }
-
+    if (address == null) { onComplete?.invoke(Result.failure(IllegalStateException("Delivery address is required"))); return null }
+    val userId = SupabaseClient.currentUserId
+    if (userId == null) { onComplete?.invoke(Result.failure(IllegalStateException("Please sign in before placing an order."))); return null }
+    if (_isPlacingOrder.value) return null
     _isPlacingOrder.value = true
-
-    // Server-grade price calculation based on cart items
-    val subtotal = items.sumOf { it.totalPrice }
-    val deliveryFee = if (subtotal >= 1999) 0 else 150 // Free delivery above Rs. 1,999
-    val discount = 0
-    val grandTotal = (subtotal - discount + deliveryFee).coerceAtLeast(0)
-
-    val randomNum = (10000..99999).random()
-    val newOrderNumber = "JT-$randomNum-PK"
-
-    val newOrder = OrderRecord(
-      orderId = newOrderNumber,
-      date = "Today, Just Now",
-      items = items,
-      subtotal = subtotal,
-      discount = discount,
-      deliveryFee = deliveryFee,
-      grandTotal = grandTotal,
-      address = address,
-      deliveryNote = deliveryNote,
-      statusHeader = "Order Placed • Cash on Delivery",
-      orderStatus = "PENDING",
-      timeline = listOf(
-        OrderTimelineStep(
-          title = "Order Placed",
-          timestamp = "Just Now",
-          description = "Order registered with JTBazar centralized hub. Cash on Delivery payable: PKR ${String.format("%,d", grandTotal)}.",
-          state = StepState.COMPLETED
-        ),
-        OrderTimelineStep(
-          title = "Vendor Coordination & Collection",
-          timestamp = "In Progress",
-          description = "JTBazar team verifying items with vendors and collecting package.",
-          state = StepState.IN_PROGRESS
-        ),
-        OrderTimelineStep(
-          title = "JTBazar Central QC & Sealing",
-          timestamp = "Pending",
-          description = "Central quality check and sealing with JTBazar tamper-evident security tape.",
-          state = StepState.PENDING
-        ),
-        OrderTimelineStep(
-          title = "Out for Delivery & COD Collection",
-          timestamp = "Estimated 2–3 Days",
-          description = "Rider delivering to ${address.area}, ${address.city} with Cash on Delivery payment.",
-          state = StepState.PENDING
-        ),
-        OrderTimelineStep(
-          title = "Delivered",
-          timestamp = "Pending Delivery",
-          description = "Package handed over with digital acknowledgment (7-day return period starts upon delivery).",
-          state = StepState.PENDING
-        )
-      )
-    )
-
-    val userId = SupabaseClient.currentUserId ?: return
-
     scope.launch {
       try {
-        val orderDto = SupabaseOrderDto(
-          id = "",
-          orderNumber = newOrderNumber,
-          userId = userId,
-          subtotal = subtotal,
-          discount = discount,
-          deliveryFee = deliveryFee,
-          grandTotal = grandTotal,
-          paymentMethod = "COD",
-          paymentStatus = "PENDING",
-          orderStatus = "PENDING",
-          deliveryNote = deliveryNote,
-          addressName = address.name,
-          addressPhone = address.phone,
-          addressLine = address.addressLine,
-          addressArea = address.area,
-          addressCity = address.city,
-          createdAt = System.currentTimeMillis().toString()
-        )
-
-        val orderItemsDto = items.map { item ->
-          SupabaseOrderItemDto(
-            id = "",
-            orderId = newOrderNumber,
-            productId = item.product.id,
-            productTitle = item.product.title,
-            unitPrice = item.product.price,
-            quantity = item.quantity,
-            totalPrice = item.totalPrice,
-            selectedPalette = item.selectedPalette,
-            selectedSize = item.selectedSize
-          )
+        val currentUser = SupabaseClient.currentUser.value
+        val dto = SupabaseOrderDto(id="", orderNumber="", userId=userId, subtotal=0, discount=0, deliveryFee=0, grandTotal=0, paymentMethod="cod", paymentStatus="pending", orderStatus="pending", deliveryNote=deliveryNote, addressName=address.name, addressPhone=address.phone, addressLine=address.addressLine, addressArea=address.area, addressCity=address.city, createdAt="", addressProvince=address.province, customerEmail=currentUser?.email, idempotencyKey=java.util.UUID.randomUUID().toString())
+        val lines = items.map { item -> SupabaseOrderItemDto(id="", orderId="", productId=item.product.id, productTitle=item.product.title, unitPrice=0, quantity=item.quantity, totalPrice=0, selectedPalette=item.selectedPalette, selectedSize=item.selectedSize) }
+        val createdId = SupabaseApiService.createOrder(dto, lines).getOrThrow()
+        val saved = SupabaseApiService.fetchOrders(userId).getOrThrow().firstOrNull { it.id == createdId } ?: throw IllegalStateException("Order created but could not be reloaded.")
+        val savedItems = SupabaseApiService.fetchOrderItems(saved.id).getOrThrow().map { line ->
+          val product = items.firstOrNull { it.product.id == line.productId }?.product ?: Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0)
+          CartItem(id=line.id, product=product, quantity=line.quantity, selectedPalette=line.selectedPalette, selectedSize=line.selectedSize)
         }
-
-        val createRes = SupabaseApiService.createOrder(orderDto, orderItemsDto)
-        if (createRes.isSuccess) {
-          _activeOrder.value = newOrder
-          _orders.update { listOf(newOrder) + it }
-
-          // Clear cart only after verified order creation
-          clearCart()
-
-          // Add real confirmation notification
-          val confirmationNotif = SupabaseNotificationDto(
-            id = "notif_${System.currentTimeMillis()}",
-            userId = userId,
-            title = "Order $newOrderNumber Placed!",
-            message = "Total: PKR ${String.format("%,d", grandTotal)} via Cash on Delivery. JTBazar is coordinating dispatch.",
-            type = "ORDER",
-            isRead = false,
-            createdAt = "Just now"
-          )
-          _notifications.update { listOf(confirmationNotif) + it }
-
-          onComplete?.invoke(Result.success(newOrder))
-        } else {
-          onComplete?.invoke(Result.failure(createRes.exceptionOrNull() ?: Exception("Failed to create order on server")))
-        }
+        val record = OrderRecord(orderId=saved.id, date=saved.createdAt, items=savedItems, subtotal=saved.subtotal, discount=saved.discount, deliveryFee=saved.deliveryFee, grandTotal=saved.grandTotal, address=DeliveryAddress(id="order-address", name=saved.addressName, phone=saved.addressPhone, addressLine=saved.addressLine, area=saved.addressArea, city=saved.addressCity, province=address.province, isDefault=false), deliveryNote=saved.deliveryNote ?: "", statusHeader=saved.orderStatus, orderStatus=saved.orderStatus)
+        _activeOrder.value = record
+        _orders.update { listOf(record) + it.filterNot { old -> old.orderId == record.orderId } }
+        clearCart()
+        loadUserData(userId)
+        onComplete?.invoke(Result.success(record))
       } catch (e: Exception) {
-        Log.e(TAG, "Order creation error", e)
+        Log.e(TAG, "Secure order placement failed", e)
         onComplete?.invoke(Result.failure(e))
-      } finally {
-        _isPlacingOrder.value = false
-      }
+      } finally { _isPlacingOrder.value = false }
     }
-
-    return newOrder
+    return null
   }
-
   fun cancelOrder(orderId: String, onComplete: ((Boolean) -> Unit)? = null): Boolean {
     val existing = _orders.value.find { it.orderId == orderId }
     if (existing != null && existing.orderStatus == "PENDING") {
@@ -518,7 +400,7 @@ object MarketplaceRepository {
   // REVIEWS & CASES
   // ----------------------------------------------------
   fun submitProductReview(productId: String, rating: Int, title: String, comment: String) {
-    val userId = SupabaseClient.currentUserId ?: run { _errorMessage.value = "Please sign in first."; return }
+    val userId = SupabaseClient.currentUserId ?: "cust_user"
     val userName = SupabaseClient.currentUser.value?.fullName ?: "Verified Buyer"
     val review = SupabaseReviewDto(
       id = "rev_${System.currentTimeMillis()}",
@@ -672,7 +554,7 @@ object MarketplaceRepository {
     _cartItems.value = emptyList()
     _cartCount.value = 0
     _notifications.value = emptyList()
-    _currentLocation.value = "Select delivery address"
+    _currentLocation.value = "Lahore, Pakistan"
   }
 
   // ----------------------------------------------------
