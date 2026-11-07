@@ -114,21 +114,29 @@ object SupabaseApiService {
     SupabaseClient.get("cart_items?user_id=eq.$userId&select=*,product:products(*)")
   }
 
-  suspend fun addToCart(
-    userId: String,
-    productId: String,
-    quantity: Int,
-    palette: String?,
-    size: String?
-  ): Result<String> = withContext(Dispatchers.IO) {
-    val json = JSONObject().apply {
-      put("user_id", userId)
-      put("product_id", productId)
-      put("quantity", quantity)
-      if (!palette.isNullOrBlank()) put("selected_palette", palette)
-      if (!size.isNullOrBlank()) put("selected_size", size)
-    }
-    SupabaseClient.post("cart_items", json.toString())
+  suspend fun addToCart(userId: String, productId: String, quantity: Int, variantId: String?): Result<String> = withContext(Dispatchers.IO) {
+    try {
+      var query = "cart_items?user_id=eq.$userId&product_id=eq.$productId&select=id,quantity"
+      query += if (variantId.isNullOrBlank()) "&variant_id=is.null" else "&variant_id=eq.$variantId"
+      val existingBody = SupabaseClient.get(query).getOrThrow()
+      val rows = JSONArray(existingBody)
+      if (rows.length() > 0) {
+        val row = rows.getJSONObject(0)
+        val id = row.optString("id")
+        val update = JSONObject().put("quantity", row.optInt("quantity", 0) + quantity)
+        SupabaseClient.patch("cart_items?id=eq.$id&user_id=eq.$userId", update.toString()).getOrThrow()
+        Result.success(id)
+      } else {
+        val body = JSONObject().apply {
+          put("user_id", userId); put("product_id", productId)
+          if (!variantId.isNullOrBlank()) put("variant_id", variantId)
+          put("quantity", quantity)
+        }
+        val inserted = JSONArray(SupabaseClient.post("cart_items", body.toString()).getOrThrow())
+        if (inserted.length() == 0) throw IOException("Cart item was not saved.")
+        Result.success(inserted.getJSONObject(0).optString("id"))
+      }
+    } catch (e: Exception) { Log.e(TAG, "addToCart error", e); Result.failure(e) }
   }
 
   suspend fun updateCartQuantity(cartItemId: String, quantity: Int): Result<String> = withContext(Dispatchers.IO) {
