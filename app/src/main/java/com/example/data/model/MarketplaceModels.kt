@@ -43,6 +43,7 @@ data class Product(
   val variantIds: Map<String, String> = emptyMap(),
   val isArtisanCollection: Boolean = false,
   val isFeatured: Boolean = false,
+  val isNewArrival: Boolean = false,
   val isWishlisted: Boolean = false
 )
 

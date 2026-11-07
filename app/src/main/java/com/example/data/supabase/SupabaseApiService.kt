@@ -20,31 +20,87 @@ object SupabaseApiService {
 
   suspend fun fetchProducts(category: String? = null, isFeatured: Boolean? = null, limit: Int = 50): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
     try {
-      val params = mutableListOf("select=*,category:categories(id,name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)", "publication_status=eq.published", "moderation_status=eq.approved", "vendor_hidden=eq.false", "order=created_at.desc", "limit=${limit.coerceIn(1, 100)}")
+      // Match the website catalog service: fetch public product rows first, then
+      // load images, variants, categories and public inventory independently.
+      // Embedded PostgREST joins were preventing the Android catalog from loading
+      // when relationship metadata differed from the website's explicit queries.
+      val params = mutableListOf(
+        "select=id,category_id,seller_id,name,slug,sku,short_description,description,price,discount_percent,food_selling_unit,food_unit_price,food_quantity_increment,food_minimum_quantity,is_daily_item,daily_available_quantity,daily_minimum_quantity,daily_available_on,daily_status,currency,specifications,publication_status,moderation_status,stock_verification_status,is_featured,track_inventory,seo_title,seo_description,created_at",
+        "publication_status=eq.published",
+        "moderation_status=eq.approved",
+        "order=created_at.desc",
+        "limit=${limit.coerceIn(1, 100)}"
+      )
       if (!category.isNullOrBlank()) params.add("category_id=eq.${URLEncoder.encode(category.trim(), "UTF-8")}")
       if (isFeatured == true) params.add("is_featured=eq.true")
-      val response = SupabaseClient.get("products?${params.joinToString("&")}")
-      response.mapCatching { json ->
-        val products = JSONArray(json)
-        if (products.length() == 0) return@mapCatching emptyList()
-        val ids = JSONArray()
-        for (i in 0 until products.length()) ids.put(products.getJSONObject(i).optString("id"))
-        val request = JSONObject().put("product_ids", ids).toString()
-        val inventory = SupabaseClient.rpc("get_public_inventory", request).getOrNull()?.let(::JSONArray)
-        val availability = SupabaseClient.rpc("get_public_availability", request).getOrNull()?.let(::JSONArray)
-        val quantities = mutableMapOf<String, Int>()
-        if (inventory != null) for (i in 0 until inventory.length()) {
-          val row = inventory.getJSONObject(i); val id = row.optString("product_id")
-          quantities[id] = (quantities[id] ?: 0) + row.optInt("available_quantity", 0)
-        }
-        val available = mutableMapOf<String, Boolean>()
-        if (availability != null) for (i in 0 until availability.length()) {
-          val row = availability.getJSONObject(i); val id = row.optString("product_id")
-          available[id] = (available[id] ?: false) || row.optBoolean("is_available", false)
-        }
-        parseProductsJson(json, quantities, available, availability != null)
+
+      val productJson = SupabaseClient.get("products?${params.joinToString("&")}").getOrThrow()
+      val products = JSONArray(productJson)
+      if (products.length() == 0) return@withContext Result.success(emptyList())
+
+      val ids = (0 until products.length()).mapNotNull { index ->
+        products.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
       }
-    } catch (e: Exception) { Log.e(TAG, "fetchProducts error", e); Result.failure(e) }
+      val idFilter = ids.joinToString(",")
+      val imageJson = SupabaseClient.get(
+        "product_images?select=product_id,image_url,storage_path,is_primary,sort_order&product_id=in.($idFilter)&order=sort_order.asc"
+      ).getOrThrow()
+      val variantJson = SupabaseClient.get(
+        "product_variants?select=id,product_id,option_label,option_value,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
+      ).getOrThrow()
+      val categoryJson = SupabaseClient.get(
+        "categories?select=id,name&is_active=eq.true"
+      ).getOrThrow()
+
+      val images = JSONArray(imageJson)
+      val variants = JSONArray(variantJson)
+      val categories = JSONArray(categoryJson)
+      val categoriesById = mutableMapOf<String, JSONObject>()
+      for (i in 0 until categories.length()) {
+        val row = categories.optJSONObject(i) ?: continue
+        categoriesById[row.optString("id")] = JSONObject().put("id", row.optString("id")).put("name", row.optString("name"))
+      }
+      val imagesByProduct = mutableMapOf<String, JSONArray>()
+      for (i in 0 until images.length()) {
+        val row = images.optJSONObject(i) ?: continue
+        val id = row.optString("product_id")
+        imagesByProduct.getOrPut(id) { JSONArray() }.put(row)
+      }
+      val variantsByProduct = mutableMapOf<String, JSONArray>()
+      for (i in 0 until variants.length()) {
+        val row = variants.optJSONObject(i) ?: continue
+        val id = row.optString("product_id")
+        variantsByProduct.getOrPut(id) { JSONArray() }.put(row)
+      }
+
+      for (i in 0 until products.length()) {
+        val row = products.optJSONObject(i) ?: continue
+        val id = row.optString("id")
+        row.put("images", imagesByProduct[id] ?: JSONArray())
+        row.put("variants", variantsByProduct[id] ?: JSONArray())
+        row.put("category", categoriesById[row.optString("category_id")] ?: JSONObject())
+      }
+
+      val request = JSONObject().put("product_ids", JSONArray(ids)).toString()
+      val inventory = SupabaseClient.rpc("get_public_inventory", request).getOrNull()?.let(::JSONArray)
+      val availability = SupabaseClient.rpc("get_public_availability", request).getOrNull()?.let(::JSONArray)
+      val quantities = mutableMapOf<String, Int>()
+      if (inventory != null) for (i in 0 until inventory.length()) {
+        val row = inventory.getJSONObject(i)
+        val id = row.optString("product_id")
+        quantities[id] = (quantities[id] ?: 0) + row.optInt("available_quantity", 0)
+      }
+      val available = mutableMapOf<String, Boolean>()
+      if (availability != null) for (i in 0 until availability.length()) {
+        val row = availability.getJSONObject(i)
+        val id = row.optString("product_id")
+        available[id] = (available[id] ?: false) || row.optBoolean("is_available", false)
+      }
+      Result.success(parseProductsJson(products.toString(), quantities, available, availability != null))
+    } catch (e: Exception) {
+      Log.e(TAG, "fetchProducts error", e)
+      Result.failure(e)
+    }
   }
 
   suspend fun searchProducts(query:String):Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO){
@@ -59,7 +115,7 @@ object SupabaseApiService {
       val obj = rows.optJSONObject(index) ?: return@mapNotNull null
       val category = obj.optJSONObject("category") ?: obj.optJSONArray("category")?.optJSONObject(0)
       val seller = obj.optJSONObject("seller") ?: obj.optJSONArray("seller")?.optJSONObject(0)
-      val basePrice = obj.optDouble("price", 0.0)
+      val basePrice = if (!obj.isNull("food_unit_price")) obj.optDouble("food_unit_price", obj.optDouble("price", 0.0)) else obj.optDouble("price", 0.0)
       val discount = obj.optDouble("discount_percent", 0.0).toInt().coerceIn(0, 100)
       val price = (basePrice * (100 - discount) / 100.0).toInt()
       val imageRows = obj.optJSONArray("images")
@@ -81,7 +137,7 @@ object SupabaseApiService {
         if (spec.optString("label").isNotBlank() && spec.optString("value").isNotBlank()) highlights.add(spec.optString("label") + ": " + spec.optString("value"))
       }
       val id = obj.optString("id"); val known = availabilityKnown && availability.containsKey(id); val stock = known && availability[id] == true
-      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
+      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=true)
     }
   }
 

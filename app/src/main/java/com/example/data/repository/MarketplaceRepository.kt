@@ -337,6 +337,7 @@ object MarketplaceRepository {
               variantIds = dto.variantIds,
               isArtisanCollection = dto.isArtisanCollection,
               isFeatured = dto.isFeatured,
+              isNewArrival = dto.isNewArrival,
               isWishlisted = false
             )
           }
