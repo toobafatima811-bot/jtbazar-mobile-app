@@ -700,7 +700,7 @@ fun AccountScreen(
                   color = if (isLoggedIn) JTPurpleContainer else JTAmberContainer
                 ) {
                   Text(
-                    text = if (isLoggedIn) "Supabase Verified • Lahore" else "Guest Account",
+                    text = if (isLoggedIn) "Supabase connected" else "Guest Account",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isLoggedIn) JTPurplePrimary else JTAmberDark,
@@ -914,7 +914,7 @@ fun AccountScreen(
               subtitle = "Express Lahore delivery in 24–48 hours",
               onClick = {
                 policyTitle = "Shipping & Delivery Policy"
-                policyContent = "JTBazar operates its own centralized delivery network in Lahore with delivery coverage across Gulberg, DHA, Model Town, Johar Town, Cantt, Bahria, and surrounding areas. Standard delivery is 2–3 business days. Free delivery applies to orders over Rs. 1,999."
+                policyContent = "JTBazar manages centralized delivery. We collect products from participating vendors and deliver orders through the JTBazar delivery operation. Delivery fee and availability are confirmed at checkout. General return requests must be submitted within 7 calendar days of delivery, subject to the published return conditions."
                 showPolicyDialog = true
               }
             )
