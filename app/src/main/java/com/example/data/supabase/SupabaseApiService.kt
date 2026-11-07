@@ -100,6 +100,63 @@ object SupabaseApiService {
     } catch (e: Exception) { Result.failure(e) }
   }
 
+  // LIVE HOMEPAGE CONTENT (same published rows as the website)
+  suspend fun fetchHomepageHeroes(): Result<List<SupabaseHomepageHeroDto>> = withContext(Dispatchers.IO) {
+    try {
+      SupabaseClient.get("homepage_heroes?select=id,title,subtitle,cta_text,cta_destination,image_url,mobile_image_url,image_alt_text,display_order&status=eq.published&order=display_order.asc")
+        .mapCatching { json ->
+          val rows = JSONArray(json)
+          (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val image = row.optString("image_url").takeIf { it.startsWith("https://") } ?: return@mapNotNull null
+            SupabaseHomepageHeroDto(
+              id = row.optString("id"),
+              title = row.optString("title"),
+              subtitle = row.optString("subtitle").takeIf { it.isNotBlank() },
+              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() },
+              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() },
+              imageUrl = image,
+              mobileImageUrl = row.optString("mobile_image_url").takeIf { it.startsWith("https://") },
+              imageAltText = row.optString("image_alt_text").takeIf { it.isNotBlank() },
+              displayOrder = row.optInt("display_order", index)
+            )
+          }
+        }
+    } catch (e: Exception) {
+      Log.e(TAG, "fetchHomepageHeroes error", e)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun fetchActivePromotions(position: String? = null): Result<List<SupabasePromotionDto>> = withContext(Dispatchers.IO) {
+    try {
+      val positionFilter = position?.takeIf { it.isNotBlank() }?.let { "&display_position=eq.${URLEncoder.encode(it, "UTF-8")}" } ?: ""
+      SupabaseClient.get("promotions?select=id,title,description,banner_image_url,banner_image_urls,cta_text,cta_destination,display_position,priority&status=eq.approved&order=priority.desc$positionFilter")
+        .mapCatching { json ->
+          val rows = JSONArray(json)
+          (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val images = row.optJSONArray("banner_image_urls")
+            val urls = if (images == null) emptyList() else (0 until images.length()).mapNotNull { images.optString(it).takeIf { url -> url.startsWith("https://") } }
+            SupabasePromotionDto(
+              id = row.optString("id"),
+              title = row.optString("title"),
+              description = row.optString("description").takeIf { it.isNotBlank() },
+              bannerImageUrl = row.optString("banner_image_url").takeIf { it.startsWith("https://") },
+              bannerImageUrls = urls,
+              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() },
+              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() },
+              displayPosition = row.optString("display_position"),
+              priority = row.optInt("priority")
+            )
+          }
+        }
+    } catch (e: Exception) {
+      Log.e(TAG, "fetchActivePromotions error", e)
+      Result.failure(e)
+    }
+  }
+
   // CATEGORIES
   // ----------------------------------------------------
 
