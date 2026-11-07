@@ -306,77 +306,199 @@ private fun TrustItem(
 @Composable
 fun AddressSelectionSheet(
   addresses: List<DeliveryAddress>,
-  selectedAddress: DeliveryAddress,
+  selectedAddress: DeliveryAddress?,
   onSelect: (DeliveryAddress) -> Unit,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  onAddNewAddress: ((DeliveryAddress) -> Unit)? = null
 ) {
+  var showNewAddressForm by remember { mutableStateOf(addresses.isEmpty()) }
+  var name by remember { mutableStateOf("") }
+  var phone by remember { mutableStateOf("") }
+  var addressLine by remember { mutableStateOf("") }
+  var area by remember { mutableStateOf("Gulberg III") }
+  var city by remember { mutableStateOf("Lahore") }
+  var tag by remember { mutableStateOf("HOME") }
+
   AlertDialog(
     onDismissRequest = onDismiss,
     confirmButton = {
-      TextButton(onClick = onDismiss) {
-        Text("Done", color = JTPurplePrimary, fontWeight = FontWeight.Bold)
+      if (showNewAddressForm) {
+        Button(
+          onClick = {
+            if (name.isNotBlank() && phone.isNotBlank() && addressLine.isNotBlank()) {
+              val newAddr = DeliveryAddress(
+                id = "addr_${System.currentTimeMillis()}",
+                name = name.trim(),
+                phone = phone.trim(),
+                addressLine = addressLine.trim(),
+                area = area.trim(),
+                city = city.trim(),
+                province = "Punjab",
+                tag = tag,
+                isDefault = addresses.isEmpty()
+              )
+              onAddNewAddress?.invoke(newAddr)
+              onSelect(newAddr)
+              onDismiss()
+            }
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
+        ) {
+          Text("Save & Deliver Here", fontWeight = FontWeight.Bold)
+        }
+      } else {
+        TextButton(onClick = onDismiss) {
+          Text("Done", color = JTPurplePrimary, fontWeight = FontWeight.Bold)
+        }
+      }
+    },
+    dismissButton = {
+      if (showNewAddressForm && addresses.isNotEmpty()) {
+        TextButton(onClick = { showNewAddressForm = false }) {
+          Text("Cancel", color = JTTextSecondary)
+        }
       }
     },
     title = {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Filled.LocationOn, contentDescription = null, tint = JTPurplePrimary)
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Select Delivery Area", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Text(
+          text = if (showNewAddressForm) "Add Delivery Address" else "Select Delivery Area",
+          fontWeight = FontWeight.Bold,
+          fontSize = 17.sp
+        )
       }
     },
     text = {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        addresses.forEach { addr ->
-          val isSelected = addr.id == selectedAddress.id
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = if (isSelected) JTPurpleContainer.copy(alpha = 0.6f) else JTBackground,
-            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, JTPurplePrimary) else androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-            modifier = Modifier
-              .fillMaxWidth()
-              .clickable { onSelect(addr) }
+      Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        if (showNewAddressForm) {
+          OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Recipient Full Name") },
+            placeholder = { Text("e.g. Tariq Mehmood") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = phone,
+            onValueChange = { phone = it },
+            label = { Text("Mobile Phone Number") },
+            placeholder = { Text("+92 300 1234567") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = addressLine,
+            onValueChange = { addressLine = it },
+            label = { Text("House / Street / Building") },
+            placeholder = { Text("House # 12, Street 4") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+              value = area,
+              onValueChange = { area = it },
+              label = { Text("Area / Colony") },
+              singleLine = true,
+              modifier = Modifier.weight(1f)
+            )
+            OutlinedTextField(
+              value = city,
+              onValueChange = { city = it },
+              label = { Text("City") },
+              singleLine = true,
+              modifier = Modifier.weight(1f)
+            )
+          }
+          Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(
-              modifier = Modifier.padding(12.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Text(
-                    text = "${addr.area}, ${addr.city}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                  )
-                  Spacer(modifier = Modifier.width(6.dp))
-                  Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = JTAmberContainer
-                  ) {
+            listOf("HOME", "OFFICE").forEach { t ->
+              FilterChip(
+                selected = tag == t,
+                onClick = { tag = t },
+                label = { Text(t, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+              )
+            }
+          }
+        } else {
+          if (addresses.isEmpty()) {
+            Text(
+              text = "No saved addresses found. Add an address to receive your Cash on Delivery orders.",
+              fontSize = 12.sp,
+              color = JTTextSecondary
+            )
+          } else {
+            addresses.forEach { addr ->
+              val isSelected = addr.id == selectedAddress?.id
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (isSelected) JTPurpleContainer.copy(alpha = 0.6f) else JTBackground,
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, JTPurplePrimary) else androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clickable { onSelect(addr) }
+              ) {
+                Row(
+                  modifier = Modifier.padding(12.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                      Text(
+                        text = "${addr.area}, ${addr.city}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                      )
+                      Spacer(modifier = Modifier.width(6.dp))
+                      Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = JTAmberContainer
+                      ) {
+                        Text(
+                          text = addr.tag,
+                          fontSize = 10.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = JTAmberDark,
+                          modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                      }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                      text = addr.tag,
-                      fontSize = 10.sp,
-                      fontWeight = FontWeight.Bold,
-                      color = JTAmberDark,
-                      modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                      text = addr.addressLine,
+                      fontSize = 12.sp,
+                      color = JTTextSecondary
+                    )
+                  }
+                  if (isSelected) {
+                    Icon(
+                      Icons.Filled.Check,
+                      contentDescription = "Selected",
+                      tint = JTPurplePrimary,
+                      modifier = Modifier.size(20.dp)
                     )
                   }
                 }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                  text = addr.addressLine,
-                  fontSize = 12.sp,
-                  color = JTTextSecondary
-                )
-              }
-              if (isSelected) {
-                Icon(
-                  Icons.Filled.Check,
-                  contentDescription = "Selected",
-                  tint = JTPurplePrimary,
-                  modifier = Modifier.size(20.dp)
-                )
               }
             }
+          }
+
+          OutlinedButton(
+            onClick = { showNewAddressForm = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp)
+          ) {
+            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Add New Delivery Address", fontSize = 12.sp, fontWeight = FontWeight.Bold)
           }
         }
       }

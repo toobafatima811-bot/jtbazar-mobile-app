@@ -36,7 +36,7 @@ enum class AppScreen {
 fun MainApp() {
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
-  var selectedProduct by remember { mutableStateOf(MarketplaceRepository.sampleProducts[0]) }
+  var selectedProduct by remember { mutableStateOf<Product?>(null) }
 
   fun navigateTo(screen: AppScreen) {
     previousScreen = currentScreen
@@ -256,12 +256,14 @@ fun MainApp() {
         AppScreen.CATEGORIES -> {
           CategoriesScreen(
             onCategorySelect = { category ->
-              val matchingProd = MarketplaceRepository.sampleProducts.find {
+              val matchingProd = MarketplaceRepository.products.value.find {
                 it.category.contains(category.title.split(" ")[0], ignoreCase = true)
-              } ?: MarketplaceRepository.sampleProducts[0]
-              selectedProduct = matchingProd
-              MarketplaceRepository.selectProduct(matchingProd)
-              navigateTo(AppScreen.PRODUCT_DETAIL)
+              } ?: MarketplaceRepository.products.value.firstOrNull()
+              if (matchingProd != null) {
+                selectedProduct = matchingProd
+                MarketplaceRepository.selectProduct(matchingProd)
+                navigateTo(AppScreen.PRODUCT_DETAIL)
+              }
             },
             onCartClick = {
               navigateTo(AppScreen.CART_CHECKOUT)
@@ -319,13 +321,18 @@ fun MainApp() {
         }
 
         AppScreen.PRODUCT_DETAIL -> {
-          ProductDetailScreen(
-            product = selectedProduct,
-            onBackClick = { navigateBack() },
-            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-            onBuyNowClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
-          )
+          val activeProd = selectedProduct ?: MarketplaceRepository.selectedProduct.collectAsState().value
+          if (activeProd != null) {
+            ProductDetailScreen(
+              product = activeProd,
+              onBackClick = { navigateBack() },
+              onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+              onBuyNowClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+              onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+            )
+          } else {
+            navigateBack()
+          }
         }
 
         AppScreen.CART_CHECKOUT -> {

@@ -58,7 +58,8 @@ fun CategoriesScreen(
         MarketplaceRepository.selectAddress(it)
         showAddressDialog = false
       },
-      onDismiss = { showAddressDialog = false }
+      onDismiss = { showAddressDialog = false },
+      onAddNewAddress = { MarketplaceRepository.addOrUpdateAddress(it) }
     )
   }
 
@@ -326,6 +327,37 @@ fun CategoriesScreen(
         categories.filter {
           it.title.contains(searchQuery, ignoreCase = true) ||
             it.sampleItems.contains(searchQuery, ignoreCase = true)
+        }
+      }
+
+      if (filteredCategories.isEmpty()) {
+        item {
+          Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = JTSurfaceVariant,
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 24.dp)
+          ) {
+            Column(
+              modifier = Modifier.padding(24.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Icon(Icons.Filled.Category, contentDescription = null, tint = JTPurplePrimary, modifier = Modifier.size(36.dp))
+              Spacer(modifier = Modifier.height(10.dp))
+              Text("No categories available", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
+              Spacer(modifier = Modifier.height(4.dp))
+              Text("Tap refresh to fetch live categories from JTBazar.", fontSize = 12.sp, color = JTTextSecondary)
+              Spacer(modifier = Modifier.height(14.dp))
+              Button(
+                onClick = { MarketplaceRepository.refreshLiveCatalog() },
+                colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+                shape = RoundedCornerShape(8.dp)
+              ) {
+                Text("Refresh Categories", fontWeight = FontWeight.Bold)
+              }
+            }
+          }
         }
       }
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.*
@@ -47,13 +48,15 @@ fun CartCheckoutScreen(
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
 
+  val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
+
   var showAddressDialog by remember { mutableStateOf(false) }
   var deliveryNote by remember { mutableStateOf("Leave parcel with security guard / gate # 2") }
 
-  // Calculations
+  // Server-aligned Calculations
   val subtotal = cartItems.sumOf { it.totalPrice }
-  val discount = if (subtotal > 0) 100 else 0
-  val deliveryCharges = if (subtotal > 0) 150 else 0
+  val deliveryCharges = if (subtotal >= 1999 || subtotal == 0) 0 else 150
+  val discount = 0
   val grandTotal = (subtotal - discount + deliveryCharges).coerceAtLeast(0)
 
   if (showAddressDialog) {
@@ -64,7 +67,8 @@ fun CartCheckoutScreen(
         MarketplaceRepository.selectAddress(it)
         showAddressDialog = false
       },
-      onDismiss = { showAddressDialog = false }
+      onDismiss = { showAddressDialog = false },
+      onAddNewAddress = { MarketplaceRepository.addOrUpdateAddress(it) }
     )
   }
 
@@ -83,62 +87,82 @@ fun CartCheckoutScreen(
       )
     },
     bottomBar = {
-      // Bottom sticky bar: PAY ON DELIVERY & Place Order Button
-      Surface(
-        color = Color.White,
-        tonalElevation = 6.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding()
-      ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween
+      if (cartItems.isNotEmpty()) {
+        // Bottom sticky bar: PAY ON DELIVERY & Place Order Button
+        Surface(
+          color = Color.White,
+          tonalElevation = 6.dp,
+          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+          modifier = Modifier.fillMaxWidth().navigationBarsPadding()
         ) {
-          Column {
-            Text(
-              text = "PAY ON DELIVERY",
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold,
-              color = JTTextSecondary
-            )
-            Text(
-              text = "PKR ${String.format("%,d", grandTotal)}",
-              fontWeight = FontWeight.ExtraBold,
-              fontSize = 18.sp,
-              color = JTPurplePrimary
-            )
-          }
-
-          Button(
-            onClick = {
-              MarketplaceRepository.placeCurrentOrder(deliveryNote = deliveryNote)
-              Toast.makeText(context, "Order Placed Successfully! Shukriya!", Toast.LENGTH_SHORT).show()
-              onOrderPlaced()
-            },
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-              containerColor = JTOrange,
-              contentColor = Color.White
-            ),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-            modifier = Modifier.testTag("place_order_button")
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Icon(
-              imageVector = Icons.Filled.LocalShipping,
-              contentDescription = null,
-              tint = Color.White,
-              modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-              text = "PLACE ORDER VIA CASH ON DELIVERY",
-              fontWeight = FontWeight.Bold,
-              fontSize = 11.sp,
-              letterSpacing = 0.3.sp
-            )
+            Column {
+              Text(
+                text = "PAY ON DELIVERY",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = JTTextSecondary
+              )
+              Text(
+                text = "PKR ${String.format("%,d", grandTotal)}",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 18.sp,
+                color = JTPurplePrimary
+              )
+            }
+
+            Button(
+              onClick = {
+                if (selectedAddress == null) {
+                  Toast.makeText(context, "Please select or add a delivery address first", Toast.LENGTH_SHORT).show()
+                  showAddressDialog = true
+                } else {
+                  MarketplaceRepository.placeCurrentOrder(deliveryNote = deliveryNote) { result ->
+                    if (result.isSuccess) {
+                      Toast.makeText(context, "Order Placed Successfully! Shukriya!", Toast.LENGTH_SHORT).show()
+                      onOrderPlaced()
+                    } else {
+                      val err = result.exceptionOrNull()?.message ?: "Order placement failed"
+                      Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                    }
+                  }
+                }
+              },
+              enabled = !isPlacingOrder && selectedAddress != null,
+              shape = RoundedCornerShape(12.dp),
+              colors = ButtonDefaults.buttonColors(
+                containerColor = JTOrange,
+                contentColor = Color.White
+              ),
+              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+              modifier = Modifier.testTag("place_order_button")
+            ) {
+              if (isPlacingOrder) {
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("PLACING ORDER...", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+              } else {
+                Icon(
+                  imageVector = Icons.Filled.LocalShipping,
+                  contentDescription = null,
+                  tint = Color.White,
+                  modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = "PLACE ORDER VIA CASH ON DELIVERY",
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 11.sp,
+                  letterSpacing = 0.3.sp
+                )
+              }
+            }
           }
         }
       }
@@ -200,128 +224,176 @@ fun CartCheckoutScreen(
         }
       }
 
-      // 2. Delivery Address Card
-      item {
-        Spacer(modifier = Modifier.height(6.dp))
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                  modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(JTPurpleContainer),
-                  contentAlignment = Alignment.Center
-                ) {
-                  Icon(
-                    imageVector = Icons.Filled.LocationOn,
-                    contentDescription = null,
-                    tint = JTPurplePrimary,
-                    modifier = Modifier.size(16.dp)
-                  )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = "DELIVERY ADDRESS",
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = JTTextPrimary,
-                  letterSpacing = 0.5.sp
+      if (cartItems.isEmpty()) {
+        item {
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 24.dp, vertical = 60.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              Box(
+                modifier = Modifier
+                  .size(80.dp)
+                  .clip(CircleShape)
+                  .background(JTPurpleContainer),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.ShoppingCart,
+                  contentDescription = null,
+                  tint = JTPurplePrimary,
+                  modifier = Modifier.size(40.dp)
                 )
+              }
+              Spacer(modifier = Modifier.height(16.dp))
+              Text(
+                text = "Your Cart is Empty",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = JTTextPrimary
+              )
+              Spacer(modifier = Modifier.height(6.dp))
+              Text(
+                text = "Explore live Pakistani crafts, authentic spices, and daily essentials from verified vendors.",
+                fontSize = 12.sp,
+                color = JTTextSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+              )
+              Spacer(modifier = Modifier.height(20.dp))
+              Button(
+                onClick = onBackClick,
+                colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+                shape = RoundedCornerShape(10.dp)
+              ) {
+                Icon(Icons.Filled.ShoppingBag, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
+                Text("Start Shopping", fontWeight = FontWeight.Bold)
+              }
+            }
+          }
+        }
+      } else {
+        // 2. Delivery Address Card
+        item {
+          val currentAddr = selectedAddress
+          Spacer(modifier = Modifier.height(6.dp))
+          Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = JTCardBg,
+            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp)
+          ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Box(
+                    modifier = Modifier
+                      .size(28.dp)
+                      .clip(CircleShape)
+                      .background(JTPurpleContainer),
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Icon(
+                      imageVector = Icons.Filled.LocationOn,
+                      contentDescription = null,
+                      tint = JTPurplePrimary,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  }
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Text(
+                    text = "DELIVERY ADDRESS",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = JTTextPrimary,
+                    letterSpacing = 0.5.sp
+                  )
+                  if (currentAddr != null) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                      shape = RoundedCornerShape(4.dp),
+                      color = JTAmberContainer
+                    ) {
+                      Text(
+                        text = currentAddr.tag,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = JTAmberDark,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                      )
+                    }
+                  }
+                }
+
                 Surface(
-                  shape = RoundedCornerShape(4.dp),
-                  color = JTAmberContainer
+                  shape = RoundedCornerShape(8.dp),
+                  color = JTPurpleContainer,
+                  modifier = Modifier.clickable { showAddressDialog = true }
                 ) {
                   Text(
-                    text = selectedAddress.tag,
-                    fontSize = 9.sp,
+                    text = if (currentAddr == null) "+ Add" else "Change",
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = JTAmberDark,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    color = JTPurplePrimary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                   )
                 }
               }
 
-              Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = JTPurpleContainer,
-                modifier = Modifier.clickable { showAddressDialog = true }
-              ) {
+              Spacer(modifier = Modifier.height(10.dp))
+
+              if (currentAddr != null) {
                 Text(
-                  text = "Change",
-                  fontSize = 11.sp,
+                  text = currentAddr.name,
                   fontWeight = FontWeight.Bold,
-                  color = JTPurplePrimary,
-                  modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                  fontSize = 14.sp,
+                  color = JTTextPrimary
+                )
+                Text(
+                  text = currentAddr.phone,
+                  fontSize = 12.sp,
+                  color = JTTextSecondary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                  text = "${currentAddr.addressLine}, ${currentAddr.area}, ${currentAddr.city}, ${currentAddr.province}",
+                  fontSize = 11.sp,
+                  color = JTTextSecondary,
+                  lineHeight = 15.sp
+                )
+              } else {
+                Text(
+                  text = "No delivery address selected. Please add your Lahore or Pakistan delivery address to proceed with Cash on Delivery.",
+                  fontSize = 12.sp,
+                  color = JTRed,
+                  fontWeight = FontWeight.Medium
                 )
               }
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-              text = selectedAddress.name,
-              fontWeight = FontWeight.Bold,
-              fontSize = 14.sp,
-              color = JTTextPrimary
-            )
-            Text(
-              text = selectedAddress.phone,
-              fontSize = 12.sp,
-              color = JTTextSecondary
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-              text = "${selectedAddress.addressLine}, ${selectedAddress.area}, ${selectedAddress.city}, ${selectedAddress.province}",
-              fontSize = 11.sp,
-              color = JTTextSecondary,
-              lineHeight = 15.sp
-            )
           }
         }
-      }
 
-      // 3. Grouped Items by Vendor
-      // Vendor 1: Multan Craft Heritage
-      val multanItems = cartItems.filter { it.product.vendor.contains("Multan", ignoreCase = true) }
-      if (multanItems.isNotEmpty()) {
-        item {
-          Spacer(modifier = Modifier.height(14.dp))
-          VendorItemsCard(
-            vendorName = "Multan Craft Heritage",
-            vendorTypeIcon = Icons.Filled.Storefront,
-            badge = "${multanItems.size} item",
-            verifiedText = "Verified Artisan",
-            items = multanItems
-          )
-        }
-      }
-
-      // Vendor 2: Al-Madina Mart & Foods
-      val alMadinaItems = cartItems.filter { it.product.vendor.contains("Madina", ignoreCase = true) || !it.product.vendor.contains("Multan", ignoreCase = true) }
-      if (alMadinaItems.isNotEmpty()) {
-        item {
-          Spacer(modifier = Modifier.height(14.dp))
-          VendorItemsCard(
-            vendorName = "Al-Madina Mart & Foods",
-            vendorTypeIcon = Icons.Filled.ShoppingBag,
-            badge = "${alMadinaItems.size} items",
-            fastDispatch = true,
-            items = alMadinaItems
-          )
+        // 3. Dynamic Grouped Items by Vendor
+        val groupedVendors = cartItems.groupBy { it.product.vendor.ifBlank { "JTBazar Verified Vendor" } }
+        groupedVendors.forEach { (vendorName, vendorItems) ->
+          item(key = vendorName) {
+            Spacer(modifier = Modifier.height(14.dp))
+            VendorItemsCard(
+              vendorName = vendorName,
+              vendorTypeIcon = Icons.Filled.Storefront,
+              badge = "${vendorItems.size} ${if (vendorItems.size == 1) "item" else "items"}",
+              verifiedText = "Verified Vendor",
+              items = vendorItems
+            )
+          }
         }
       }
 
@@ -615,7 +687,7 @@ fun CartCheckoutScreen(
           Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Icon(
-                imageVector = Icons.Filled.ReceiptLong,
+                imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
                 contentDescription = null,
                 tint = JTPurplePrimary,
                 modifier = Modifier.size(16.dp)
@@ -846,12 +918,23 @@ private fun VendorItemsCard(
               .clip(RoundedCornerShape(10.dp))
               .background(JTSurfaceVariant)
           ) {
-            Image(
-              painter = painterResource(id = cartItem.product.drawableRes),
-              contentDescription = cartItem.product.title,
-              contentScale = ContentScale.Crop,
-              modifier = Modifier.fillMaxSize()
-            )
+            if (!cartItem.product.imageUrl.isNullOrBlank()) {
+              coil.compose.AsyncImage(
+                model = cartItem.product.imageUrl,
+                contentDescription = cartItem.product.title,
+                contentScale = ContentScale.Crop,
+                placeholder = painterResource(id = cartItem.product.drawableRes),
+                error = painterResource(id = cartItem.product.drawableRes),
+                modifier = Modifier.fillMaxSize()
+              )
+            } else {
+              Image(
+                painter = painterResource(id = cartItem.product.drawableRes),
+                contentDescription = cartItem.product.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+              )
+            }
           }
 
           Spacer(modifier = Modifier.width(10.dp))

@@ -36,6 +36,7 @@ fun DiscoverScreen(
 ) {
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
+  val products by MarketplaceRepository.products.collectAsState()
 
   Scaffold(
     containerColor = Color.White,
@@ -149,7 +150,29 @@ fun DiscoverScreen(
         )
       }
 
-      val products by MarketplaceRepository.products.collectAsState()
+      if (products.isEmpty()) {
+        item {
+          Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = JTSurfaceVariant,
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 24.dp)
+          ) {
+            Column(
+              modifier = Modifier.padding(24.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Icon(Icons.Filled.Search, contentDescription = null, tint = JTPurplePrimary, modifier = Modifier.size(36.dp))
+              Spacer(modifier = Modifier.height(10.dp))
+              Text("No products discovered", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
+              Spacer(modifier = Modifier.height(4.dp))
+              Text("Live items from verified Pakistani vendors will appear here.", fontSize = 12.sp, color = JTTextSecondary)
+            }
+          }
+        }
+      }
+
       items(products) { prod ->
         Surface(
           shape = RoundedCornerShape(14.dp),

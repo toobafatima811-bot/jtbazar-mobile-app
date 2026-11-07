@@ -441,6 +441,25 @@ object SupabaseApiService {
     }
   }
 
+  suspend fun cancelOrder(orderNumber: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      val json = JSONObject().apply {
+        put("order_status", "CANCELLED")
+      }
+      val res = SupabaseClient.patch("orders?order_number=eq.$orderNumber", json.toString())
+      if (res.isSuccess) {
+        Result.success(true)
+      } else {
+        // Also try id=eq
+        val resId = SupabaseClient.patch("orders?id=eq.$orderNumber", json.toString())
+        Result.success(resId.isSuccess)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "cancelOrder error", e)
+      Result.failure(e)
+    }
+  }
+
   // ----------------------------------------------------
   // REVIEWS & RATINGS
   // ----------------------------------------------------

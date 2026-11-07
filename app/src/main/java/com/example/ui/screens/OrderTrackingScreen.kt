@@ -14,10 +14,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,9 +53,9 @@ fun OrderTrackingScreen(
 
   var showInvoiceDialog by remember { mutableStateOf(false) }
 
-  if (showInvoiceDialog) {
+  if (showInvoiceDialog && activeOrder != null) {
     InvoiceDialog(
-      order = activeOrder,
+      order = activeOrder!!,
       onDismiss = { showInvoiceDialog = false }
     )
   }
@@ -75,12 +75,65 @@ fun OrderTrackingScreen(
     },
     modifier = modifier.fillMaxSize()
   ) { paddingValues ->
-    LazyColumn(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(paddingValues),
-      contentPadding = PaddingValues(bottom = 32.dp)
-    ) {
+    if (activeOrder == null) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(paddingValues),
+        contentAlignment = Alignment.Center
+      ) {
+        Column(
+          horizontalAlignment = Alignment.CenterHorizontally,
+          modifier = Modifier.padding(24.dp)
+        ) {
+          Box(
+            modifier = Modifier
+              .size(76.dp)
+              .clip(CircleShape)
+              .background(JTPurpleContainer),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
+              contentDescription = null,
+              tint = JTPurplePrimary,
+              modifier = Modifier.size(38.dp)
+            )
+          }
+          Spacer(modifier = Modifier.height(16.dp))
+          Text(
+            text = "No Active Orders",
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = JTTextPrimary
+          )
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = "You don't have any orders to track yet. Once you place an order with Cash on Delivery, you can track its live timeline, rider dispatch, and invoice here.",
+            fontSize = 12.sp,
+            color = JTTextSecondary,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+          )
+          Spacer(modifier = Modifier.height(20.dp))
+          Button(
+            onClick = onContinueShopping,
+            colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+            shape = RoundedCornerShape(10.dp)
+          ) {
+            Icon(Icons.Filled.ShoppingBag, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Start Shopping", fontWeight = FontWeight.Bold)
+          }
+        }
+      }
+    } else {
+      val activeOrder = activeOrder!!
+      LazyColumn(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(paddingValues),
+        contentPadding = PaddingValues(bottom = 32.dp)
+      ) {
       // 1. Verified Transaction Top Notice with Close 'X'
       item {
         Surface(
@@ -203,7 +256,7 @@ fun OrderTrackingScreen(
             ) {
               Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                  imageVector = Icons.Outlined.ReceiptLong,
+                  imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
                   contentDescription = null,
                   tint = JTPurplePrimary,
                   modifier = Modifier.size(16.dp)
@@ -522,7 +575,7 @@ fun OrderTrackingScreen(
               .testTag("view_invoice_button")
           ) {
             Icon(
-              imageVector = Icons.Outlined.ReceiptLong,
+              imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
               contentDescription = null,
               modifier = Modifier.size(18.dp)
             )
@@ -532,6 +585,37 @@ fun OrderTrackingScreen(
               fontSize = 13.sp,
               fontWeight = FontWeight.Bold
             )
+          }
+
+          if (activeOrder.orderStatus == "PENDING") {
+            OutlinedButton(
+              onClick = {
+                val success = MarketplaceRepository.cancelOrder(activeOrder.orderId)
+                if (success) {
+                  Toast.makeText(context, "Order #${activeOrder.orderId} cancelled", Toast.LENGTH_SHORT).show()
+                }
+              },
+              shape = RoundedCornerShape(12.dp),
+              colors = ButtonDefaults.outlinedButtonColors(contentColor = JTRed),
+              border = androidx.compose.foundation.BorderStroke(1.dp, JTRed),
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp)
+                .testTag("cancel_order_button")
+            ) {
+              Icon(
+                imageVector = Icons.Filled.Cancel,
+                contentDescription = null,
+                tint = JTRed,
+                modifier = Modifier.size(18.dp)
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = "Cancel Order",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+              )
+            }
           }
 
           Button(
@@ -617,7 +701,7 @@ fun OrderTrackingScreen(
               modifier = Modifier.height(34.dp).testTag("whatsapp_help_button")
             ) {
               Icon(
-                imageVector = Icons.Outlined.Chat,
+                imageVector = Icons.AutoMirrored.Outlined.Chat,
                 contentDescription = null,
                 tint = JTEmerald,
                 modifier = Modifier.size(14.dp)
@@ -632,6 +716,7 @@ fun OrderTrackingScreen(
             }
           }
         }
+      }
       }
     }
   }
@@ -847,7 +932,7 @@ private fun InvoiceDialog(
     },
     title = {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = JTPurplePrimary)
+        Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null, tint = JTPurplePrimary)
         Spacer(modifier = Modifier.width(8.dp))
         Text("Order Invoice #${order.orderId}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
       }

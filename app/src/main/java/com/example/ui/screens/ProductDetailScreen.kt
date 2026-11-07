@@ -84,9 +84,9 @@ fun ProductDetailScreen(
             for (i in 1..5) {
               IconButton(onClick = { reviewRating = i }, modifier = Modifier.size(32.dp)) {
                 Icon(
-                  imageVector = if (i <= reviewRating) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                  imageVector = Icons.Filled.Star,
                   contentDescription = "$i Stars",
-                  tint = JTAmber,
+                  tint = if (i <= reviewRating) JTAmber else Color(0xFFD1D5DB),
                   modifier = Modifier.size(24.dp)
                 )
               }
@@ -150,7 +150,8 @@ fun ProductDetailScreen(
         MarketplaceRepository.selectAddress(it)
         showAddressDialog = false
       },
-      onDismiss = { showAddressDialog = false }
+      onDismiss = { showAddressDialog = false },
+      onAddNewAddress = { MarketplaceRepository.addOrUpdateAddress(it) }
     )
   }
 

@@ -47,6 +47,7 @@ fun HomeScreen(
   modifier: Modifier = Modifier
 ) {
   val products by MarketplaceRepository.products.collectAsState()
+  val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val countdownSeconds by MarketplaceRepository.countdownSeconds.collectAsState()
@@ -71,7 +72,8 @@ fun HomeScreen(
         MarketplaceRepository.selectAddress(it)
         showAddressDialog = false
       },
-      onDismiss = { showAddressDialog = false }
+      onDismiss = { showAddressDialog = false },
+      onAddNewAddress = { MarketplaceRepository.addOrUpdateAddress(it) }
     )
   }
 
@@ -285,34 +287,93 @@ fun HomeScreen(
           }
         }
 
-        Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-          val chunked = displayProducts.chunked(2)
-          chunked.forEach { rowItems ->
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(12.dp)
+        if (isLoading) {
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 32.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              CircularProgressIndicator(color = JTPurplePrimary, modifier = Modifier.size(36.dp))
+              Spacer(modifier = Modifier.height(10.dp))
+              Text("Loading live JTBazar catalog...", fontSize = 12.sp, color = JTTextSecondary)
+            }
+          }
+        } else if (displayProducts.isEmpty()) {
+          Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = JTSurfaceVariant,
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 8.dp)
+          ) {
+            Column(
+              modifier = Modifier.padding(24.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
             ) {
-              rowItems.forEach { product ->
-                Box(modifier = Modifier.weight(1f)) {
-                  ProductCard(
-                    product = product,
-                    onProductClick = { onProductClick(product) },
-                    onAddToCart = {
-                      MarketplaceRepository.addToCart(product)
-                    },
-                    onToggleWishlist = {
-                      MarketplaceRepository.toggleWishlist(product.id)
-                    }
-                  )
-                }
+              Icon(
+                imageVector = Icons.Filled.ShoppingBag,
+                contentDescription = null,
+                tint = JTPurplePrimary,
+                modifier = Modifier.size(36.dp)
+              )
+              Spacer(modifier = Modifier.height(10.dp))
+              Text(
+                text = if (searchQuery.isNotBlank()) "No matching products found" else "No live products available",
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                color = JTTextPrimary
+              )
+              Spacer(modifier = Modifier.height(4.dp))
+              Text(
+                text = if (searchQuery.isNotBlank()) "Try searching for another keyword or browse categories." else "Please check your network connection or tap retry.",
+                fontSize = 12.sp,
+                color = JTTextSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+              )
+              Spacer(modifier = Modifier.height(14.dp))
+              Button(
+                onClick = { MarketplaceRepository.refreshLiveCatalog() },
+                colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+                shape = RoundedCornerShape(8.dp)
+              ) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Refresh Catalog", fontWeight = FontWeight.Bold)
               }
-              if (rowItems.size == 1) {
-                Spacer(modifier = Modifier.weight(1f))
+            }
+          }
+        } else {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+          ) {
+            val chunked = displayProducts.chunked(2)
+            chunked.forEach { rowItems ->
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+              ) {
+                rowItems.forEach { product ->
+                  Box(modifier = Modifier.weight(1f)) {
+                    ProductCard(
+                      product = product,
+                      onProductClick = { onProductClick(product) },
+                      onAddToCart = {
+                        MarketplaceRepository.addToCart(product)
+                      },
+                      onToggleWishlist = {
+                        MarketplaceRepository.toggleWishlist(product.id)
+                      }
+                    )
+                  }
+                }
+                if (rowItems.size == 1) {
+                  Spacer(modifier = Modifier.weight(1f))
+                }
               }
             }
           }
