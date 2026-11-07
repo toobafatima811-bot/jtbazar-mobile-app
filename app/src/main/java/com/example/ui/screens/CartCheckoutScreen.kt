@@ -47,15 +47,17 @@ fun CartCheckoutScreen(
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
+  val configuredDeliveryFee by MarketplaceRepository.deliveryFee.collectAsState()
+  val codEnabled by MarketplaceRepository.codEnabled.collectAsState()
 
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
 
   var showAddressDialog by remember { mutableStateOf(false) }
-  var deliveryNote by remember { mutableStateOf("Leave parcel with security guard / gate # 2") }
+  var deliveryNote by remember { mutableStateOf("") }
 
   // Server-aligned Calculations
   val subtotal = cartItems.sumOf { it.totalPrice }
-  val deliveryCharges = if (subtotal >= 1999 || subtotal == 0) 0 else 150
+  val deliveryCharges = if (subtotal == 0) 0 else configuredDeliveryFee
   val discount = 0
   val grandTotal = (subtotal - discount + deliveryCharges).coerceAtLeast(0)
 
@@ -134,7 +136,7 @@ fun CartCheckoutScreen(
                   }
                 }
               },
-              enabled = !isPlacingOrder && selectedAddress != null,
+              enabled = !isPlacingOrder && selectedAddress != null && codEnabled,
               shape = RoundedCornerShape(12.dp),
               colors = ButtonDefaults.buttonColors(
                 containerColor = JTOrange,
@@ -449,13 +451,13 @@ fun CartCheckoutScreen(
                   Spacer(modifier = Modifier.width(10.dp))
                   Column {
                     Text(
-                      text = "Standard Courier (2-3 Days)",
+                      text = "JTBazar Central Delivery",
                       fontWeight = FontWeight.Bold,
                       fontSize = 12.sp,
                       color = JTTextPrimary
                     )
                     Text(
-                      text = "TCS / Leopards Express Tracking",
+                      text = "Collected from vendors and delivered by JTBazar",
                       fontSize = 10.sp,
                       color = JTTextSecondary
                     )
@@ -463,7 +465,7 @@ fun CartCheckoutScreen(
                 }
 
                 Text(
-                  text = "Rs. 150",
+                  text = "PKR " + String.format("%,d", deliveryCharges),
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp,
                   color = JTTextPrimary
@@ -719,37 +721,6 @@ fun CartCheckoutScreen(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = JTTextPrimary
-              )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Store Discount
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                  imageVector = Icons.Filled.LocalOffer,
-                  contentDescription = null,
-                  tint = JTAmberDark,
-                  modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                  text = "Store Discount (JTBAZAR100)",
-                  fontSize = 12.sp,
-                  color = JTAmberDark,
-                  fontWeight = FontWeight.SemiBold
-                )
-              }
-              Text(
-                text = "- Rs. 100",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTEmerald
               )
             }
 
