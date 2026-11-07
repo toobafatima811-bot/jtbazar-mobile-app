@@ -52,6 +52,7 @@ data class SupabaseProductDto(
   val highlights: List<String> = emptyList(),
   val palettes: List<String> = emptyList(),
   val sizes: List<String> = emptyList(),
+  val variantIds: Map<String, String> = emptyMap(),
   val isArtisanCollection: Boolean = false,
   val isFeatured: Boolean = false,
   val isBestSeller: Boolean = false,
