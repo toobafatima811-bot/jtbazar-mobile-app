@@ -342,10 +342,10 @@ object MarketplaceRepository {
           _categories.value = mappedCategories
           Log.d(TAG, "Loaded ${mappedCategories.size} categories from Supabase")
         }
+        SupabaseClient.currentUserId?.let { loadUserData(it) }
       } catch (e: Exception) {
         Log.e(TAG, "Backend sync error: ${e.message}", e)
         _errorMessage.value = e.message
-        SupabaseClient.currentUserId?.let { loadUserData(it) }
       } finally {
         _isLoading.value = false
       }
