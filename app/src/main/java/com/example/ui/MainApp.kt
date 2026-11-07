@@ -34,6 +34,12 @@ enum class AppScreen {
 
 @Composable
 fun MainApp() {
+  // Start the live Supabase catalog fetch as soon as the app opens.
+  // Without this call, the product/category StateFlows stay empty forever.
+  LaunchedEffect(Unit) {
+    MarketplaceRepository.refreshLiveCatalog()
+  }
+
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
