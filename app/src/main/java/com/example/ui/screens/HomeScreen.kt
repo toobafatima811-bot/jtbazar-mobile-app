@@ -48,6 +48,8 @@ fun HomeScreen(
 ) {
   val products by MarketplaceRepository.products.collectAsState()
   val categories by MarketplaceRepository.categories.collectAsState()
+  val homepageHeroes by MarketplaceRepository.homepageHeroes.collectAsState()
+  val homepagePromotions by MarketplaceRepository.homepagePromotions.collectAsState()
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
@@ -104,7 +106,84 @@ fun HomeScreen(
         )
       }
 
-      // Homepage promotions will render only after live promotions are fetched from Supabase.
+      // Published homepage hero banners from the same Supabase table as the website.
+      if (homepageHeroes.isNotEmpty()) {
+        item {
+          LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(top = 8.dp)
+          ) {
+            items(homepageHeroes, key = { it.id }) { hero ->
+              Card(
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier
+                  .width(320.dp)
+                  .height(168.dp)
+                  .clickable { onExploreCategoriesClick() }
+              ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                  AsyncImage(
+                    model = hero.mobileImageUrl ?: hero.imageUrl,
+                    contentDescription = hero.imageAltText ?: hero.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                  )
+                  Box(
+                    modifier = Modifier
+                      .fillMaxSize()
+                      .background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.68f), Color.Transparent)))
+                  )
+                  Column(
+                    modifier = Modifier
+                      .align(Alignment.CenterStart)
+                      .fillMaxWidth(0.72f)
+                      .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                  ) {
+                    Text(hero.title, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    hero.subtitle?.let { Text(it, color = Color.White, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                    hero.ctaText?.let {
+                      Surface(shape = RoundedCornerShape(8.dp), color = JTOrange) {
+                        Text(it, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Approved marketplace promotions; no invented offers are displayed.
+      if (homepagePromotions.isNotEmpty()) {
+        item {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            homepagePromotions.take(3).forEach { promotion ->
+              val image = promotion.bannerImageUrls.firstOrNull() ?: promotion.bannerImageUrl
+              if (image != null) {
+                Card(
+                  shape = RoundedCornerShape(14.dp),
+                  modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { onExploreCategoriesClick() }
+                ) {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(model = image, contentDescription = promotion.title, contentScale = ContentScale.Crop, modifier = Modifier.size(width = 104.dp, height = 88.dp))
+                    Column(modifier = Modifier.weight(1f).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                      Text(promotion.title, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                      promotion.description?.let { Text(it, fontSize = 11.sp, color = JTTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                      promotion.ctaText?.let { Text(it, fontSize = 11.sp, color = JTOrangeDark, fontWeight = FontWeight.Bold) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
 
       // 4. Shop by Category (Horizontal Row)
       item {
