@@ -86,7 +86,7 @@ data class DeliveryAddress(
   val addressLine: String,
   val area: String,
   val city: String = "",
-  val province: String = "Punjab",
+  val province: String = "",
   val tag: String = "HOME",
   val isDefault: Boolean = false
 ) {

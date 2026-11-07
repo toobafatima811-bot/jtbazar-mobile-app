@@ -127,6 +127,11 @@ object MarketplaceRepository {
     }
   }
 
+  fun adjustQuantity(itemId: String, delta: Int) {
+    val current = _cartItems.value.firstOrNull { it.id == itemId } ?: return
+    updateQuantity(itemId, current.quantity + delta)
+  }
+
   fun updateQuantity(itemId: String, quantity: Int) {
     if (quantity <= 0) {
       removeFromCart(itemId)
@@ -326,6 +331,8 @@ object MarketplaceRepository {
           }
           Log.d(TAG, "Loaded ${mappedProducts.size} live products from Supabase")
         } else {
+          _products.value = emptyList()
+          _selectedProduct.value = null
           _errorMessage.value = productResult.exceptionOrNull()?.message
         }
 
@@ -346,6 +353,9 @@ object MarketplaceRepository {
           }
           _categories.value = mappedCategories
           Log.d(TAG, "Loaded ${mappedCategories.size} categories from Supabase")
+        } else {
+          _categories.value = emptyList()
+          _errorMessage.value = categoryResult.exceptionOrNull()?.message
         }
         SupabaseClient.currentUserId?.let { loadUserData(it) }
       } catch (e: Exception) {
@@ -360,7 +370,14 @@ object MarketplaceRepository {
   // ----------------------------------------------------
   // ORDER PLACEMENT (CENTRALIZED JTBAZAR COD MODEL)
   // ----------------------------------------------------
-  fun placeCurrentOrder(deliveryNote: String = "", onComplete: ((Result<OrderRecord>) -> Unit)? = null): OrderRecord? {
+  fun placeCurrentOrder(
+    deliveryNote: String = "",
+    deliveryLat: Double? = null,
+    deliveryLng: Double? = null,
+    deliveryLocationName: String? = null,
+    deliveryLocationCapturedAt: String? = null,
+    onComplete: ((Result<OrderRecord>) -> Unit)? = null
+  ): OrderRecord? {
     val items = _cartItems.value
     if (items.isEmpty()) { onComplete?.invoke(Result.failure(IllegalStateException("Shopping cart is empty"))); return null }
     val address = _selectedAddress.value
@@ -374,7 +391,13 @@ object MarketplaceRepository {
         val currentUser = SupabaseClient.currentUser.value
         val dto = SupabaseOrderDto(id="", orderNumber="", userId=userId, subtotal=0, discount=0, deliveryFee=0, grandTotal=0, paymentMethod="cod", paymentStatus="pending", orderStatus="pending", deliveryNote=deliveryNote, addressName=address.name, addressPhone=address.phone, addressLine=address.addressLine, addressArea=address.area, addressCity=address.city, createdAt="", addressProvince=address.province, customerEmail=currentUser?.email, idempotencyKey=java.util.UUID.randomUUID().toString())
         val lines = items.map { item -> SupabaseOrderItemDto(id="", orderId="", productId=item.product.id, productTitle=item.product.title, unitPrice=0, quantity=item.quantity, totalPrice=0, selectedPalette=item.selectedPalette, selectedSize=item.selectedSize) }
-        val createdId = SupabaseApiService.createOrder(dto, lines).getOrThrow()
+        val createdId = SupabaseApiService.createOrder(
+          dto, lines,
+          deliveryLat = deliveryLat,
+          deliveryLng = deliveryLng,
+          deliveryLocationName = deliveryLocationName,
+          deliveryLocationCapturedAt = deliveryLocationCapturedAt
+        ).getOrThrow()
         val saved = SupabaseApiService.fetchOrders(userId).getOrThrow().firstOrNull { it.id == createdId } ?: throw IllegalStateException("Order created but could not be reloaded.")
         val savedItems = SupabaseApiService.fetchOrderItems(saved.id).getOrThrow().map { line ->
           val product = items.firstOrNull { it.product.id == line.productId }?.product ?: Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0)
@@ -462,6 +485,13 @@ object MarketplaceRepository {
   // ----------------------------------------------------
   fun loadUserData(userId: String) {
     scope.launch {
+      _cartItems.value = emptyList()
+      _cartCount.value = 0
+      _addresses.value = emptyList()
+      _selectedAddress.value = null
+      _orders.value = emptyList()
+      _activeOrder.value = null
+      _notifications.value = emptyList()
       try {
         // Load persisted cart and wishlist for this signed-in customer.
         val cartRes = SupabaseApiService.fetchCart(userId)
@@ -535,7 +565,7 @@ object MarketplaceRepository {
                 addressLine = dto.addressLine,
                 area = dto.addressArea,
                 city = dto.addressCity,
-                province = "Punjab"
+                province = ""
               ),
               deliveryNote = dto.deliveryNote ?: "",
               statusHeader = when (dto.orderStatus) {

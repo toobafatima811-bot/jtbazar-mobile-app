@@ -311,7 +311,7 @@ object SupabaseAuthService {
         phone = obj.optString("phone", ""),
         email = obj.optString("email", ""),
         avatarUrl = if (obj.has("avatar_url")) obj.optString("avatar_url") else null,
-        city = obj.optString("city", "Lahore")
+        city = obj.optString("city", "")
       )
       _userProfile.value = profile
       profile

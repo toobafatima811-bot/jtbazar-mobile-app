@@ -242,13 +242,62 @@ object SupabaseApiService {
   suspend fun fetchOrderItems(orderId:String):Result<List<SupabaseOrderItemDto>> = withContext(Dispatchers.IO){
     try{SupabaseClient.get("order_items?order_id=eq.$orderId&select=*&order=created_at.asc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;val v=o.optJSONObject("variant_snapshot")?:JSONObject();SupabaseOrderItemDto(id=o.optString("id"),orderId=o.optString("order_id"),productId=o.optString("product_id",""),productTitle=o.optString("product_name_snapshot",""),unitPrice=o.optDouble("unit_price").toInt(),quantity=o.optInt("quantity",1),totalPrice=o.optDouble("line_total").toInt(),selectedPalette=v.optString("value").takeIf{v.optString("label").contains("color",true)},selectedSize=v.optString("value").takeIf{v.optString("label").contains("size",true)},variantId=o.optString("variant_id").takeIf{it.isNotBlank()})}}}catch(e:Exception){Log.e(TAG,"fetchOrderItems error",e);Result.failure(e)}
   }
-  suspend fun createOrder(order:SupabaseOrderDto,items:List<SupabaseOrderItemDto>):Result<String> = withContext(Dispatchers.IO){
-    try{val address=JSONObject().apply{put("recipient_name",order.addressName);put("phone",order.addressPhone);put("address_line_1",order.addressLine);if(order.addressArea.isNotBlank())put("address_line_2",order.addressArea);put("city",order.addressCity);put("province",order.addressProvince);if(!order.postalCode.isNullOrBlank())put("postal_code",order.postalCode)}
-      val lines=JSONArray();items.forEach{item->lines.put(JSONObject().apply{put("product_id",item.productId);if(!item.variantId.isNullOrBlank())put("variant_id",item.variantId);put("quantity",item.quantity)})}
-      val params=JSONObject().apply{put("p_customer_name",order.addressName);put("p_customer_phone",order.addressPhone);put("p_customer_email",order.customerEmail?:JSONObject.NULL);put("p_shipping_address",address);put("p_items",lines);put("p_idempotency_key",order.idempotencyKey);put("p_customer_note",order.deliveryNote?:"")}
-      val body=SupabaseClient.rpc("place_order",params.toString()).getOrThrow();val rows=JSONArray(body);if(rows.length()==0)throw IOException("Order was not created");val id=rows.getJSONObject(0).optString("order_id");if(id.isBlank())throw IOException("Server did not return an order ID");Result.success(id)
-    }catch(e:Exception){Log.e(TAG,"Secure place_order RPC failed",e);Result.failure(e)}
+  suspend fun createOrder(
+    order: SupabaseOrderDto,
+    items: List<SupabaseOrderItemDto>,
+    deliveryLat: Double? = null,
+    deliveryLng: Double? = null,
+    deliveryLocationName: String? = null,
+    deliveryLocationCapturedAt: String? = null
+  ): Result<String> = withContext(Dispatchers.IO) {
+    try {
+      if ((deliveryLat == null) != (deliveryLng == null)) {
+        throw IOException("Both delivery latitude and longitude are required.")
+      }
+      val address = JSONObject().apply {
+        put("recipient_name", order.addressName)
+        put("phone", order.addressPhone)
+        put("address_line_1", order.addressLine)
+        if (order.addressArea.isNotBlank()) put("address_line_2", order.addressArea)
+        put("city", order.addressCity)
+        if (order.addressProvince.isNotBlank()) put("province", order.addressProvince)
+        if (!order.postalCode.isNullOrBlank()) put("postal_code", order.postalCode)
+        if (deliveryLat != null) put("latitude", deliveryLat)
+        if (deliveryLng != null) put("longitude", deliveryLng)
+      }
+      val lines = JSONArray()
+      items.forEach { item ->
+        lines.put(JSONObject().apply {
+          put("product_id", item.productId)
+          if (!item.variantId.isNullOrBlank()) put("variant_id", item.variantId)
+          put("quantity", item.quantity)
+        })
+      }
+      val params = JSONObject().apply {
+        put("p_customer_name", order.addressName)
+        put("p_customer_phone", order.addressPhone)
+        put("p_customer_email", order.customerEmail ?: JSONObject.NULL)
+        put("p_shipping_address", address)
+        put("p_items", lines)
+        put("p_idempotency_key", order.idempotencyKey)
+        put("p_customer_note", order.deliveryNote ?: "")
+        put("p_delivery_lat", deliveryLat ?: JSONObject.NULL)
+        put("p_delivery_lng", deliveryLng ?: JSONObject.NULL)
+        put("p_delivery_location_name", deliveryLocationName ?: JSONObject.NULL)
+        put("p_delivery_location_captured_at", deliveryLocationCapturedAt ?: JSONObject.NULL)
+      }
+      val body = SupabaseClient.rpc("place_order", params.toString()).getOrThrow()
+      val rows = JSONArray(body)
+      if (rows.length() == 0) throw IOException("Order was not created.")
+      val id = rows.getJSONObject(0).optString("order_id")
+      if (id.isBlank()) throw IOException("Server did not return an order ID.")
+      Result.success(id)
+    } catch (e: Exception) {
+      Log.e(TAG, "Secure place_order RPC failed", e)
+      Result.failure(e)
+    }
   }
+
   suspend fun cancelOrder(orderId:String):Result<Boolean> = withContext(Dispatchers.IO){
     try{val body=SupabaseClient.rpc("cancel_customer_order",JSONObject().put("p_order_id",orderId).toString()).getOrThrow();Result.success(body.trim()=="true"||body.trim()=="\"true\"")}catch(e:Exception){Log.e(TAG,"cancel_customer_order RPC failed",e);Result.failure(e)}
   }
