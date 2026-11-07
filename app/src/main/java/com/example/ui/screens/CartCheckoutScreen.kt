@@ -961,8 +961,8 @@ private fun VendorItemsCard(
 
               QuantityStepper(
                 quantity = cartItem.quantity,
-                onIncrement = { MarketplaceRepository.updateQuantity(cartItem.id, 1) },
-                onDecrement = { MarketplaceRepository.updateQuantity(cartItem.id, -1) }
+                onIncrement = { MarketplaceRepository.adjustQuantity(cartItem.id, 1) },
+                onDecrement = { MarketplaceRepository.adjustQuantity(cartItem.id, -1) }
               )
             }
           }
