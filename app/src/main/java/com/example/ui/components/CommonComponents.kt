@@ -58,7 +58,7 @@ fun JTBazarTopBar(
   onAvatarClick: () -> Unit = {},
   onLocationClick: () -> Unit = {},
   cartCount: Int = 2,
-  currentLocation: String = "Gulberg III, Lahore",
+  currentLocation: String = "Select delivery address",
   modifier: Modifier = Modifier
 ) {
   Surface(
