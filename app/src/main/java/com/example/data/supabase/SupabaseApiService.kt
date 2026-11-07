@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.net.URLEncoder
 
 /**
  * Service executing structured PostgREST queries against Supabase tables and RPC endpoints.
@@ -17,172 +18,39 @@ object SupabaseApiService {
   // PRODUCTS
   // ----------------------------------------------------
 
-  suspend fun fetchProducts(
-    category: String? = null,
-    isFeatured: Boolean? = null,
-    limit: Int = 50
-  ): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
-    try {
-      val queryParams = mutableListOf("select=*")
-      if (!category.isNullOrBlank()) {
-        queryParams.add("category=ilike.*${category.trim()}*")
-      }
-      if (isFeatured == true) {
-        queryParams.add("is_featured=eq.true")
-      }
-      queryParams.add("limit=$limit")
-      queryParams.add("order=created_at.desc.nullslast")
+  suspend fun fetchProducts(category:String?=null,isFeatured:Boolean?=null,limit:Int=50):Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO){
+    try{
+      val p=mutableListOf("select=*,category:categories(name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)","publication_status=eq.published","moderation_status=eq.approved","vendor_hidden=eq.false","order=created_at.desc","limit=${limit.coerceIn(1,100)}")
+      if(!category.isNullOrBlank())p.add("category_id=eq.${URLEncoder.encode(category.trim(),"UTF-8")}")
+      if(isFeatured==true)p.add("is_featured=eq.true")
+      SupabaseClient.get("products?${p.joinToString("&")}").mapCatching{json->parseProductsJson(json)}
+    }catch(e:Exception){Log.e(TAG,"fetchProducts error",e);Result.failure(e)}
+  }
 
-      val query = "products?" + queryParams.joinToString("&")
-      val res = SupabaseClient.get(query)
+  suspend fun searchProducts(query:String):Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO){
+    try{val q=URLEncoder.encode(query.trim(),"UTF-8");val url="products?select=*,category:categories(name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)&publication_status=eq.published&moderation_status=eq.approved&vendor_hidden=eq.false&or=(name.ilike.*$q*,description.ilike.*$q*,short_description.ilike.*$q*)&limit=30";SupabaseClient.get(url).mapCatching{parseProductsJson(it)}}catch(e:Exception){Result.failure(e)}
+  }
 
-      res.mapCatching { jsonStr ->
-        parseProductsJson(jsonStr)
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "fetchProducts error", e)
-      Result.failure(e)
+  suspend fun fetchProductById(id:String):Result<SupabaseProductDto> = fetchProducts(limit=100).mapCatching{it.firstOrNull{p->p.id==id}?:throw IOException("Product not found")}
+
+  private fun parseProductsJson(jsonStr:String):List<SupabaseProductDto>{
+    val a=JSONArray(jsonStr);return (0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null
+      val c=o.optJSONObject("category")?:o.optJSONArray("category")?.optJSONObject(0);val seller=o.optJSONObject("seller")?:o.optJSONArray("seller")?.optJSONObject(0)
+      val base=o.optDouble("price",0.0);val discount=o.optDouble("discount_percent",0.0).toInt().coerceIn(0,100);val price=(base*(100-discount)/100.0).toInt()
+      val images=o.optJSONArray("images");var image:String?=null;if(images!=null){val rows=(0 until images.length()).mapNotNull{images.optJSONObject(it)}.sortedWith(compareByDescending<JSONObject>{it.optBoolean("is_primary")}.thenBy{it.optInt("sort_order")});val im=rows.firstOrNull();if(im!=null){val direct=if(im.isNull("image_url"))"" else im.optString("image_url");val path=if(im.isNull("storage_path"))"" else im.optString("storage_path");image=direct.takeIf{it.startsWith("https://")}?:path.takeIf{it.isNotBlank()}?.let{"${SupabaseConfig.storageUrl}/object/public/product-images/${it.replace(" ","%20")}"} }}
+      val colors=mutableListOf<String>();val sizes=mutableListOf<String>();val vs=o.optJSONArray("variants");if(vs!=null)for(j in 0 until vs.length()){val v=vs.optJSONObject(j)?:continue;if(!v.optBoolean("is_active",true))continue;val l=v.optString("option_label");val value=v.optString("option_value");if(l.contains("color",true)||l.contains("colour",true))colors.add(value);if(l.contains("size",true))sizes.add(value)}
+      val highlights=mutableListOf<String>();val specs=o.optJSONArray("specifications");if(specs!=null)for(j in 0 until specs.length()){val v=specs.optJSONObject(j)?:continue;if(v.optString("label").isNotBlank()&&v.optString("value").isNotBlank())highlights.add("${v.optString("label")}: ${v.optString("value")}")}
+      SupabaseProductDto(id=o.optString("id"),title=o.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=c?.optString("name")?:"",price=price,originalPrice=base.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=image,badge=if(discount>0)"$discount% OFF" else null,inStock=false,stockQuantity=0,inStockText="Stock status unavailable",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=o.optString("description",""),highlights=highlights,palettes=colors.distinct(),sizes=sizes.distinct(),isArtisanCollection=false,isFeatured=o.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=false)
     }
   }
 
-  suspend fun searchProducts(query: String): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
-    try {
-      val encoded = query.trim()
-      val filter = "title=ilike.*$encoded*,description=ilike.*$encoded*,vendor=ilike.*$encoded*,category=ilike.*$encoded*"
-      val url = "products?select=*&or=($filter)&limit=30"
-      val res = SupabaseClient.get(url)
-
-      res.mapCatching { jsonStr ->
-        parseProductsJson(jsonStr)
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "searchProducts error", e)
-      Result.failure(e)
-    }
-  }
-
-  suspend fun fetchProductById(id: String): Result<SupabaseProductDto> = withContext(Dispatchers.IO) {
-    try {
-      val res = SupabaseClient.get("products?id=eq.$id&select=*")
-      res.mapCatching { jsonStr ->
-        val list = parseProductsJson(jsonStr)
-        list.firstOrNull() ?: throw IOException("Product $id not found")
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "fetchProductById error", e)
-      Result.failure(e)
-    }
-  }
-
-  private fun parseProductsJson(jsonStr: String): List<SupabaseProductDto> {
-    val result = mutableListOf<SupabaseProductDto>()
-    val arr = JSONArray(jsonStr)
-    for (i in 0 until arr.length()) {
-      val obj = arr.getJSONObject(i)
-      val id = obj.optString("id", "")
-      val title = obj.optString("title", obj.optString("name", "Product"))
-      val vendor = obj.optString("vendor", obj.optString("vendor_name", "JTBazar Seller"))
-      val category = obj.optString("category", obj.optString("category_name", "General"))
-      val price = obj.optInt("price", 0)
-      val originalPrice = obj.optInt("original_price", price)
-      val discountPercent = obj.optInt("discount_percent", if (originalPrice > price) ((originalPrice - price) * 100 / originalPrice) else 0)
-      val rating = obj.optDouble("rating", 4.8)
-      val reviewCount = obj.optInt("review_count", 0)
-      val imageUrl = if (obj.has("image_url")) obj.optString("image_url") else if (obj.has("thumbnail")) obj.optString("thumbnail") else null
-      val badge = if (obj.has("badge")) obj.optString("badge") else if (discountPercent > 0) "$discountPercent% OFF" else null
-      val inStock = obj.optBoolean("in_stock", true)
-      val stockQty = obj.optInt("stock_quantity", 50)
-      val craftStory = obj.optString("craft_story", obj.optString("description", ""))
-
-      // Highlights
-      val highlights = mutableListOf<String>()
-      val hlArr = obj.optJSONArray("highlights")
-      if (hlArr != null) {
-        for (j in 0 until hlArr.length()) {
-          highlights.add(hlArr.getString(j))
-        }
-      }
-
-      // Palettes / variants
-      val palettes = mutableListOf<String>()
-      val palArr = obj.optJSONArray("palettes")
-      if (palArr != null) {
-        for (j in 0 until palArr.length()) {
-          palettes.add(palArr.getString(j))
-        }
-      }
-
-      // Sizes
-      val sizes = mutableListOf<String>()
-      val sizeArr = obj.optJSONArray("sizes")
-      if (sizeArr != null) {
-        for (j in 0 until sizeArr.length()) {
-          sizes.add(sizeArr.getString(j))
-        }
-      }
-
-      result.add(
-        SupabaseProductDto(
-          id = id,
-          title = title,
-          vendor = vendor,
-          category = category,
-          price = price,
-          originalPrice = originalPrice,
-          discountPercent = discountPercent,
-          rating = rating,
-          reviewCount = reviewCount,
-          imageUrl = imageUrl,
-          badge = badge,
-          inStock = inStock,
-          stockQuantity = stockQty,
-          craftStory = craftStory,
-          highlights = highlights,
-          palettes = palettes,
-          sizes = sizes,
-          isArtisanCollection = obj.optBoolean("is_artisan", false),
-          isFeatured = obj.optBoolean("is_featured", false),
-          isBestSeller = obj.optBoolean("is_best_seller", false),
-          isNewArrival = obj.optBoolean("is_new_arrival", false)
-        )
-      )
-    }
-    return result
-  }
-
-  // ----------------------------------------------------
   // CATEGORIES
   // ----------------------------------------------------
 
-  suspend fun fetchCategories(): Result<List<SupabaseCategoryDto>> = withContext(Dispatchers.IO) {
-    try {
-      val res = SupabaseClient.get("categories?select=*&order=display_order.asc.nullslast")
-      res.mapCatching { jsonStr ->
-        val list = mutableListOf<SupabaseCategoryDto>()
-        val arr = JSONArray(jsonStr)
-        for (i in 0 until arr.length()) {
-          val obj = arr.getJSONObject(i)
-          list.add(
-            SupabaseCategoryDto(
-              id = obj.optString("id", ""),
-              title = obj.optString("title", obj.optString("name", "Category")),
-              countText = obj.optString("count_text", "100+ Products"),
-              sampleItems = obj.optString("sample_items", obj.optString("description", "")),
-              imageUrl = if (obj.has("image_url")) obj.optString("image_url") else null,
-              badge = if (obj.has("badge")) obj.optString("badge") else null,
-              displayOrder = obj.optInt("display_order", i)
-            )
-          )
-        }
-        list
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "fetchCategories error", e)
-      Result.failure(e)
-    }
+  suspend fun fetchCategories():Result<List<SupabaseCategoryDto>> = withContext(Dispatchers.IO){
+    try{SupabaseClient.get("categories?select=id,name,description,image_url,sort_order,is_coming_soon&is_active=eq.true&order=sort_order.asc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;SupabaseCategoryDto(id=o.optString("id"),title=o.optString("name"),countText="",sampleItems=o.optString("description",""),imageUrl=if(o.isNull("image_url"))null else o.optString("image_url"),badge=if(o.optBoolean("is_coming_soon"))"Coming soon" else null,displayOrder=o.optInt("sort_order",i))}}}catch(e:Exception){Log.e(TAG,"fetchCategories error",e);Result.failure(e)}
   }
 
-  // ----------------------------------------------------
   // CART
   // ----------------------------------------------------
 
@@ -302,165 +170,23 @@ object SupabaseApiService {
   // ORDERS
   // ----------------------------------------------------
 
-  suspend fun fetchOrders(userId: String): Result<List<SupabaseOrderDto>> = withContext(Dispatchers.IO) {
-    try {
-      val res = SupabaseClient.get("orders?user_id=eq.$userId&select=*&order=created_at.desc")
-      res.mapCatching { jsonStr ->
-        val arr = JSONArray(jsonStr)
-        val list = mutableListOf<SupabaseOrderDto>()
-        for (i in 0 until arr.length()) {
-          val obj = arr.getJSONObject(i)
-          list.add(
-            SupabaseOrderDto(
-              id = obj.optString("id", ""),
-              orderNumber = obj.optString("order_number", obj.optString("order_id", "JT-00000-PK")),
-              userId = obj.optString("user_id", userId),
-              subtotal = obj.optInt("subtotal", 0),
-              discount = obj.optInt("discount", 0),
-              deliveryFee = obj.optInt("delivery_fee", 0),
-              grandTotal = obj.optInt("grand_total", obj.optInt("total", 0)),
-              paymentMethod = obj.optString("payment_method", "COD"),
-              paymentStatus = obj.optString("payment_status", "PENDING"),
-              orderStatus = obj.optString("order_status", obj.optString("status", "PENDING")),
-              deliveryNote = if (obj.has("delivery_note")) obj.optString("delivery_note") else null,
-              addressName = obj.optString("address_name", ""),
-              addressPhone = obj.optString("address_phone", ""),
-              addressLine = obj.optString("address_line", ""),
-              addressArea = obj.optString("address_area", ""),
-              addressCity = obj.optString("address_city", "Lahore"),
-              createdAt = obj.optString("created_at", "")
-            )
-          )
-        }
-        list
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "fetchOrders error", e)
-      Result.failure(e)
-    }
+  suspend fun fetchOrders(userId:String):Result<List<SupabaseOrderDto>> = withContext(Dispatchers.IO){
+    try{SupabaseClient.get("orders?customer_id=eq.$userId&select=*&order=created_at.desc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;val ad=o.optJSONObject("shipping_address_snapshot")?:JSONObject();SupabaseOrderDto(id=o.optString("id"),orderNumber=o.optString("order_number"),userId=o.optString("customer_id",userId),subtotal=o.optDouble("subtotal").toInt(),discount=o.optDouble("discount_amount").toInt(),deliveryFee=o.optDouble("delivery_fee").toInt(),grandTotal=o.optDouble("total").toInt(),paymentMethod=o.optString("payment_method","cod").uppercase(),paymentStatus=o.optString("payment_status","pending").uppercase(),orderStatus=o.optString("order_status","pending").uppercase(),deliveryNote=if(o.isNull("delivery_note"))null else o.optString("delivery_note"),addressName=ad.optString("recipient_name",o.optString("customer_name","")),addressPhone=ad.optString("phone",o.optString("customer_phone","")),addressLine=ad.optString("address_line_1",""),addressArea=ad.optString("address_line_2",""),addressCity=ad.optString("city",""),createdAt=o.optString("created_at",""))}}}catch(e:Exception){Log.e(TAG,"fetchOrders error",e);Result.failure(e)}
+  }
+  suspend fun fetchOrderItems(orderId:String):Result<List<SupabaseOrderItemDto>> = withContext(Dispatchers.IO){
+    try{SupabaseClient.get("order_items?order_id=eq.$orderId&select=*&order=created_at.asc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;val v=o.optJSONObject("variant_snapshot")?:JSONObject();SupabaseOrderItemDto(id=o.optString("id"),orderId=o.optString("order_id"),productId=o.optString("product_id",""),productTitle=o.optString("product_name_snapshot",""),unitPrice=o.optDouble("unit_price").toInt(),quantity=o.optInt("quantity",1),totalPrice=o.optDouble("line_total").toInt(),selectedPalette=v.optString("value").takeIf{v.optString("label").contains("color",true)},selectedSize=v.optString("value").takeIf{v.optString("label").contains("size",true)})}}}catch(e:Exception){Log.e(TAG,"fetchOrderItems error",e);Result.failure(e)}
+  }
+  suspend fun createOrder(order:SupabaseOrderDto,items:List<SupabaseOrderItemDto>):Result<String> = withContext(Dispatchers.IO){
+    try{val address=JSONObject().apply{put("recipient_name",order.addressName);put("phone",order.addressPhone);put("address_line_1",order.addressLine);if(order.addressArea.isNotBlank())put("address_line_2",order.addressArea);put("city",order.addressCity);put("province",order.addressProvince);if(!order.postalCode.isNullOrBlank())put("postal_code",order.postalCode)}
+      val lines=JSONArray();items.forEach{item->lines.put(JSONObject().apply{put("product_id",item.productId);if(!item.variantId.isNullOrBlank())put("variant_id",item.variantId);put("quantity",item.quantity)})}
+      val params=JSONObject().apply{put("p_customer_name",order.addressName);put("p_customer_phone",order.addressPhone);put("p_customer_email",order.customerEmail?:JSONObject.NULL);put("p_shipping_address",address);put("p_items",lines);put("p_idempotency_key",order.idempotencyKey);put("p_customer_note",order.deliveryNote?:"")}
+      val body=SupabaseClient.rpc("place_order",params.toString()).getOrThrow();val rows=JSONArray(body);if(rows.length()==0)throw IOException("Order was not created");val id=rows.getJSONObject(0).optString("order_id");if(id.isBlank())throw IOException("Server did not return an order ID");Result.success(id)
+    }catch(e:Exception){Log.e(TAG,"Secure place_order RPC failed",e);Result.failure(e)}
+  }
+  suspend fun cancelOrder(orderId:String):Result<Boolean> = withContext(Dispatchers.IO){
+    try{val body=SupabaseClient.rpc("cancel_customer_order",JSONObject().put("p_order_id",orderId).toString()).getOrThrow();Result.success(body.trim()=="true"||body.trim()=="\"true\"")}catch(e:Exception){Log.e(TAG,"cancel_customer_order RPC failed",e);Result.failure(e)}
   }
 
-  suspend fun fetchOrderItems(orderId: String): Result<List<SupabaseOrderItemDto>> = withContext(Dispatchers.IO) {
-    try {
-      val res = SupabaseClient.get("order_items?order_id=eq.$orderId&select=*")
-      res.mapCatching { jsonStr ->
-        val arr = JSONArray(jsonStr)
-        val list = mutableListOf<SupabaseOrderItemDto>()
-        for (i in 0 until arr.length()) {
-          val obj = arr.getJSONObject(i)
-          list.add(
-            SupabaseOrderItemDto(
-              id = obj.optString("id", ""),
-              orderId = obj.optString("order_id", orderId),
-              productId = obj.optString("product_id", ""),
-              productTitle = obj.optString("product_title", obj.optString("title", "Product")),
-              unitPrice = obj.optInt("unit_price", obj.optInt("price", 0)),
-              quantity = obj.optInt("quantity", 1),
-              totalPrice = obj.optInt("total_price", 0),
-              selectedPalette = if (obj.has("selected_palette")) obj.optString("selected_palette") else null,
-              selectedSize = if (obj.has("selected_size")) obj.optString("selected_size") else null,
-              imageUrl = if (obj.has("image_url")) obj.optString("image_url") else null
-            )
-          )
-        }
-        list
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "fetchOrderItems error", e)
-      Result.failure(e)
-    }
-  }
-
-  suspend fun createOrder(
-    order: SupabaseOrderDto,
-    items: List<SupabaseOrderItemDto>
-  ): Result<String> = withContext(Dispatchers.IO) {
-    try {
-      // First try executing secure RPC create_order if defined
-      val rpcJson = JSONObject().apply {
-        put("p_user_id", order.userId)
-        put("p_order_number", order.orderNumber)
-        put("p_subtotal", order.subtotal)
-        put("p_discount", order.discount)
-        put("p_delivery_fee", order.deliveryFee)
-        put("p_grand_total", order.grandTotal)
-        put("p_delivery_note", order.deliveryNote ?: "")
-        put("p_address_line", order.addressLine)
-        put("p_area", order.addressArea)
-        put("p_city", order.addressCity)
-      }
-
-      val rpcRes = SupabaseClient.rpc("create_order", rpcJson.toString())
-      if (rpcRes.isSuccess) {
-        return@withContext rpcRes
-      }
-
-      // Fallback: Direct table insert into orders and order_items
-      val orderJson = JSONObject().apply {
-        put("order_number", order.orderNumber)
-        put("user_id", order.userId)
-        put("subtotal", order.subtotal)
-        put("discount", order.discount)
-        put("delivery_fee", order.deliveryFee)
-        put("grand_total", order.grandTotal)
-        put("payment_method", order.paymentMethod)
-        put("payment_status", order.paymentStatus)
-        put("order_status", order.orderStatus)
-        if (!order.deliveryNote.isNullOrBlank()) put("delivery_note", order.deliveryNote)
-        put("address_name", order.addressName)
-        put("address_phone", order.addressPhone)
-        put("address_line", order.addressLine)
-        put("address_area", order.addressArea)
-        put("address_city", order.addressCity)
-      }
-
-      val insertRes = SupabaseClient.post("orders", orderJson.toString())
-      val insertedBody = insertRes.getOrThrow()
-      val insertedArray = JSONArray(insertedBody)
-      val createdOrderId = insertedArray.getJSONObject(0).optString("id", order.orderNumber)
-
-      // Insert items
-      for (item in items) {
-        val itemJson = JSONObject().apply {
-          put("order_id", createdOrderId)
-          put("product_id", item.productId)
-          put("product_title", item.productTitle)
-          put("unit_price", item.unitPrice)
-          put("quantity", item.quantity)
-          put("total_price", item.totalPrice)
-          if (!item.selectedPalette.isNullOrBlank()) put("selected_palette", item.selectedPalette)
-          if (!item.selectedSize.isNullOrBlank()) put("selected_size", item.selectedSize)
-        }
-        SupabaseClient.post("order_items", itemJson.toString(), preferReturn = false)
-      }
-
-      Result.success(createdOrderId)
-    } catch (e: Exception) {
-      Log.e(TAG, "createOrder error", e)
-      Result.failure(e)
-    }
-  }
-
-  suspend fun cancelOrder(orderNumber: String): Result<Boolean> = withContext(Dispatchers.IO) {
-    try {
-      val json = JSONObject().apply {
-        put("order_status", "CANCELLED")
-      }
-      val res = SupabaseClient.patch("orders?order_number=eq.$orderNumber", json.toString())
-      if (res.isSuccess) {
-        Result.success(true)
-      } else {
-        // Also try id=eq
-        val resId = SupabaseClient.patch("orders?id=eq.$orderNumber", json.toString())
-        Result.success(resId.isSuccess)
-      }
-    } catch (e: Exception) {
-      Log.e(TAG, "cancelOrder error", e)
-      Result.failure(e)
-    }
-  }
-
-  // ----------------------------------------------------
   // REVIEWS & RATINGS
   // ----------------------------------------------------
 
