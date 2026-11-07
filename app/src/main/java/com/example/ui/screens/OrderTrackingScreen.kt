@@ -263,7 +263,7 @@ fun OrderTrackingScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Order #${activeOrder.orderId}",
+                  text = "Order #" + activeOrder.orderNumber,
                   fontWeight = FontWeight.Bold,
                   fontSize = 12.sp,
                   color = JTTextPrimary
@@ -276,9 +276,9 @@ fun OrderTrackingScreen(
                 modifier = Modifier
                   .clickable {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("Order ID", activeOrder.orderId)
+                    val clip = ClipData.newPlainText("Order Number", activeOrder.orderNumber)
                     clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Copied Order ID: #${activeOrder.orderId}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Copied Order Number: #" + activeOrder.orderNumber, Toast.LENGTH_SHORT).show()
                   }
                   .testTag("copy_order_id_button")
               ) {
@@ -585,7 +585,7 @@ fun OrderTrackingScreen(
               onClick = {
                 val success = MarketplaceRepository.cancelOrder(activeOrder.orderId)
                 if (success) {
-                  Toast.makeText(context, "Order #${activeOrder.orderId} cancelled", Toast.LENGTH_SHORT).show()
+                  Toast.makeText(context, "Order #" + activeOrder.orderNumber + " cancelled", Toast.LENGTH_SHORT).show()
                 }
               },
               shape = RoundedCornerShape(12.dp),
@@ -927,7 +927,7 @@ private fun InvoiceDialog(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null, tint = JTPurplePrimary)
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Order Invoice #${order.orderId}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("Order Invoice #" + order.orderNumber, fontSize = 16.sp, fontWeight = FontWeight.Bold)
       }
     },
     text = {
