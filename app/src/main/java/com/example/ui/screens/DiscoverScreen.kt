@@ -614,29 +614,16 @@ private fun ProductsFeedReelsView(
           .fillMaxSize()
           .background(Color(0xFFF5F5F5))
       ) {
-        // Show the complete product photo without cropping or excessive zoom.
-        // Fit preserves the source image's aspect ratio inside the feed viewport.
-        if (!product.imageUrl.isNullOrBlank()) {
-          AsyncImage(
-            model = product.imageUrl,
-            contentDescription = product.title,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-              .fillMaxWidth()
-              .fillMaxHeight()
-              .align(Alignment.Center)
-          )
-        } else {
-          Image(
-            painter = painterResource(id = R.drawable.ic_launcher_background),
-            contentDescription = product.title,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-              .fillMaxWidth()
-              .fillMaxHeight()
-              .align(Alignment.Center)
-          )
-        }
+        // Fit the whole product image within the available feed area.
+        // Coil also loads the bundled placeholder resource when no remote image exists.
+        AsyncImage(
+          model = product.imageUrl?.takeIf { it.isNotBlank() } ?: R.drawable.ic_launcher_background,
+          contentDescription = product.title,
+          contentScale = ContentScale.Fit,
+          modifier = Modifier
+            .fillMaxSize()
+            .align(Alignment.Center)
+        )
 
         // Bottom Gradient Overlay for text contrast
         Box(
