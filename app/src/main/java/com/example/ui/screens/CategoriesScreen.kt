@@ -420,12 +420,13 @@ fun CategoryCard(
           .background(JTSurfaceVariant)
       ) {
         if (!category.imageUrl.isNullOrBlank()) {
+          // Load remote and bundled fallback images through Coil. Avoid eager
+          // painterResource() calls in placeholder/error, which can crash when
+          // a bundled asset is not a supported Android drawable.
           AsyncImage(
-            model = category.imageUrl,
+            model = category.imageUrl?.takeIf { it.isNotBlank() } ?: category.drawableRes,
             contentDescription = category.title,
             contentScale = ContentScale.Crop,
-            placeholder = painterResource(id = category.drawableRes),
-            error = painterResource(id = category.drawableRes),
             modifier = Modifier.fillMaxSize()
           )
         } else {
