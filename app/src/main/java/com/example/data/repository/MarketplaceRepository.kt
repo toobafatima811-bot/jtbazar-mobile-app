@@ -124,7 +124,7 @@ object MarketplaceRepository {
         }
       } else {
         val newItem = CartItem(
-          id = "cart_" + System.currentTimeMillis(),
+          id = "cart_" + java.util.UUID.randomUUID().toString(),
           product = product,
           quantity = quantity,
           selectedPalette = palette,
