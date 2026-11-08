@@ -612,22 +612,29 @@ private fun ProductsFeedReelsView(
       Box(
         modifier = Modifier
           .fillMaxSize()
-          .background(Color.Black)
+          .background(Color(0xFFF5F5F5))
       ) {
-        // Full Bleed Product Image
+        // Show the complete product photo without cropping or excessive zoom.
+        // Fit preserves the source image's aspect ratio inside the feed viewport.
         if (!product.imageUrl.isNullOrBlank()) {
           AsyncImage(
             model = product.imageUrl,
             contentDescription = product.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+              .fillMaxWidth()
+              .fillMaxHeight()
+              .align(Alignment.Center)
           )
         } else {
           Image(
             painter = painterResource(id = R.drawable.ic_launcher_background),
             contentDescription = product.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+              .fillMaxWidth()
+              .fillMaxHeight()
+              .align(Alignment.Center)
           )
         }
 
