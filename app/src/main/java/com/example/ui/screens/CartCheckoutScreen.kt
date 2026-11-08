@@ -1,6 +1,13 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,14 +15,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,14 +37,29 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.model.CartItem
+import com.example.data.model.DeliveryAddress
+import com.example.data.model.OrderRecord
 import com.example.data.repository.MarketplaceRepository
-import com.example.ui.components.AddressSelectionSheet
+import com.example.data.supabase.SupabaseAuthService
+import com.example.data.supabase.SupabaseClient
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
+
+enum class CartCheckoutStage {
+  CART,
+  CHECKOUT,
+  CONFIRMATION
+}
 
 @Composable
 fun CartCheckoutScreen(
@@ -42,6 +69,8 @@ fun CartCheckoutScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val coroutineScope = rememberCoroutineScope()
+
   val cartItems by MarketplaceRepository.cartItems.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
@@ -49,68 +78,110 @@ fun CartCheckoutScreen(
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
   val configuredDeliveryFee by MarketplaceRepository.deliveryFee.collectAsState()
   val codEnabled by MarketplaceRepository.codEnabled.collectAsState()
-
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
+  val currentUser by SupabaseClient.currentUser.collectAsState()
+  val userProfile by SupabaseAuthService.userProfile.collectAsState()
 
-  var showAddressDialog by remember { mutableStateOf(false) }
-  var deliveryNote by remember { mutableStateOf("") }
+  var stage by remember { mutableStateOf(CartCheckoutStage.CART) }
+  var confirmedOrder by remember { mutableStateOf<OrderRecord?>(null) }
+
+  // Checkout Form States
+  var recipientName by remember(userProfile, selectedAddress) {
+    mutableStateOf(selectedAddress?.name ?: userProfile?.fullName ?: currentUser?.fullName ?: "")
+  }
+  var recipientPhone by remember(userProfile, selectedAddress) {
+    mutableStateOf(selectedAddress?.phone ?: userProfile?.phone ?: currentUser?.phone ?: "")
+  }
+  var city by remember(userProfile, selectedAddress) {
+    mutableStateOf(selectedAddress?.city ?: userProfile?.city ?: "")
+  }
+  var streetAddress by remember(selectedAddress) {
+    mutableStateOf(selectedAddress?.addressLine ?: "")
+  }
+  var areaLocality by remember(selectedAddress) {
+    mutableStateOf(selectedAddress?.area ?: "")
+  }
+  var customerEmail by remember(currentUser, userProfile) {
+    mutableStateOf(currentUser?.email ?: userProfile?.email ?: "")
+  }
+  var deliveryInstructions by remember { mutableStateOf("") }
+  var saveAddressToAccount by remember { mutableStateOf(true) }
+
+  // Location Pin State
+  var deliveryLat by remember { mutableStateOf<Double?>(null) }
+  var deliveryLng by remember { mutableStateOf<Double?>(null) }
+  var locationCapturedAt by remember { mutableStateOf<String?>(null) }
+  var isPinConfirmed by remember { mutableStateOf(false) }
+
+  val locationPermissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestMultiplePermissions()
+  ) { perms ->
+    val granted = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    if (granted) {
+      try {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+          ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        if (loc != null) {
+          deliveryLat = loc.latitude
+          deliveryLng = loc.longitude
+          locationCapturedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+          }.format(java.util.Date())
+          isPinConfirmed = true
+          Toast.makeText(context, "Location pin captured: ${String.format("%.4f", loc.latitude)}, ${String.format("%.4f", loc.longitude)}", Toast.LENGTH_SHORT).show()
+        }
+      } catch (_: SecurityException) {}
+    } else {
+      Toast.makeText(context, "Location permission not granted. Location pin remains optional.", Toast.LENGTH_SHORT).show()
+    }
+  }
 
   // Server-aligned Calculations
   val subtotal = cartItems.sumOf { it.totalPrice }
   val deliveryCharges = if (subtotal == 0) 0 else configuredDeliveryFee
-  val discount = 0
-  val grandTotal = (subtotal - discount + deliveryCharges).coerceAtLeast(0)
-
-  if (showAddressDialog) {
-    AddressSelectionSheet(
-      addresses = addresses,
-      selectedAddress = selectedAddress,
-      onSelect = {
-        MarketplaceRepository.selectAddress(it)
-        showAddressDialog = false
-      },
-      onDismiss = { showAddressDialog = false },
-      onAddNewAddress = { MarketplaceRepository.addOrUpdateAddress(it) }
-    )
-  }
+  val grandTotal = (subtotal + deliveryCharges).coerceAtLeast(0)
 
   Scaffold(
     containerColor = Color.White,
     topBar = {
       JTBazarTopBar(
-        title = "Cart & COD Checkout",
-        showBack = true,
-        onBackClick = onBackClick,
-        onCartClick = { /* already here */ },
+        title = when (stage) {
+          CartCheckoutStage.CART -> "Shopping Cart"
+          CartCheckoutStage.CHECKOUT -> "Checkout & Delivery"
+          CartCheckoutStage.CONFIRMATION -> "Order Confirmation"
+        },
+        showBack = stage != CartCheckoutStage.CONFIRMATION,
+        onBackClick = {
+          if (stage == CartCheckoutStage.CHECKOUT) {
+            stage = CartCheckoutStage.CART
+          } else {
+            onBackClick()
+          }
+        },
+        onCartClick = { stage = CartCheckoutStage.CART },
         onAvatarClick = onAccountClick,
-        onLocationClick = { showAddressDialog = true },
         cartCount = cartCount,
         currentLocation = currentLocation
       )
     },
     bottomBar = {
-      if (cartItems.isNotEmpty()) {
-        // Bottom sticky bar: PAY ON DELIVERY & Place Order Button
+      if (stage == CartCheckoutStage.CART && cartItems.isNotEmpty()) {
         Surface(
           color = Color.White,
-          tonalElevation = 6.dp,
+          shadowElevation = 8.dp,
           border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
           modifier = Modifier.fillMaxWidth().navigationBarsPadding()
         ) {
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 16.dp, vertical = 10.dp),
+              .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
             Column {
-              Text(
-                text = "PAY ON DELIVERY",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTTextSecondary
-              )
+              Text("TOTAL (INCL. DELIVERY)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = JTTextSecondary)
               Text(
                 text = "PKR ${String.format("%,d", grandTotal)}",
                 fontWeight = FontWeight.ExtraBold,
@@ -118,52 +189,15 @@ fun CartCheckoutScreen(
                 color = JTPurplePrimary
               )
             }
-
             Button(
-              onClick = {
-                if (selectedAddress == null) {
-                  Toast.makeText(context, "Please select or add a delivery address first", Toast.LENGTH_SHORT).show()
-                  showAddressDialog = true
-                } else {
-                  MarketplaceRepository.placeCurrentOrder(deliveryNote = deliveryNote) { result ->
-                    if (result.isSuccess) {
-                      Toast.makeText(context, "Order Placed Successfully! Shukriya!", Toast.LENGTH_SHORT).show()
-                      onOrderPlaced()
-                    } else {
-                      val err = result.exceptionOrNull()?.message ?: "Order placement failed"
-                      Toast.makeText(context, err, Toast.LENGTH_LONG).show()
-                    }
-                  }
-                }
-              },
-              enabled = !isPlacingOrder && selectedAddress != null && codEnabled,
+              onClick = { stage = CartCheckoutStage.CHECKOUT },
               shape = RoundedCornerShape(12.dp),
-              colors = ButtonDefaults.buttonColors(
-                containerColor = JTOrange,
-                contentColor = Color.White
-              ),
-              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-              modifier = Modifier.testTag("place_order_button")
+              colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
+              modifier = Modifier.height(44.dp).testTag("cart_proceed_checkout_btn")
             ) {
-              if (isPlacingOrder) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("PLACING ORDER...", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-              } else {
-                Icon(
-                  imageVector = Icons.Filled.LocalShipping,
-                  contentDescription = null,
-                  tint = Color.White,
-                  modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                  text = "PLACE ORDER VIA CASH ON DELIVERY",
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 11.sp,
-                  letterSpacing = 0.3.sp
-                )
-              }
+              Text("Proceed to Checkout", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              Spacer(modifier = Modifier.width(4.dp))
+              Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
             }
           }
         }
@@ -171,803 +205,674 @@ fun CartCheckoutScreen(
     },
     modifier = modifier.fillMaxSize()
   ) { paddingValues ->
-    LazyColumn(
+    Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(paddingValues),
-      contentPadding = PaddingValues(bottom = 28.dp)
+        .padding(paddingValues)
     ) {
-      // 1. SSL & Genuine Marketplace Banner
-      item {
-        Surface(
-          shape = RoundedCornerShape(14.dp),
-          color = JTPurpleContainer.copy(alpha = 0.5f),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.weight(1f)
-            ) {
-              Icon(
-                imageVector = Icons.Filled.VerifiedUser,
-                contentDescription = null,
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(16.dp)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = "100% Genuine Pakistani Marketplace Checkout",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = JTTextPrimary
-              )
-            }
-
-            Surface(
-              shape = RoundedCornerShape(8.dp),
-              color = Color.White
-            ) {
-              Text(
-                text = "SSL Secure",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTPurplePrimary,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-              )
-            }
-          }
-        }
-      }
-
-      if (cartItems.isEmpty()) {
-        item {
-          Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 24.dp, vertical = 60.dp),
-            contentAlignment = Alignment.Center
-          ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-              Box(
-                modifier = Modifier
-                  .size(80.dp)
-                  .clip(CircleShape)
-                  .background(JTPurpleContainer),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.Filled.ShoppingCart,
-                  contentDescription = null,
-                  tint = JTPurplePrimary,
-                  modifier = Modifier.size(40.dp)
-                )
-              }
-              Spacer(modifier = Modifier.height(16.dp))
-              Text(
-                text = "Your Cart is Empty",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = JTTextPrimary
-              )
-              Spacer(modifier = Modifier.height(6.dp))
-              Text(
-                text = "Explore live Pakistani crafts, authentic spices, and daily essentials from verified vendors.",
-                fontSize = 12.sp,
-                color = JTTextSecondary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-              )
-              Spacer(modifier = Modifier.height(20.dp))
-              Button(
-                onClick = onBackClick,
-                colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
-                shape = RoundedCornerShape(10.dp)
-              ) {
-                Icon(Icons.Filled.ShoppingBag, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Start Shopping", fontWeight = FontWeight.Bold)
-              }
-            }
-          }
-        }
-      } else {
-        // 2. Delivery Address Card
-        item {
-          val currentAddr = selectedAddress
-          Spacer(modifier = Modifier.height(6.dp))
-          Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = JTCardBg,
-            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 16.dp)
-          ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Box(
-                    modifier = Modifier
-                      .size(28.dp)
-                      .clip(CircleShape)
-                      .background(JTPurpleContainer),
-                    contentAlignment = Alignment.Center
-                  ) {
-                    Icon(
-                      imageVector = Icons.Filled.LocationOn,
-                      contentDescription = null,
-                      tint = JTPurplePrimary,
-                      modifier = Modifier.size(16.dp)
-                    )
-                  }
-                  Spacer(modifier = Modifier.width(8.dp))
-                  Text(
-                    text = "DELIVERY ADDRESS",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = JTTextPrimary,
-                    letterSpacing = 0.5.sp
-                  )
-                  if (currentAddr != null) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Surface(
-                      shape = RoundedCornerShape(4.dp),
-                      color = JTAmberContainer
-                    ) {
-                      Text(
-                        text = currentAddr.tag,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = JTAmberDark,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                      )
-                    }
-                  }
-                }
-
-                Surface(
-                  shape = RoundedCornerShape(8.dp),
-                  color = JTPurpleContainer,
-                  modifier = Modifier.clickable { showAddressDialog = true }
-                ) {
-                  Text(
-                    text = if (currentAddr == null) "+ Add" else "Change",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = JTPurplePrimary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                  )
-                }
-              }
-
-              Spacer(modifier = Modifier.height(10.dp))
-
-              if (currentAddr != null) {
-                Text(
-                  text = currentAddr.name,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 14.sp,
-                  color = JTTextPrimary
-                )
-                Text(
-                  text = currentAddr.phone,
-                  fontSize = 12.sp,
-                  color = JTTextSecondary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                  text = "${currentAddr.addressLine}, ${currentAddr.area}, ${currentAddr.city}, ${currentAddr.province}",
-                  fontSize = 11.sp,
-                  color = JTTextSecondary,
-                  lineHeight = 15.sp
-                )
-              } else {
-                Text(
-                  text = "No delivery address selected. Please add your delivery address to proceed with Cash on Delivery.",
-                  fontSize = 12.sp,
-                  color = JTRed,
-                  fontWeight = FontWeight.Medium
-                )
-              }
-            }
-          }
+      when (stage) {
+        CartCheckoutStage.CART -> {
+          CartView(
+            items = cartItems,
+            subtotal = subtotal,
+            deliveryFee = deliveryCharges,
+            grandTotal = grandTotal,
+            onClearCart = { MarketplaceRepository.clearCart() },
+            onContinueShopping = onBackClick,
+            onProceedToCheckout = { stage = CartCheckoutStage.CHECKOUT }
+          )
         }
 
-        // 3. Dynamic Grouped Items by Vendor
-        val groupedVendors = cartItems.groupBy { it.product.vendor.ifBlank { "JTBazar Verified Vendor" } }
-        groupedVendors.forEach { (vendorName, vendorItems) ->
-          item(key = vendorName) {
-            Spacer(modifier = Modifier.height(14.dp))
-            VendorItemsCard(
-              vendorName = vendorName,
-              vendorTypeIcon = Icons.Filled.Storefront,
-              badge = "${vendorItems.size} ${if (vendorItems.size == 1) "item" else "items"}",
-              verifiedText = "Verified Vendor",
-              items = vendorItems
-            )
-          }
-        }
-      }
-
-      // 4. Delivery & Instructions Card
-      item {
-        Spacer(modifier = Modifier.height(14.dp))
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(
-                imageVector = Icons.Filled.LocalShipping,
-                contentDescription = null,
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(16.dp)
+        CartCheckoutStage.CHECKOUT -> {
+          CheckoutView(
+            items = cartItems,
+            subtotal = subtotal,
+            deliveryFee = deliveryCharges,
+            grandTotal = grandTotal,
+            recipientName = recipientName,
+            onRecipientNameChange = { recipientName = it },
+            recipientPhone = recipientPhone,
+            onRecipientPhoneChange = { recipientPhone = it },
+            city = city,
+            onCityChange = { city = it },
+            streetAddress = streetAddress,
+            onStreetAddressChange = { streetAddress = it },
+            areaLocality = areaLocality,
+            onAreaLocalityChange = { areaLocality = it },
+            customerEmail = customerEmail,
+            onCustomerEmailChange = { customerEmail = it },
+            deliveryInstructions = deliveryInstructions,
+            onDeliveryInstructionsChange = { deliveryInstructions = it },
+            saveAddressToAccount = saveAddressToAccount,
+            onSaveAddressToAccountChange = { saveAddressToAccount = it },
+            savedAddresses = addresses,
+            onSelectSavedAddress = { addr ->
+              recipientName = addr.name
+              recipientPhone = addr.phone
+              city = addr.city
+              streetAddress = addr.addressLine
+              areaLocality = addr.area
+              MarketplaceRepository.selectAddress(addr)
+            },
+            deliveryLat = deliveryLat,
+            deliveryLng = deliveryLng,
+            isPinConfirmed = isPinConfirmed,
+            onRequestPin = {
+              locationPermissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
               )
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = "DELIVERY & INSTRUCTIONS",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = JTTextPrimary,
-                letterSpacing = 0.5.sp
-              )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Standard Courier Radio Box
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = JTSurfaceVariant,
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-              ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Box(
-                    modifier = Modifier
-                      .size(14.dp)
-                      .clip(CircleShape)
-                      .background(JTPurplePrimary)
-                  )
-                  Spacer(modifier = Modifier.width(10.dp))
-                  Column {
-                    Text(
-                      text = "JTBazar Central Delivery",
-                      fontWeight = FontWeight.Bold,
-                      fontSize = 12.sp,
-                      color = JTTextPrimary
-                    )
-                    Text(
-                      text = "Collected from vendors and delivered by JTBazar",
-                      fontSize = 10.sp,
-                      color = JTTextSecondary
-                    )
-                  }
-                }
-
-                Text(
-                  text = "PKR " + String.format("%,d", deliveryCharges),
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 13.sp,
-                  color = JTTextPrimary
-                )
-              }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Delivery Note (Optional)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(
-                imageVector = Icons.Filled.EditNote,
-                contentDescription = null,
-                tint = JTTextSecondary,
-                modifier = Modifier.size(16.dp)
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text(
-                text = "Delivery Note (Optional)",
-                fontSize = 11.sp,
-                color = JTTextSecondary,
-                fontWeight = FontWeight.SemiBold
-              )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Surface(
-              shape = RoundedCornerShape(10.dp),
-              color = JTSurfaceVariant,
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-            ) {
-              Box(
-                modifier = Modifier
-                  .fillMaxSize()
-                  .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.CenterStart
-              ) {
-                androidx.compose.foundation.text.BasicTextField(
-                  value = deliveryNote,
-                  onValueChange = { deliveryNote = it },
-                  singleLine = true,
-                  textStyle = androidx.compose.ui.text.TextStyle(
-                    color = JTTextPrimary,
-                    fontSize = 11.sp
-                  ),
-                  modifier = Modifier.fillMaxWidth().testTag("delivery_note_input")
-                )
-              }
-            }
-          }
-        }
-      }
-
-      // 5. Payment Method Card (COD Preferred)
-      item {
-        Spacer(modifier = Modifier.height(14.dp))
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                  imageVector = Icons.Filled.Payment,
-                  contentDescription = null,
-                  tint = JTPurplePrimary,
-                  modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = "PAYMENT METHOD",
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = JTTextPrimary,
-                  letterSpacing = 0.5.sp
-                )
+            },
+            onChangePin = {
+              isPinConfirmed = false
+              deliveryLat = null
+              deliveryLng = null
+            },
+            isPlacingOrder = isPlacingOrder,
+            onPlaceOrder = {
+              if (recipientName.isBlank() || recipientPhone.isBlank() || city.isBlank() || streetAddress.isBlank()) {
+                Toast.makeText(context, "Please complete all required delivery fields.", Toast.LENGTH_SHORT).show()
+                return@CheckoutView
               }
 
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = JTAmberContainer
-              ) {
-                Text(
-                  text = "Preferred",
-                  fontSize = 9.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = JTAmberDark,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+              // Update/Save Address
+              val activeAddr = DeliveryAddress(
+                id = selectedAddress?.id ?: "addr_${System.currentTimeMillis()}",
+                name = recipientName.trim(),
+                phone = recipientPhone.trim(),
+                addressLine = streetAddress.trim(),
+                area = areaLocality.trim(),
+                city = city.trim(),
+                province = "Punjab"
+              )
+              MarketplaceRepository.selectAddress(activeAddr)
+              if (saveAddressToAccount && SupabaseClient.isAuthenticated) {
+                MarketplaceRepository.addOrUpdateAddress(activeAddr)
               }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // COD Option Container
-            Surface(
-              shape = RoundedCornerShape(14.dp),
-              color = JTPurpleSurface,
-              border = androidx.compose.foundation.BorderStroke(1.dp, JTPurpleContainerBorder),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically
-                ) {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                      modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(JTPurpleContainer),
-                      contentAlignment = Alignment.Center
-                    ) {
-                      Icon(
-                        imageVector = Icons.Filled.Money,
-                        contentDescription = null,
-                        tint = JTPurplePrimary,
-                        modifier = Modifier.size(20.dp)
-                      )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                      Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                          text = "Cash on Delivery (COD)",
-                          fontWeight = FontWeight.Bold,
-                          fontSize = 13.sp,
-                          color = JTTextPrimary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                          imageVector = Icons.Filled.CheckCircle,
-                          contentDescription = null,
-                          tint = JTPurplePrimary,
-                          modifier = Modifier.size(13.dp)
-                        )
-                      }
-                      Text(
-                        text = "Pay with PKR cash at delivery",
-                        fontSize = 10.sp,
-                        color = JTTextSecondary
-                      )
-                    }
-                  }
-
-                  // Radio checked icon
-                  Box(
-                    modifier = Modifier
-                      .size(20.dp)
-                      .clip(CircleShape)
-                      .background(JTPurplePrimary),
-                    contentAlignment = Alignment.Center
-                  ) {
-                    Icon(
-                      imageVector = Icons.Filled.Check,
-                      contentDescription = null,
-                      tint = Color.White,
-                      modifier = Modifier.size(14.dp)
-                    )
-                  }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Info note
-                Surface(
-                  shape = RoundedCornerShape(8.dp),
-                  color = Color.White
-                ) {
-                  Row(
-                    modifier = Modifier.padding(8.dp),
-                    verticalAlignment = Alignment.Top
-                  ) {
-                    Icon(
-                      imageVector = Icons.Filled.Info,
-                      contentDescription = null,
-                      tint = JTAmberDark,
-                      modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                      text = "Pay securely in cash at your doorstep upon receiving your parcel. No advance card required.",
-                      fontSize = 10.sp,
-                      color = JTTextSecondary,
-                      lineHeight = 14.sp
-                    )
-                  }
+              MarketplaceRepository.placeCurrentOrder(
+                deliveryNote = deliveryInstructions.trim(),
+                deliveryLat = deliveryLat,
+                deliveryLng = deliveryLng,
+                deliveryLocationName = if (deliveryLat != null) "$areaLocality, $city" else null,
+                deliveryLocationCapturedAt = locationCapturedAt
+              ) { result ->
+                if (result.isSuccess) {
+                  confirmedOrder = result.getOrNull()
+                  stage = CartCheckoutStage.CONFIRMATION
+                } else {
+                  val err = result.exceptionOrNull()?.message ?: "Order placement failed"
+                  Toast.makeText(context, err, Toast.LENGTH_LONG).show()
                 }
               }
             }
-          }
+          )
         }
-      }
 
-      // 6. Bill Breakdown Card
-      item {
-        Spacer(modifier = Modifier.height(14.dp))
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(
-                imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
-                contentDescription = null,
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(16.dp)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = "BILL BREAKDOWN",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = JTTextPrimary,
-                letterSpacing = 0.5.sp
-              )
+        CartCheckoutStage.CONFIRMATION -> {
+          val order = confirmedOrder
+          OrderConfirmationView(
+            order = order,
+            onViewTracking = onOrderPlaced,
+            onContinueShopping = {
+              stage = CartCheckoutStage.CART
+              onBackClick()
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Subtotal
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-              Text(
-                text = "Items Subtotal (${cartCount} items)",
-                fontSize = 12.sp,
-                color = JTTextSecondary
-              )
-              Text(
-                text = "Rs. ${String.format("%,d", subtotal)}",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = JTTextPrimary
-              )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Delivery Charges
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-              Text(
-                text = "Delivery Charges",
-                fontSize = 12.sp,
-                color = JTTextSecondary
-              )
-              Text(
-                text = "Rs. ${String.format("%,d", deliveryCharges)}",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = JTTextPrimary
-              )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-            HorizontalDivider(color = JTBorder)
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Grand Total
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Column {
-                Text(
-                  text = "Grand Total",
-                  fontSize = 14.sp,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = JTTextPrimary
-                )
-                Text(
-                  text = "Includes all applicable taxes",
-                  fontSize = 9.sp,
-                  color = JTTextSecondary
-                )
-              }
-              Text(
-                text = "Rs. ${String.format("%,d", grandTotal)}",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = JTPurplePrimary
-              )
-            }
-          }
+          )
         }
       }
     }
   }
 }
 
+// ----------------------------------------------------
+// 1. CART VIEW
+// ----------------------------------------------------
 @Composable
-private fun VendorItemsCard(
-  vendorName: String,
-  vendorTypeIcon: androidx.compose.ui.graphics.vector.ImageVector,
-  badge: String,
-  verifiedText: String? = null,
-  fastDispatch: Boolean = false,
-  items: List<CartItem>
+private fun CartView(
+  items: List<CartItem>,
+  subtotal: Int,
+  deliveryFee: Int,
+  grandTotal: Int,
+  onClearCart: () -> Unit,
+  onContinueShopping: () -> Unit,
+  onProceedToCheckout: () -> Unit
 ) {
-  Surface(
-    shape = RoundedCornerShape(18.dp),
-    color = JTCardBg,
-    border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp)
-  ) {
-    Column(modifier = Modifier.padding(14.dp)) {
-      // Vendor Header Row
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+  if (items.isEmpty()) {
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(24.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center
+    ) {
+      Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = JTSurfaceVariant,
+        modifier = Modifier.size(80.dp)
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            imageVector = vendorTypeIcon,
-            contentDescription = null,
-            tint = JTPurplePrimary,
-            modifier = Modifier.size(16.dp)
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            text = vendorName,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = JTTextPrimary
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = JTPurpleContainer
-          ) {
-            Text(
-              text = badge,
-              fontSize = 9.sp,
-              fontWeight = FontWeight.Bold,
-              color = JTPurplePrimary,
-              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-            )
-          }
+        Box(contentAlignment = Alignment.Center) {
+          Icon(Icons.Filled.ShoppingBag, contentDescription = null, tint = JTPurplePrimary, modifier = Modifier.size(40.dp))
         }
-
-        if (verifiedText != null) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              imageVector = Icons.Filled.CheckCircle,
-              contentDescription = null,
-              tint = JTAmberDark,
-              modifier = Modifier.size(12.dp)
-            )
-            Spacer(modifier = Modifier.width(3.dp))
-            Text(
-              text = verifiedText,
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold,
-              color = JTAmberDark
-            )
-          }
-        } else if (fastDispatch) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              imageVector = Icons.Filled.LocalShipping,
-              contentDescription = null,
-              tint = JTPurplePrimary,
-              modifier = Modifier.size(12.dp)
-            )
-            Spacer(modifier = Modifier.width(3.dp))
-            Text(
-              text = "Fast dispatch",
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold,
-              color = JTPurplePrimary
-            )
+      }
+      Spacer(modifier = Modifier.height(16.dp))
+      Text("Your Cart is Empty", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+      Spacer(modifier = Modifier.height(6.dp))
+      Text(
+        text = "Explore handcrafted Multani pottery, Pure Honey, and Fresh Kitchen essentials.",
+        fontSize = 13.sp,
+        color = JTTextSecondary,
+        textAlign = TextAlign.Center
+      )
+      Spacer(modifier = Modifier.height(20.dp))
+      Button(
+        onClick = onContinueShopping,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White)
+      ) {
+        Text("Start Shopping", fontWeight = FontWeight.Bold)
+      }
+    }
+  } else {
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(16.dp),
+      verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+      item {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text("${items.size} item(s) in cart", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+          TextButton(onClick = onClearCart, modifier = Modifier.testTag("clear_cart_btn")) {
+            Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Clear Cart", fontSize = 12.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
           }
         }
       }
 
-      Spacer(modifier = Modifier.height(10.dp))
-
-      // Cart Items List
-      items.forEachIndexed { index, cartItem ->
-        if (index > 0) {
-          Spacer(modifier = Modifier.height(10.dp))
-          HorizontalDivider(color = JTBorder)
-          Spacer(modifier = Modifier.height(10.dp))
-        }
-
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          verticalAlignment = Alignment.CenterVertically
+      items(items, key = { it.id }) { item ->
+        Surface(
+          shape = RoundedCornerShape(14.dp),
+          color = JTCardBg,
+          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+          modifier = Modifier.fillMaxWidth().testTag("cart_item_${item.id}")
         ) {
-          Box(
-            modifier = Modifier
-              .size(68.dp)
-              .clip(RoundedCornerShape(10.dp))
-              .background(JTSurfaceVariant)
+          Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            if (!cartItem.product.imageUrl.isNullOrBlank()) {
-              coil.compose.AsyncImage(
-                model = cartItem.product.imageUrl,
-                contentDescription = cartItem.product.title,
-                contentScale = ContentScale.Crop,
-                placeholder = painterResource(id = cartItem.product.drawableRes),
-                error = painterResource(id = cartItem.product.drawableRes),
-                modifier = Modifier.fillMaxSize()
-              )
-            } else {
-              Image(
-                painter = painterResource(id = cartItem.product.drawableRes),
-                contentDescription = cartItem.product.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-              )
-            }
-          }
-
-          Spacer(modifier = Modifier.width(10.dp))
-
-          Column(modifier = Modifier.weight(1f)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.Top
+            Box(
+              modifier = Modifier
+                .size(68.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(JTSurfaceVariant)
             ) {
-              Text(
-                text = if (cartItem.selectedPalette != null) "${cartItem.product.title.split("(")[0]} (${cartItem.selectedPalette}, ${cartItem.selectedSize ?: ""})" else cartItem.product.title,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                color = JTTextPrimary,
-                maxLines = 2,
-                modifier = Modifier.weight(1f)
-              )
-
-              IconButton(
-                onClick = { MarketplaceRepository.removeFromCart(cartItem.id) },
-                modifier = Modifier.size(24.dp)
-              ) {
-                Icon(
-                  imageVector = Icons.Outlined.Delete,
-                  contentDescription = "Remove",
-                  tint = JTTextSecondary,
-                  modifier = Modifier.size(16.dp)
+              if (!item.product.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                  model = item.product.imageUrl,
+                  contentDescription = item.product.title,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
+                )
+              } else {
+                Image(
+                  painter = painterResource(id = R.drawable.ic_launcher_background),
+                  contentDescription = item.product.title,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
                 )
               }
             }
 
-            val subtitleText = cartItem.product.category
-            Text(
-              text = subtitleText,
-              fontSize = 10.sp,
-              color = JTTextSecondary
-            )
+            Spacer(modifier = Modifier.width(12.dp))
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
               Text(
-                text = "Rs. ${String.format("%,d", cartItem.totalPrice)}",
+                text = item.product.title,
+                fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = JTPurplePrimary
+                color = JTTextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
 
-              QuantityStepper(
-                quantity = cartItem.quantity,
-                onIncrement = { MarketplaceRepository.adjustQuantity(cartItem.id, 1) },
-                onDecrement = { MarketplaceRepository.adjustQuantity(cartItem.id, -1) }
+              if (!item.selectedSize.isNullOrBlank() || !item.selectedPalette.isNullOrBlank()) {
+                Text(
+                  text = listOfNotNull(item.selectedSize, item.selectedPalette).joinToString(" • "),
+                  fontSize = 11.sp,
+                  color = JTPurplePrimary,
+                  fontWeight = FontWeight.SemiBold
+                )
+              }
+
+              Text(
+                text = "PKR ${String.format("%,d", item.product.price)}",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = JTTextPrimary
               )
+
+              Spacer(modifier = Modifier.height(6.dp))
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                QuantityStepper(
+                  quantity = item.quantity,
+                  onIncrement = { MarketplaceRepository.adjustQuantity(item.id, 1) },
+                  onDecrement = { MarketplaceRepository.adjustQuantity(item.id, -1) }
+                )
+
+                IconButton(
+                  onClick = { MarketplaceRepository.removeFromCart(item.id) },
+                  modifier = Modifier.size(28.dp).testTag("cart_item_delete_${item.id}")
+                ) {
+                  Icon(Icons.Outlined.Delete, contentDescription = "Remove", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                }
+              }
             }
           }
         }
       }
+
+      // Order Summary Card
+      item {
+        Surface(
+          shape = RoundedCornerShape(14.dp),
+          color = JTSurfaceVariant,
+          modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+          Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTTextPrimary)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+              Text("Subtotal", fontSize = 13.sp, color = JTTextSecondary)
+              Text("PKR ${String.format("%,d", subtotal)}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+              Text("Delivery Charges", fontSize = 13.sp, color = JTTextSecondary)
+              Text(
+                if (deliveryFee == 0) "Free" else "PKR ${String.format("%,d", deliveryFee)}",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = JTTextPrimary
+              )
+            }
+            HorizontalDivider(color = Color.LightGray)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+              Text("Estimated Total", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+              Text("PKR ${String.format("%,d", grandTotal)}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = JTPurplePrimary)
+            }
+          }
+        }
+      }
+
+      item {
+        Spacer(modifier = Modifier.height(60.dp))
+      }
+    }
+  }
+}
+
+// ----------------------------------------------------
+// 2. CHECKOUT VIEW (DEDICATED FULL SCREEN)
+// ----------------------------------------------------
+@Composable
+private fun CheckoutView(
+  items: List<CartItem>,
+  subtotal: Int,
+  deliveryFee: Int,
+  grandTotal: Int,
+  recipientName: String,
+  onRecipientNameChange: (String) -> Unit,
+  recipientPhone: String,
+  onRecipientPhoneChange: (String) -> Unit,
+  city: String,
+  onCityChange: (String) -> Unit,
+  streetAddress: String,
+  onStreetAddressChange: (String) -> Unit,
+  areaLocality: String,
+  onAreaLocalityChange: (String) -> Unit,
+  customerEmail: String,
+  onCustomerEmailChange: (String) -> Unit,
+  deliveryInstructions: String,
+  onDeliveryInstructionsChange: (String) -> Unit,
+  saveAddressToAccount: Boolean,
+  onSaveAddressToAccountChange: (Boolean) -> Unit,
+  savedAddresses: List<DeliveryAddress>,
+  onSelectSavedAddress: (DeliveryAddress) -> Unit,
+  deliveryLat: Double?,
+  deliveryLng: Double?,
+  isPinConfirmed: Boolean,
+  onRequestPin: () -> Unit,
+  onChangePin: () -> Unit,
+  isPlacingOrder: Boolean,
+  onPlaceOrder: () -> Unit
+) {
+  Column(
+    modifier = Modifier
+      .fillMaxSize()
+      .verticalScroll(rememberScrollState())
+      .padding(16.dp),
+    verticalArrangement = Arrangement.spacedBy(16.dp)
+  ) {
+    // Saved Address Quick Picker
+    if (savedAddresses.isNotEmpty()) {
+      Text("Select Saved Address", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        savedAddresses.take(3).forEach { addr ->
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (streetAddress == addr.addressLine) JTPurpleContainer else JTSurfaceVariant,
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (streetAddress == addr.addressLine) JTPurplePrimary else Color.Transparent),
+            modifier = Modifier.clickable { onSelectSavedAddress(addr) }
+          ) {
+            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+              Text(addr.name, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+              Text(addr.tag, fontSize = 10.sp, color = JTPurplePrimary, fontWeight = FontWeight.Bold)
+            }
+          }
+        }
+      }
+    }
+
+    Text("Delivery Details", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
+
+    // Required fields: Full Name, Mobile, City, Street Address
+    OutlinedTextField(
+      value = recipientName,
+      onValueChange = onRecipientNameChange,
+      label = { Text("Full Name *") },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth().testTag("checkout_name_input")
+    )
+
+    OutlinedTextField(
+      value = recipientPhone,
+      onValueChange = onRecipientPhoneChange,
+      label = { Text("Mobile Number (for COD verification) *") },
+      placeholder = { Text("0300 1234567") },
+      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth().testTag("checkout_phone_input")
+    )
+
+    OutlinedTextField(
+      value = city,
+      onValueChange = onCityChange,
+      label = { Text("City *") },
+      placeholder = { Text("e.g. Lahore, Karachi, Islamabad") },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth().testTag("checkout_city_input")
+    )
+
+    OutlinedTextField(
+      value = streetAddress,
+      onValueChange = onStreetAddressChange,
+      label = { Text("Full Street Address *") },
+      placeholder = { Text("House / Flat #, Street #, Building") },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth().testTag("checkout_address_input")
+    )
+
+    OutlinedTextField(
+      value = areaLocality,
+      onValueChange = onAreaLocalityChange,
+      label = { Text("Area / Locality / Landmark") },
+      placeholder = { Text("e.g. Gulberg III, DHA Phase 5") },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth().testTag("checkout_area_input")
+    )
+
+    OutlinedTextField(
+      value = customerEmail,
+      onValueChange = onCustomerEmailChange,
+      label = { Text("Email Address (for order receipt)") },
+      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth().testTag("checkout_email_input")
+    )
+
+    OutlinedTextField(
+      value = deliveryInstructions,
+      onValueChange = onDeliveryInstructionsChange,
+      label = { Text("Delivery Instructions (Optional)") },
+      placeholder = { Text("e.g. Leave parcel at security gate, call on arrival") },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth().testTag("checkout_instructions_input")
+    )
+
+    // Location Pin Section (GPS)
+    Surface(
+      shape = RoundedCornerShape(12.dp),
+      color = if (isPinConfirmed) Color(0xFFDEF7EC) else JTSurfaceVariant,
+      border = androidx.compose.foundation.BorderStroke(1.dp, if (isPinConfirmed) Color(0xFF0E9F6E) else JTBorder),
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Column(modifier = Modifier.padding(14.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+              imageVector = Icons.Filled.LocationOn,
+              contentDescription = null,
+              tint = if (isPinConfirmed) Color(0xFF03543F) else JTOrange,
+              modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = if (isPinConfirmed) "Delivery Location Confirmed" else "Delivery Location Pin",
+              fontWeight = FontWeight.Bold,
+              fontSize = 13.sp,
+              color = if (isPinConfirmed) Color(0xFF03543F) else JTTextPrimary
+            )
+          }
+
+          if (isPinConfirmed) {
+            Text(
+              text = "Change Pin",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              color = JTOrange,
+              modifier = Modifier.clickable(onClick = onChangePin)
+            )
+          }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        if (isPinConfirmed && deliveryLat != null && deliveryLng != null) {
+          Text(
+            text = "GPS Coordinates: ${String.format("%.4f", deliveryLat)}, ${String.format("%.4f", deliveryLng)}",
+            fontSize = 11.sp,
+            color = Color(0xFF03543F)
+          )
+        } else {
+          Text(
+            text = "Capture device GPS pin for express neighborhood food dispatch & exact door drop-off.",
+            fontSize = 11.sp,
+            color = JTTextSecondary
+          )
+          Spacer(modifier = Modifier.height(8.dp))
+          Button(
+            onClick = onRequestPin,
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.height(34.dp).testTag("capture_location_pin_btn")
+          ) {
+            Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Update My Location (GPS)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+          }
+        }
+      }
+    }
+
+    // Save Address Checkbox
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.clickable { onSaveAddressToAccountChange(!saveAddressToAccount) }
+    ) {
+      Checkbox(
+        checked = saveAddressToAccount,
+        onCheckedChange = onSaveAddressToAccountChange,
+        colors = CheckboxDefaults.colors(checkedColor = JTOrange)
+      )
+      Spacer(modifier = Modifier.width(6.dp))
+      Text("Save this address to my account for future orders", fontSize = 12.sp, color = JTTextPrimary)
+    }
+
+    // Payment Method: Cash on Delivery (COD)
+    Surface(
+      shape = RoundedCornerShape(12.dp),
+      color = Color(0xFFEFF6FF),
+      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF93C5FD)),
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Row(
+        modifier = Modifier.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Icon(Icons.Filled.Payment, contentDescription = null, tint = Color(0xFF1D4ED8), modifier = Modifier.size(24.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Column {
+          Text("Payment Method: Cash on Delivery (COD)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E40AF))
+          Text("Pay with cash when your parcel is delivered to your doorstep.", fontSize = 11.sp, color = Color(0xFF1E3A8A))
+        }
+      }
+    }
+
+    // Order Totals Summary
+    Surface(
+      shape = RoundedCornerShape(12.dp),
+      color = JTSurfaceVariant,
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text("Items Subtotal (${items.size})", fontSize = 12.sp, color = JTTextSecondary)
+          Text("PKR ${String.format("%,d", subtotal)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text("Delivery Charges", fontSize = 12.sp, color = JTTextSecondary)
+          Text(if (deliveryFee == 0) "Free" else "PKR ${String.format("%,d", deliveryFee)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        HorizontalDivider(color = Color.LightGray)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text("Total Payable on Delivery", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text("PKR ${String.format("%,d", grandTotal)}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = JTPurplePrimary)
+        }
+      }
+    }
+
+    // Place Order Button
+    Button(
+      onClick = onPlaceOrder,
+      enabled = !isPlacingOrder && recipientName.isNotBlank() && recipientPhone.isNotBlank() && city.isNotBlank() && streetAddress.isNotBlank(),
+      shape = RoundedCornerShape(12.dp),
+      colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
+      modifier = Modifier.fillMaxWidth().height(48.dp).testTag("checkout_place_order_btn")
+    ) {
+      if (isPlacingOrder) {
+        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Validating & Placing Order...", fontWeight = FontWeight.Bold)
+      } else {
+        Text("Place Cash on Delivery Order", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+      }
+    }
+
+    Spacer(modifier = Modifier.height(24.dp))
+  }
+}
+
+// ----------------------------------------------------
+// 3. ORDER CONFIRMATION VIEW
+// ----------------------------------------------------
+@Composable
+private fun OrderConfirmationView(
+  order: OrderRecord?,
+  onViewTracking: () -> Unit,
+  onContinueShopping: () -> Unit
+) {
+  Column(
+    modifier = Modifier
+      .fillMaxSize()
+      .padding(24.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.Center
+  ) {
+    Surface(
+      shape = RoundedCornerShape(32.dp),
+      color = Color(0xFFDEF7EC),
+      modifier = Modifier.size(90.dp)
+    ) {
+      Box(contentAlignment = Alignment.Center) {
+        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF0E9F6E), modifier = Modifier.size(54.dp))
+      }
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+
+    Text("Shukriya! Order Placed", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+    Spacer(modifier = Modifier.height(6.dp))
+
+    if (order != null) {
+      Text(
+        text = "Order Number: ${order.orderNumber}",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = JTPurplePrimary
+      )
+      Spacer(modifier = Modifier.height(6.dp))
+      Text(
+        text = "Total: PKR ${String.format("%,d", order.grandTotal)} • Cash on Delivery",
+        fontSize = 13.sp,
+        color = JTTextSecondary
+      )
+    }
+
+    Spacer(modifier = Modifier.height(10.dp))
+    Text(
+      text = "Our verified vendor and delivery partners have been notified. Your items will be dispatched promptly.",
+      fontSize = 12.sp,
+      color = JTTextSecondary,
+      textAlign = TextAlign.Center,
+      lineHeight = 16.sp
+    )
+
+    Spacer(modifier = Modifier.height(28.dp))
+
+    Button(
+      onClick = onViewTracking,
+      shape = RoundedCornerShape(12.dp),
+      colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
+      modifier = Modifier.fillMaxWidth().height(46.dp).testTag("confirm_track_order_btn")
+    ) {
+      Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null)
+      Spacer(modifier = Modifier.width(8.dp))
+      Text("Track Order Status", fontWeight = FontWeight.Bold)
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    OutlinedButton(
+      onClick = onContinueShopping,
+      shape = RoundedCornerShape(12.dp),
+      modifier = Modifier.fillMaxWidth().height(46.dp).testTag("confirm_continue_shopping_btn")
+    ) {
+      Text("Continue Shopping", fontWeight = FontWeight.Bold)
     }
   }
 }

@@ -30,13 +30,26 @@ enum class AppScreen {
   ACCOUNT,
   PRODUCT_DETAIL,
   CART_CHECKOUT,
-  ORDER_TRACKING
+  ORDER_TRACKING,
+  LOGIN,
+  REGISTER,
+  EMAIL_OTP,
+  LOGIN_OTP,
+  FORGOT_PASSWORD,
+  RESET_PASSWORD,
+  MY_PROFILE,
+  MY_ORDERS,
+  MY_ADDRESSES,
+  NOTIFICATIONS,
+  RETURNS_REFUNDS,
+  CUSTOMER_SUPPORT,
+  ACCOUNT_SETTINGS,
+  SECURITY_PASSWORD,
+  BUDGET_SHOPPING
 }
 
 @Composable
 fun MainApp() {
-  // Start the live Supabase catalog fetch as soon as the app opens.
-  // Without this call, the product/category StateFlows stay empty forever.
   LaunchedEffect(Unit) {
     MarketplaceRepository.refreshLiveCatalog()
   }
@@ -45,6 +58,10 @@ fun MainApp() {
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
   var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
+
+  // Auth navigation state
+  var pendingAuthEmail by remember { mutableStateOf("") }
+  var pendingFullName by remember { mutableStateOf("") }
 
   fun navigateTo(screen: AppScreen) {
     previousScreen = currentScreen
@@ -58,6 +75,12 @@ fun MainApp() {
       AppScreen.CART_CHECKOUT -> currentScreen = AppScreen.HOME
       AppScreen.ORDER_TRACKING -> currentScreen = AppScreen.HOME
       AppScreen.SPLASH -> currentScreen = AppScreen.HOME
+      AppScreen.LOGIN, AppScreen.REGISTER, AppScreen.FORGOT_PASSWORD -> currentScreen = AppScreen.ACCOUNT
+      AppScreen.EMAIL_OTP, AppScreen.LOGIN_OTP, AppScreen.RESET_PASSWORD -> currentScreen = AppScreen.LOGIN
+      AppScreen.MY_PROFILE, AppScreen.MY_ORDERS, AppScreen.MY_ADDRESSES,
+      AppScreen.NOTIFICATIONS, AppScreen.RETURNS_REFUNDS, AppScreen.CUSTOMER_SUPPORT,
+      AppScreen.ACCOUNT_SETTINGS, AppScreen.SECURITY_PASSWORD -> currentScreen = AppScreen.ACCOUNT
+      AppScreen.BUDGET_SHOPPING -> currentScreen = previousScreen
       else -> {
         if (currentScreen != AppScreen.HOME) {
           currentScreen = AppScreen.HOME
@@ -66,7 +89,6 @@ fun MainApp() {
     }
   }
 
-  // Handle system back button gracefully
   BackHandler(enabled = currentScreen != AppScreen.HOME && currentScreen != AppScreen.SPLASH) {
     navigateBack()
   }
@@ -237,9 +259,7 @@ fun MainApp() {
       when (currentScreen) {
         AppScreen.SPLASH -> {
           SplashScreen(
-            onFinish = {
-              currentScreen = AppScreen.HOME
-            }
+            onFinish = { currentScreen = AppScreen.HOME }
           )
         }
 
@@ -250,15 +270,10 @@ fun MainApp() {
               MarketplaceRepository.selectProduct(product)
               navigateTo(AppScreen.PRODUCT_DETAIL)
             },
-            onExploreCategoriesClick = {
-              currentScreen = AppScreen.CATEGORIES
-            },
-            onCartClick = {
-              navigateTo(AppScreen.CART_CHECKOUT)
-            },
-            onAccountClick = {
-              currentScreen = AppScreen.ACCOUNT
-            }
+            onExploreCategoriesClick = { currentScreen = AppScreen.CATEGORIES },
+            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+            onAccountClick = { currentScreen = AppScreen.ACCOUNT },
+            onBudgetClick = { navigateTo(AppScreen.BUDGET_SHOPPING) }
           )
         }
 
@@ -268,12 +283,8 @@ fun MainApp() {
               selectedCategory = category
               navigateTo(AppScreen.CATEGORY_PRODUCTS)
             },
-            onCartClick = {
-              navigateTo(AppScreen.CART_CHECKOUT)
-            },
-            onAccountClick = {
-              currentScreen = AppScreen.ACCOUNT
-            }
+            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
           )
         }
 
@@ -302,12 +313,8 @@ fun MainApp() {
               MarketplaceRepository.selectProduct(product)
               navigateTo(AppScreen.PRODUCT_DETAIL)
             },
-            onCartClick = {
-              navigateTo(AppScreen.CART_CHECKOUT)
-            },
-            onAccountClick = {
-              currentScreen = AppScreen.ACCOUNT
-            }
+            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
           )
         }
 
@@ -318,26 +325,26 @@ fun MainApp() {
               MarketplaceRepository.selectProduct(product)
               navigateTo(AppScreen.PRODUCT_DETAIL)
             },
-            onCartClick = {
-              navigateTo(AppScreen.CART_CHECKOUT)
-            },
-            onAccountClick = {
-              currentScreen = AppScreen.ACCOUNT
-            }
+            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
           )
         }
 
         AppScreen.ACCOUNT -> {
           AccountScreen(
-            onViewOrderTracking = {
-              navigateTo(AppScreen.ORDER_TRACKING)
-            },
-            onCartClick = {
-              navigateTo(AppScreen.CART_CHECKOUT)
-            },
-            onShowSplash = {
-              navigateTo(AppScreen.SPLASH)
-            }
+            onNavigateToLogin = { navigateTo(AppScreen.LOGIN) },
+            onNavigateToRegister = { navigateTo(AppScreen.REGISTER) },
+            onNavigateToProfile = { navigateTo(AppScreen.MY_PROFILE) },
+            onNavigateToOrders = { navigateTo(AppScreen.MY_ORDERS) },
+            onNavigateToAddresses = { navigateTo(AppScreen.MY_ADDRESSES) },
+            onNavigateToWishlist = { currentScreen = AppScreen.WISHLIST },
+            onNavigateToNotifications = { navigateTo(AppScreen.NOTIFICATIONS) },
+            onNavigateToReturns = { navigateTo(AppScreen.RETURNS_REFUNDS) },
+            onNavigateToSupport = { navigateTo(AppScreen.CUSTOMER_SUPPORT) },
+            onNavigateToSettings = { navigateTo(AppScreen.ACCOUNT_SETTINGS) },
+            onNavigateToSecurity = { navigateTo(AppScreen.SECURITY_PASSWORD) },
+            onNavigateToBudget = { navigateTo(AppScreen.BUDGET_SHOPPING) },
+            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) }
           )
         }
 
@@ -359,9 +366,7 @@ fun MainApp() {
         AppScreen.CART_CHECKOUT -> {
           CartCheckoutScreen(
             onBackClick = { navigateBack() },
-            onOrderPlaced = {
-              navigateTo(AppScreen.ORDER_TRACKING)
-            },
+            onOrderPlaced = { navigateTo(AppScreen.ORDER_TRACKING) },
             onAccountClick = { currentScreen = AppScreen.ACCOUNT }
           )
         }
@@ -369,10 +374,122 @@ fun MainApp() {
         AppScreen.ORDER_TRACKING -> {
           OrderTrackingScreen(
             onBackClick = { navigateBack() },
-            onContinueShopping = {
-              currentScreen = AppScreen.HOME
-            },
+            onContinueShopping = { currentScreen = AppScreen.HOME },
             onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+          )
+        }
+
+        // AUTHENTICATION SCREENS
+        AppScreen.LOGIN -> {
+          LoginScreen(
+            onNavigateToRegister = { navigateTo(AppScreen.REGISTER) },
+            onNavigateToForgotPassword = { navigateTo(AppScreen.FORGOT_PASSWORD) },
+            onLoginOtpRequired = { email ->
+              pendingAuthEmail = email
+              navigateTo(AppScreen.LOGIN_OTP)
+            },
+            onLoginSuccess = { currentScreen = AppScreen.ACCOUNT },
+            onBack = { navigateBack() }
+          )
+        }
+
+        AppScreen.REGISTER -> {
+          RegistrationScreen(
+            onNavigateToLogin = { navigateTo(AppScreen.LOGIN) },
+            onOtpRequired = { email, fullName ->
+              pendingAuthEmail = email
+              pendingFullName = fullName
+              navigateTo(AppScreen.EMAIL_OTP)
+            },
+            onBack = { navigateBack() }
+          )
+        }
+
+        AppScreen.EMAIL_OTP -> {
+          EmailOtpVerificationScreen(
+            email = pendingAuthEmail,
+            fullName = pendingFullName,
+            onVerified = { currentScreen = AppScreen.HOME },
+            onBack = { navigateBack() }
+          )
+        }
+
+        AppScreen.LOGIN_OTP -> {
+          LoginOtpVerificationScreen(
+            email = pendingAuthEmail,
+            onVerified = { currentScreen = AppScreen.ACCOUNT },
+            onBack = { navigateBack() }
+          )
+        }
+
+        AppScreen.FORGOT_PASSWORD -> {
+          ForgotPasswordScreen(
+            onNavigateToLogin = { navigateTo(AppScreen.LOGIN) },
+            onNavigateToResetPassword = { email ->
+              pendingAuthEmail = email
+              navigateTo(AppScreen.RESET_PASSWORD)
+            },
+            onBack = { navigateBack() }
+          )
+        }
+
+        AppScreen.RESET_PASSWORD -> {
+          ResetPasswordScreen(
+            email = pendingAuthEmail,
+            onResetSuccess = { navigateTo(AppScreen.LOGIN) },
+            onBack = { navigateBack() }
+          )
+        }
+
+        // DEDICATED ACCOUNT SUB-SCREENS
+        AppScreen.MY_PROFILE -> {
+          MyProfileScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.MY_ORDERS -> {
+          MyOrdersScreen(
+            onOrderClick = { ord -> navigateTo(AppScreen.ORDER_TRACKING) },
+            onExploreProducts = { currentScreen = AppScreen.HOME },
+            onBack = { navigateBack() }
+          )
+        }
+
+        AppScreen.MY_ADDRESSES -> {
+          MyAddressesScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.NOTIFICATIONS -> {
+          NotificationsScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.RETURNS_REFUNDS -> {
+          ReturnsRefundsScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.CUSTOMER_SUPPORT -> {
+          CustomerSupportScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.ACCOUNT_SETTINGS -> {
+          AccountSettingsScreen(
+            onNavigateToSecurity = { navigateTo(AppScreen.SECURITY_PASSWORD) },
+            onBack = { navigateBack() }
+          )
+        }
+
+        AppScreen.SECURITY_PASSWORD -> {
+          SecurityPasswordScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.BUDGET_SHOPPING -> {
+          BudgetShoppingScreen(
+            onProductClick = { product ->
+              selectedProduct = product
+              MarketplaceRepository.selectProduct(product)
+              navigateTo(AppScreen.PRODUCT_DETAIL)
+            },
+            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+            onBack = { navigateBack() }
           )
         }
       }

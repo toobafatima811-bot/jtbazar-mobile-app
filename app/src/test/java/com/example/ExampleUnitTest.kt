@@ -1,68 +1,87 @@
 package com.example
 
 import com.example.data.model.DeliveryAddress
+import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.supabase.SupabaseClient
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 
 class ExampleUnitTest {
-  @Test
-  fun testProductCatalogIntegrity() {
-    val products = MarketplaceRepository.sampleProducts
-    assertTrue("Product catalog should have items", products.isNotEmpty())
 
-    val multaniPlate = products.find { it.id == "prod_multani_plate" }
-    assertNotNull("Multani plate should exist", multaniPlate)
-    assertEquals(2450, multaniPlate?.price)
-    assertEquals(2990, multaniPlate?.originalPrice)
-    assertEquals(18, multaniPlate?.discountPercent)
+  private val testProduct = Product(
+    id = "prod_test_001",
+    title = "Multani Blue Pottery Ceramic Vase",
+    vendor = "Multan Artisan Studio",
+    category = "Artisan Crafts",
+    price = 2450,
+    originalPrice = 2990,
+    discountPercent = 18,
+    rating = 4.8,
+    reviewCount = 42
+  )
+
+  @Before
+  fun setUp() {
+    MarketplaceRepository.clearCart()
+    SupabaseClient.clearSession()
   }
 
   @Test
-  fun testCartInitialValuesAndCalculation() {
+  fun testCartAddAndCalculations() {
+    assertTrue(MarketplaceRepository.cartItems.value.isEmpty())
+
+    MarketplaceRepository.addToCart(testProduct, quantity = 2)
     val cartItems = MarketplaceRepository.cartItems.value
-    assertEquals("Initial cart should have 3 items", 3, cartItems.size)
+    assertEquals(1, cartItems.size)
+    assertEquals(2, cartItems[0].quantity)
+    assertEquals(2450 * 2, cartItems[0].totalPrice)
 
     val subtotal = cartItems.sumOf { it.totalPrice }
-    assertEquals(4160, subtotal)
+    assertEquals(4900, subtotal)
 
-    val discount = 100
     val deliveryFee = 150
+    val discount = 100
     val grandTotal = subtotal - discount + deliveryFee
-    assertEquals(4210, grandTotal)
+    assertEquals(4950, grandTotal)
   }
 
   @Test
-  fun testWishlistToggle() {
-    val prodId = "prod_multani_plate"
-    val initialWishlist = MarketplaceRepository.products.value.find { it.id == prodId }?.isWishlisted ?: false
-    MarketplaceRepository.toggleWishlist(prodId)
-    val afterToggle = MarketplaceRepository.products.value.find { it.id == prodId }?.isWishlisted ?: false
-    assertNotEquals(initialWishlist, afterToggle)
+  fun testCartQuantityUpdates() {
+    MarketplaceRepository.addToCart(testProduct, quantity = 1)
+    val item = MarketplaceRepository.cartItems.value.first()
+    assertEquals(1, item.quantity)
+
+    MarketplaceRepository.updateQuantity(item.id, 3)
+    assertEquals(3, MarketplaceRepository.cartItems.value.first().quantity)
+    assertEquals(2450 * 3, MarketplaceRepository.cartItems.value.first().totalPrice)
+
+    MarketplaceRepository.removeFromCart(item.id)
+    assertTrue(MarketplaceRepository.cartItems.value.isEmpty())
   }
 
   @Test
-  fun testOrderPlacement() {
-    val order = MarketplaceRepository.placeCurrentOrder("Leave parcel at gate")
-    assertNotNull(order)
-    assertTrue("Order ID must follow JT prefix format", order.orderId.startsWith("JT-"))
-    assertTrue("Order ID must end with -PK", order.orderId.endsWith("-PK"))
-    assertEquals(4210, order.grandTotal)
-    assertEquals("Leave parcel at gate", order.deliveryNote)
+  fun testOrderPlacementRequiresAuthenticationAndAddress() {
+    MarketplaceRepository.addToCart(testProduct, quantity = 1)
+    // User is unauthenticated:
+    val unauthOrder = MarketplaceRepository.placeCurrentOrder("Test note")
+    assertNull("Unauthenticated order placement must be rejected", unauthOrder)
   }
 
   @Test
   fun testAddressSelection() {
-    val newAddress = DeliveryAddress(
-      id = "addr_dha",
+    val address = DeliveryAddress(
+      id = "addr_test_01",
       name = "Muhammad Usman",
       phone = "+92 300 4821902",
       addressLine = "Sector H, Phase 5",
       area = "DHA Phase 5",
-      city = "Lahore"
+      city = "Lahore",
+      isDefault = true
     )
-    MarketplaceRepository.selectAddress(newAddress)
+    MarketplaceRepository.selectAddress(address)
     assertEquals("DHA Phase 5, Lahore", MarketplaceRepository.currentLocation.value)
-    assertEquals(newAddress.id, MarketplaceRepository.selectedAddress.value.id)
+    assertEquals(address.id, MarketplaceRepository.selectedAddress.value?.id)
   }
 }

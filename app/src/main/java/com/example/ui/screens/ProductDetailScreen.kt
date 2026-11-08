@@ -1136,25 +1136,23 @@ fun ProductDetailScreen(
                   }
                 }
 
-                // Render newly submitted reviews
-                productReviews.forEach { rev ->
-                  ReviewSnippet(
-                    name = rev.userName,
-                    comment = rev.comment,
-                    rating = rev.rating
+                // Render real reviews from backend
+                if (productReviews.isEmpty()) {
+                  Text(
+                    text = "No reviews yet. Verified customers can leave a review after receiving their order.",
+                    fontSize = 12.sp,
+                    color = JTTextSecondary,
+                    modifier = Modifier.padding(vertical = 8.dp)
                   )
+                } else {
+                  productReviews.forEach { rev ->
+                    ReviewSnippet(
+                      name = rev.userName.ifBlank { "Verified Buyer" },
+                      comment = rev.comment,
+                      rating = rev.rating
+                    )
+                  }
                 }
-
-                ReviewSnippet(
-                  name = "Fatima Tariq, Lahore",
-                  comment = "SubhanAllah the hand-painted cobalt blue glaze is so gorgeous! Packaged very safely.",
-                  rating = 5
-                )
-                ReviewSnippet(
-                  name = "Bilal Ahmed, Islamabad",
-                  comment = "Pure authentic Multani pottery quality. Microwave safe and looks high end.",
-                  rating = 5
-                )
               }
             }
           }

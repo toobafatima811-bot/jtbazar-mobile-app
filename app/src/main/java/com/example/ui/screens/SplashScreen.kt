@@ -136,7 +136,7 @@ fun SplashScreen(
           Spacer(modifier = Modifier.height(8.dp))
 
           Text(
-            text = "Pakistan's Trusted Marketplace • Lahore",
+            text = "Pakistan's Trusted Marketplace • Authentic & Fresh",
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = JTTextSecondary

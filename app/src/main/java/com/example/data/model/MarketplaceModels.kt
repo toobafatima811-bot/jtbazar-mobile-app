@@ -125,3 +125,19 @@ data class OrderRecord(
   val timeline: List<OrderTimelineStep> = emptyList(),
   val orderNumber: String = orderId
 )
+
+data class ShopRecord(
+  val id: String,
+  val name: String,
+  val description: String = "",
+  val logoUrl: String? = null,
+  val bannerUrl: String? = null,
+  val city: String = "",
+  val address: String = "",
+  val latitude: Double = 0.0,
+  val longitude: Double = 0.0,
+  val rating: Double = 4.8,
+  val isVerified: Boolean = true,
+  val phone: String = "",
+  val deliveryRadiusKm: Double = 5.0
+)

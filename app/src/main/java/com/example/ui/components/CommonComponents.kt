@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HeadsetMic
@@ -186,21 +187,71 @@ fun JTBazarTopBar(
         }
 
         // User Avatar
-        Box(
-          modifier = Modifier
-            .size(32.dp)
-            .clip(CircleShape)
-            .border(1.5.dp, JTPurpleContainerBorder, CircleShape)
-            .clickable(onClick = onAvatarClick)
-            .testTag("user_avatar_button")
-        ) {
-          Image(
-            painter = painterResource(id = R.drawable.user_avatar),
-            contentDescription = "User Avatar",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-          )
-        }
+        val currentProfile by com.example.data.supabase.SupabaseAuthService.userProfile.collectAsState()
+        UserAvatarView(
+          avatarUrl = currentProfile?.avatarUrl,
+          fullName = currentProfile?.fullName,
+          size = 32.dp,
+          onClick = onAvatarClick,
+          modifier = Modifier.testTag("user_avatar_button")
+        )
+      }
+    }
+  }
+}
+
+@Composable
+fun UserAvatarView(
+  avatarUrl: String? = null,
+  fullName: String? = null,
+  size: androidx.compose.ui.unit.Dp = 32.dp,
+  onClick: (() -> Unit)? = null,
+  modifier: Modifier = Modifier
+) {
+  val clickModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+  Box(
+    modifier = modifier
+      .size(size)
+      .clip(CircleShape)
+      .border(1.5.dp, JTPurpleContainerBorder, CircleShape)
+      .then(clickModifier),
+    contentAlignment = Alignment.Center
+  ) {
+    if (!avatarUrl.isNullOrBlank()) {
+      coil.compose.AsyncImage(
+        model = avatarUrl,
+        contentDescription = "User Avatar",
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize()
+      )
+    } else if (!fullName.isNullOrBlank()) {
+      val initial = fullName.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "J"
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(JTPurplePrimary),
+        contentAlignment = Alignment.Center
+      ) {
+        Text(
+          text = initial,
+          color = Color.White,
+          fontWeight = FontWeight.Bold,
+          fontSize = (size.value * 0.42f).sp
+        )
+      }
+    } else {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(JTSurfaceVariant),
+        contentAlignment = Alignment.Center
+      ) {
+        Icon(
+          imageVector = Icons.Filled.AccountCircle,
+          contentDescription = "Account",
+          tint = JTPurplePrimary,
+          modifier = Modifier.size((size.value * 0.7f).dp)
+        )
       }
     }
   }

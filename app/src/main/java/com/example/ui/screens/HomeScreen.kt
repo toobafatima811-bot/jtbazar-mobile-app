@@ -31,6 +31,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.AddressSelectionSheet
@@ -44,6 +47,7 @@ fun HomeScreen(
   onExploreCategoriesClick: () -> Unit,
   onCartClick: () -> Unit,
   onAccountClick: () -> Unit,
+  onBudgetClick: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val products by MarketplaceRepository.products.collectAsState()
@@ -489,6 +493,46 @@ fun HomeScreen(
       item {
         Spacer(modifier = Modifier.height(8.dp))
         TrustBadgesRow()
+      }
+
+      // 9. Budget Shopping Callout Banner
+      item {
+        Surface(
+          shape = RoundedCornerShape(16.dp),
+          color = Color(0xFFFEF3C7),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable { onBudgetClick() }
+            .testTag("home_budget_banner")
+        ) {
+          Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Box(
+              modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFFFDE68A)),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = JTAmberDark, modifier = Modifier.size(24.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+              Text("Budget Shopping Corner", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF92400E))
+              Text("Explore products under Rs. 500, 1,000 & 2,000", fontSize = 11.sp, color = Color(0xFFB45309))
+            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFF92400E), modifier = Modifier.size(16.dp))
+          }
+        }
+      }
+
+      // 10. Social Media Links Section (AT THE VERY END OF HOME SCREEN)
+      item {
+        SocialMediaSection()
       }
     }
   }
@@ -964,109 +1008,93 @@ fun ProductCard(
 }
 
 @Composable
-fun LahoreSpecialKitchenCard(
-  onBrowse: () -> Unit,
-  modifier: Modifier = Modifier
-) {
-  Card(
-    shape = RoundedCornerShape(18.dp),
-    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9ED)),
-    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
-    modifier = modifier.fillMaxWidth()
+fun SocialMediaSection(modifier: Modifier = Modifier) {
+  val context = LocalContext.current
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(horizontal = 16.dp, vertical = 20.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    Column(
-      modifier = Modifier.padding(16.dp)
+    Text(
+      text = "Connect with JTBazar",
+      fontSize = 14.sp,
+      fontWeight = FontWeight.Bold,
+      color = JTTextPrimary
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+      text = "Follow our official channels for live updates, vendor stories & deals",
+      fontSize = 11.sp,
+      color = JTTextSecondary,
+      textAlign = androidx.compose.ui.text.style.TextAlign.Center
+    )
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(16.dp),
+      verticalAlignment = Alignment.CenterVertically
     ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-          modifier = Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFFFDE68A)),
-          contentAlignment = Alignment.Center
-        ) {
-          Icon(
-            imageVector = Icons.Filled.SoupKitchen,
-            contentDescription = null,
-            tint = JTAmberDark,
-            modifier = Modifier.size(22.dp)
-          )
-        }
-        Spacer(modifier = Modifier.width(10.dp))
-        Column {
-          Text(
-            text = "LAHORE SPECIAL",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = JTAmberDark,
-            letterSpacing = 0.5.sp
-          )
-          Text(
-            text = "Authentic Homemade Kitchens in Your Town",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = JTTextPrimary
-          )
+      // Instagram: https://www.instagram.com/jtbazarofficial/
+      Surface(
+        shape = CircleShape,
+        color = Color(0xFFE1306C),
+        shadowElevation = 3.dp,
+        modifier = Modifier
+          .size(46.dp)
+          .clickable {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/jtbazarofficial/"))
+            context.startActivity(intent)
+          }
+          .testTag("social_instagram")
+      ) {
+        Box(contentAlignment = Alignment.Center) {
+          Icon(Icons.Filled.CameraAlt, contentDescription = "Instagram", tint = Color.White, modifier = Modifier.size(22.dp))
         }
       }
 
-      Spacer(modifier = Modifier.height(10.dp))
-
-      Text(
-        text = "Fresh Ghar Ka Khana delivered piping hot from neighborhood home chefs directly to your doorstep.",
-        fontSize = 12.sp,
-        color = JTTextSecondary,
-        lineHeight = 16.sp
-      )
-
-      Spacer(modifier = Modifier.height(12.dp))
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+      // Facebook: https://www.facebook.com/profile.php?id=61595825413366
+      Surface(
+        shape = CircleShape,
+        color = Color(0xFF1877F2),
+        shadowElevation = 3.dp,
+        modifier = Modifier
+          .size(46.dp)
+          .clickable {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.facebook.com/profile.php?id=61595825413366"))
+            context.startActivity(intent)
+          }
+          .testTag("social_facebook")
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(
-            modifier = Modifier
-              .size(8.dp)
-              .clip(CircleShape)
-              .background(JTPurplePrimary)
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            text = "48 active home chefs nearby",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = JTTextPrimary
-          )
+        Box(contentAlignment = Alignment.Center) {
+          Icon(Icons.Filled.Share, contentDescription = "Facebook", tint = Color.White, modifier = Modifier.size(22.dp))
         }
+      }
 
-        Button(
-          onClick = onBrowse,
-          shape = RoundedCornerShape(10.dp),
-          colors = ButtonDefaults.buttonColors(
-            containerColor = JTOrange,
-            contentColor = Color.White
-          ),
-          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-          modifier = Modifier
-            .height(34.dp)
-            .testTag("browse_home_chefs_button")
-        ) {
-          Text(
-            text = "Browse Home Chefs",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
-          )
-          Spacer(modifier = Modifier.width(4.dp))
-          Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = null,
-            modifier = Modifier.size(13.dp)
-          )
+      // TikTok: https://www.tiktok.com/@jtbazarofficial
+      Surface(
+        shape = CircleShape,
+        color = Color.Black,
+        shadowElevation = 3.dp,
+        modifier = Modifier
+          .size(46.dp)
+          .clickable {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.tiktok.com/@jtbazarofficial"))
+            context.startActivity(intent)
+          }
+          .testTag("social_tiktok")
+      ) {
+        Box(contentAlignment = Alignment.Center) {
+          Icon(Icons.Filled.MusicNote, contentDescription = "TikTok", tint = Color.White, modifier = Modifier.size(22.dp))
         }
       }
     }
+
+    Spacer(modifier = Modifier.height(14.dp))
+    Text(
+      text = "© 2026 JTBazar • Authentic Marketplace Pakistan",
+      fontSize = 10.sp,
+      color = JTTextSecondary.copy(alpha = 0.7f)
+    )
   }
 }

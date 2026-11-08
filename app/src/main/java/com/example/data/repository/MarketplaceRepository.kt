@@ -57,6 +57,19 @@ object MarketplaceRepository {
   private val _homepagePromotions = MutableStateFlow<List<SupabasePromotionDto>>(emptyList())
   val homepagePromotions: StateFlow<List<SupabasePromotionDto>> = _homepagePromotions.asStateFlow()
 
+  private val _shops = MutableStateFlow<List<ShopRecord>>(emptyList())
+  val shops: StateFlow<List<ShopRecord>> = _shops.asStateFlow()
+
+  fun refreshShops() {
+    scope.launch {
+      SupabaseApiService.fetchShops().onSuccess { fetchedShops ->
+        _shops.value = fetchedShops
+      }.onFailure {
+        Log.e(TAG, "Failed to load shops: ${it.message}")
+      }
+    }
+  }
+
   // ----------------------------------------------------
   // PRODUCTS STATE (REAL SUPABASE CATALOG ONLY)
   // ----------------------------------------------------
@@ -373,6 +386,7 @@ object MarketplaceRepository {
           _categories.value = emptyList()
           _errorMessage.value = categoryResult.exceptionOrNull()?.message
         }
+        refreshShops()
         SupabaseClient.currentUserId?.let { loadUserData(it) }
       } catch (e: Exception) {
         Log.e(TAG, "Backend sync error: ${e.message}", e)
@@ -493,6 +507,25 @@ object MarketplaceRepository {
       SupabaseApiService.submitComplaint(complaint)
         .onSuccess { _errorMessage.value = "Your support request has been submitted." }
         .onFailure { _errorMessage.value = it.message }
+    }
+  }
+
+  fun markNotificationRead(id: String) {
+    _notifications.update { list ->
+      list.map { if (it.id == id) it.copy(isRead = true) else it }
+    }
+    scope.launch {
+      SupabaseApiService.markNotificationRead(id)
+    }
+  }
+
+  fun markAllNotificationsRead() {
+    val userId = SupabaseClient.currentUserId ?: return
+    _notifications.update { list ->
+      list.map { it.copy(isRead = true) }
+    }
+    scope.launch {
+      SupabaseApiService.markAllNotificationsRead(userId)
     }
   }
 

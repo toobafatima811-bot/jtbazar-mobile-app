@@ -276,11 +276,20 @@ object SupabaseApiService {
   }
 
   suspend fun addToWishlist(userId: String, productId: String): Result<String> = withContext(Dispatchers.IO) {
-    val json = JSONObject().apply {
-      put("user_id", userId)
-      put("product_id", productId)
+    try {
+      val check = SupabaseClient.get("wishlist_items?user_id=eq.$userId&product_id=eq.$productId&select=id").getOrNull()
+      if (check != null && JSONArray(check).length() > 0) {
+        return@withContext Result.success("already_in_wishlist")
+      }
+      val json = JSONObject().apply {
+        put("user_id", userId)
+        put("product_id", productId)
+      }
+      SupabaseClient.post("wishlist_items", json.toString())
+    } catch (e: Exception) {
+      Log.e(TAG, "addToWishlist error", e)
+      Result.failure(e)
     }
-    SupabaseClient.post("wishlist_items", json.toString())
   }
 
   suspend fun removeFromWishlist(userId: String, productId: String): Result<Boolean> = withContext(Dispatchers.IO) {
@@ -513,6 +522,77 @@ object SupabaseApiService {
     } catch (e: Exception) {
       Log.e(TAG, "fetchNotifications error", e)
       Result.failure(e)
+    }
+  }
+
+  suspend fun markNotificationRead(notificationId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      val nowIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+        timeZone = java.util.TimeZone.getTimeZone("UTC")
+      }.format(java.util.Date())
+      val body = JSONObject().put("read_at", nowIso)
+      SupabaseClient.patch("notifications?id=eq.$notificationId", body.toString())
+      Result.success(true)
+    } catch (e: Exception) {
+      Log.e(TAG, "markNotificationRead error", e)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun markAllNotificationsRead(userId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      val nowIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+        timeZone = java.util.TimeZone.getTimeZone("UTC")
+      }.format(java.util.Date())
+      val body = JSONObject().put("read_at", nowIso)
+      SupabaseClient.patch("notifications?user_id=eq.$userId&read_at=is.null", body.toString())
+      Result.success(true)
+    } catch (e: Exception) {
+      Log.e(TAG, "markAllNotificationsRead error", e)
+      Result.failure(e)
+    }
+  }
+
+  // SHOPS & NEARBY VENDORS
+  // ----------------------------------------------------
+
+  suspend fun fetchShops(): Result<List<com.example.data.model.ShopRecord>> = withContext(Dispatchers.IO) {
+    try {
+      val res = SupabaseClient.get("seller_profiles?select=id,shop_name,description,shop_image_url,phone,shop_lat,shop_lng,shop_location_label,current_address,complete_address,status,shop_is_open&limit=50")
+      res.fold(
+        onSuccess = { jsonStr ->
+          val arr = JSONArray(jsonStr)
+          val list = mutableListOf<com.example.data.model.ShopRecord>()
+          for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val name = obj.optString("shop_name", "").takeIf { it.isNotBlank() } ?: continue
+            list.add(
+              com.example.data.model.ShopRecord(
+                id = obj.optString("id", "shop_$i"),
+                name = name,
+                description = obj.optString("description", "Verified Vendor"),
+                logoUrl = obj.optString("shop_image_url").takeIf { it.startsWith("http") },
+                bannerUrl = null,
+                city = obj.optString("shop_location_label", obj.optString("current_address", "")),
+                address = obj.optString("complete_address", obj.optString("current_address", "")),
+                latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 31.5204) else 31.5204,
+                longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 74.3587) else 74.3587,
+                isVerified = obj.optString("status") == "approved",
+                phone = obj.optString("phone", ""),
+                deliveryRadiusKm = 5.0
+              )
+            )
+          }
+          Result.success(list)
+        },
+        onFailure = {
+          Log.w(TAG, "seller_profiles access: ${it.message}")
+          Result.success(emptyList())
+        }
+      )
+    } catch (e: Exception) {
+      Log.e(TAG, "fetchShops error", e)
+      Result.success(emptyList())
     }
   }
 }

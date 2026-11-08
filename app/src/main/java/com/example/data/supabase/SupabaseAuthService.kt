@@ -215,7 +215,12 @@ object SupabaseAuthService {
         val session = SupabaseSession(accessToken = accessToken, refreshToken = refreshToken, user = user)
         SupabaseClient.setSession(session)
         persistSession(context, session)
-        val profile = SupabaseProfile(user.id, user.fullName, user.phone ?: "", user.email ?: "")
+        val profile = SupabaseProfile(
+          id = user.id,
+          fullName = user.fullName ?: "JTBazar Customer",
+          phone = user.phone ?: "",
+          email = user.email ?: ""
+        )
         _userProfile.value = profile
         upsertProfile(profile)
         Result.success(session)
@@ -364,10 +369,15 @@ object SupabaseAuthService {
           phone = metadata?.optString("phone", "") ?: "",
           fullName = metadata?.optString("full_name", "JTBazar Customer") ?: "JTBazar Customer"
         )
-        val session = SupabaseSession(accessToken, refreshToken, user)
+        val session = SupabaseSession(accessToken = accessToken, refreshToken = refreshToken, user = user)
         SupabaseClient.setSession(session)
         persistSession(context, session)
-        val profile = fetchProfile(user.id).getOrNull() ?: SupabaseProfile(user.id, user.fullName, user.phone ?: "", user.email ?: "")
+        val profile = fetchProfile(user.id).getOrNull() ?: SupabaseProfile(
+          id = user.id,
+          fullName = user.fullName ?: "JTBazar Customer",
+          phone = user.phone ?: "",
+          email = user.email ?: ""
+        )
         _userProfile.value = profile
         Result.success(session)
       }

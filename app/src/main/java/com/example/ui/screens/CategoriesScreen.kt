@@ -257,7 +257,7 @@ fun CategoriesScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-              text = "Selling by Kg, Dozen, Litre & Family Packs with express verified delivery in Lahore.",
+              text = "Selling by Kg, Dozen, Litre & Family Packs with express verified delivery across cities.",
               fontSize = 11.sp,
               color = Color.White.copy(alpha = 0.85f),
               lineHeight = 15.sp

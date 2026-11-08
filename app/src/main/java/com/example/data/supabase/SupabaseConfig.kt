@@ -17,7 +17,12 @@ object SupabaseConfig {
   }
 
   val publishableKey: String by lazy {
-    BuildConfig.SUPABASE_PUBLISHABLE_KEY.trim()
+    val raw = BuildConfig.SUPABASE_PUBLISHABLE_KEY.trim()
+    if (raw.isBlank() || raw.contains("placeholder")) {
+      "sb_publishable_fBu4PTDFMxgcNZ8luVkpOQ_lIIbZUHI"
+    } else {
+      raw
+    }
   }
 
   val projectReference: String by lazy {

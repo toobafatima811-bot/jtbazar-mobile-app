@@ -1,1182 +1,519 @@
 package com.example.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.AssignmentReturn
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
-import com.example.data.model.DeliveryAddress
 import com.example.data.repository.MarketplaceRepository
-import com.example.data.supabase.*
-import com.example.ui.components.AddressSelectionSheet
+import com.example.data.supabase.SupabaseAuthService
+import com.example.data.supabase.SupabaseClient
 import com.example.ui.components.JTBazarTopBar
+import com.example.ui.components.UserAvatarView
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
 @Composable
 fun AccountScreen(
-  onViewOrderTracking: () -> Unit,
+  onNavigateToLogin: () -> Unit,
+  onNavigateToRegister: () -> Unit,
+  onNavigateToProfile: () -> Unit,
+  onNavigateToOrders: () -> Unit,
+  onNavigateToAddresses: () -> Unit,
+  onNavigateToWishlist: () -> Unit,
+  onNavigateToNotifications: () -> Unit,
+  onNavigateToReturns: () -> Unit,
+  onNavigateToSupport: () -> Unit,
+  onNavigateToSettings: () -> Unit,
+  onNavigateToSecurity: () -> Unit,
+  onNavigateToBudget: () -> Unit,
   onCartClick: () -> Unit,
-  onShowSplash: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   val coroutineScope = rememberCoroutineScope()
 
+  val currentSession by SupabaseClient.session.collectAsState()
+  val currentUser by SupabaseClient.currentUser.collectAsState()
+  val userProfile by SupabaseAuthService.userProfile.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
-  val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
-  val addresses by MarketplaceRepository.addresses.collectAsState()
-  val activeOrder by MarketplaceRepository.activeOrder.collectAsState()
   val notifications by MarketplaceRepository.notifications.collectAsState()
-  val reviews by MarketplaceRepository.reviews.collectAsState()
 
-  val currentSession by SupabaseClient.session.collectAsState()
-  val userProfile by SupabaseAuthService.userProfile.collectAsState()
   val isLoggedIn = currentSession != null
+  var showLogoutConfirmDialog by remember { mutableStateOf(false) }
 
-  // Dialogs state
-  var showAddressDialog by remember { mutableStateOf(false) }
-  var showAuthDialog by remember { mutableStateOf(false) }
-  var authTab by remember { mutableIntStateOf(0) } // 0: Login, 1: Register, 2: Forgot Password
-
-  var showEditProfileDialog by remember { mutableStateOf(false) }
-  var showNotificationsDialog by remember { mutableStateOf(false) }
-  var showReviewsDialog by remember { mutableStateOf(false) }
-  var showReturnDialog by remember { mutableStateOf(false) }
-  var showComplaintDialog by remember { mutableStateOf(false) }
-  var showPolicyDialog by remember { mutableStateOf(false) }
-  var policyTitle by remember { mutableStateOf("") }
-  var policyContent by remember { mutableStateOf("") }
-
-  // Auth form states
-  var authEmail by remember { mutableStateOf("") }
-  var authPassword by remember { mutableStateOf("") }
-  var authFullName by remember { mutableStateOf("") }
-  var authPhone by remember { mutableStateOf("") }
-  var authLoading by remember { mutableStateOf(false) }
-  var authError by remember { mutableStateOf<String?>(null) }
-  var showOtpDialog by remember { mutableStateOf(false) }
-  var pendingSignupEmail by remember { mutableStateOf("") }
-  var signupOtp by remember { mutableStateOf("") }
-  var otpError by remember { mutableStateOf<String?>(null) }
-  var showLoginOtpDialog by remember { mutableStateOf(false) }
-  var loginOtp by remember { mutableStateOf("") }
-  var loginOtpError by remember { mutableStateOf<String?>(null) }
-
-  // Edit Profile form states
-  var editFullName by remember { mutableStateOf(userProfile?.fullName ?: selectedAddress?.name ?: "") }
-  var editPhone by remember { mutableStateOf(userProfile?.phone ?: selectedAddress?.phone ?: "") }
-  var editCity by remember { mutableStateOf(userProfile?.city ?: selectedAddress?.city ?: "") }
-
-  // Complaint / Support form states
-  var complaintSubject by remember { mutableStateOf("") }
-  var complaintMessage by remember { mutableStateOf("") }
-
-  // Return request form states
-  var returnReason by remember { mutableStateOf("Damaged item") }
-  var returnDescription by remember { mutableStateOf("") }
-
-  // ----------------------------------------------------
-  // AUTH DIALOG (LOGIN / REGISTER / FORGOT PASSWORD)
-  // ----------------------------------------------------
-  if (showAuthDialog) {
-    AlertDialog(
-      onDismissRequest = {
-        if (!authLoading) {
-          showAuthDialog = false
-          authError = null
-        }
-      },
-      title = {
-        Text(
-          text = when (authTab) {
-            0 -> "Sign In to JTBazar"
-            1 -> "Create Customer Account"
-            else -> "Reset Password"
-          },
-          fontWeight = FontWeight.Bold,
-          fontSize = 17.sp,
-          color = JTTextPrimary
-        )
-      },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          if (authTab < 2) {
-            TabRow(
-              selectedTabIndex = authTab,
-              containerColor = JTSurfaceVariant,
-              contentColor = JTPurplePrimary
-            ) {
-              Tab(
-                selected = authTab == 0,
-                onClick = { authTab = 0; authError = null },
-                text = { Text("Sign In", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-              )
-              Tab(
-                selected = authTab == 1,
-                onClick = { authTab = 1; authError = null },
-                text = { Text("Register", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-              )
-            }
-          }
-
-          if (authError != null) {
-            Surface(
-              shape = RoundedCornerShape(8.dp),
-              color = JTRedContainer,
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Text(
-                text = authError ?: "",
-                color = JTRed,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(8.dp)
-              )
-            }
-          }
-
-          if (authTab == 1) {
-            OutlinedTextField(
-              value = authFullName,
-              onValueChange = { authFullName = it },
-              label = { Text("Full Name") },
-              placeholder = { Text("Enter your full name") },
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-              value = authPhone,
-              onValueChange = { authPhone = it },
-              label = { Text("Mobile Number") },
-              placeholder = { Text("+92 300 1234567") },
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth()
-            )
-          }
-
-          OutlinedTextField(
-            value = authEmail,
-            onValueChange = { authEmail = it },
-            label = { Text("Email Address") },
-            placeholder = { Text("customer@jtbazar.pk") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-
-          if (authTab < 2) {
-            OutlinedTextField(
-              value = authPassword,
-              onValueChange = { authPassword = it },
-              label = { Text("Password") },
-              singleLine = true,
-              visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-              modifier = Modifier.fillMaxWidth()
-            )
-          }
-
-          if (authTab == 0) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              TextButton(onClick = { authTab = 2; authError = null }, contentPadding = PaddingValues(0.dp)) {
-                Text("Forgot Password?", color = JTPurplePrimary, fontSize = 11.sp)
-              }
-              Spacer(Modifier.weight(1f))
-              TextButton(
-                enabled = !authLoading,
-                onClick = {
-                  if (authEmail.isBlank()) authError = "Enter your email address first."
-                  else {
-                    authLoading = true
-                    authError = null
-                    coroutineScope.launch {
-                      val result = SupabaseAuthService.sendLoginOtp(authEmail)
-                      authLoading = false
-                      if (result.isSuccess) {
-                        pendingSignupEmail = authEmail.trim()
-                        loginOtp = ""
-                        loginOtpError = null
-                        showAuthDialog = false
-                        showLoginOtpDialog = true
-                      } else authError = result.exceptionOrNull()?.message ?: "Could not send sign-in code"
-                    }
-                  }
-                },
-                contentPadding = PaddingValues(0.dp)
-              ) { Text("Sign in with email code", color = JTPurplePrimary, fontSize = 10.sp) }
-            }
-          } else if (authTab == 2) {
-            Text(
-              text = "Enter your email address and we will send you a password recovery link.",
-              fontSize = 11.sp,
-              color = JTTextSecondary
-            )
-          }
-        }
-      },
-      confirmButton = {
-        Button(
-          onClick = {
-            authError = null
-            authLoading = true
-            coroutineScope.launch {
-              when (authTab) {
-                0 -> {
-                  val res = SupabaseAuthService.signIn(authEmail, authPassword, context)
-                  authLoading = false
-                  if (res.isSuccess) {
-                    showAuthDialog = false
-                    Toast.makeText(context, "Welcome back to JTBazar!", Toast.LENGTH_SHORT).show()
-                  } else {
-                    authError = res.exceptionOrNull()?.message ?: "Sign in failed"
-                  }
-                }
-                1 -> {
-                  val res = SupabaseAuthService.signUp(authEmail, authPassword, authFullName, authPhone, context)
-                  authLoading = false
-                  if (res.isSuccess) {
-                    val createdSession = res.getOrNull()
-                    if (createdSession?.accessToken.isNullOrBlank()) {
-                      // Website requires email OTP before a new account is considered signed in.
-                      pendingSignupEmail = authEmail.trim()
-                      signupOtp = ""
-                      otpError = null
-                      showAuthDialog = false
-                      showOtpDialog = true
-                    } else {
-                      showAuthDialog = false
-                      Toast.makeText(context, "Account created. You are signed in.", Toast.LENGTH_SHORT).show()
-                    }
-                  } else {
-                    authError = res.exceptionOrNull()?.message ?: "Registration failed"
-                  }
-                }
-                2 -> {
-                  val res = SupabaseAuthService.resetPassword(authEmail)
-                  authLoading = false
-                  if (res.isSuccess) {
-                    showAuthDialog = false
-                    Toast.makeText(context, "Password reset instructions sent to your email", Toast.LENGTH_LONG).show()
-                  } else {
-                    authError = res.exceptionOrNull()?.message ?: "Password reset failed"
-                  }
-                }
-              }
-            }
-          },
-          enabled = !authLoading && authEmail.isNotBlank(),
-          colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
-        ) {
-          if (authLoading) {
-            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-          } else {
-            Text(if (authTab == 0) "Sign In" else if (authTab == 1) "Register" else "Send Reset Link")
-          }
-        }
-      },
-      dismissButton = {
-        TextButton(
-          onClick = {
-            if (authTab == 2) authTab = 0 else showAuthDialog = false
-          },
-          enabled = !authLoading
-        ) {
-          Text(if (authTab == 2) "Back to Sign In" else "Cancel", color = JTTextSecondary)
-        }
-      }
-    )
-  }
-
-  if (showOtpDialog) {
-    AlertDialog(
-      onDismissRequest = { showOtpDialog = false },
-      title = { Text("Verify your email", fontWeight = FontWeight.Bold) },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("Enter the six-digit code sent to $pendingSignupEmail. Check your spam or junk folder too.")
-          OutlinedTextField(
-            value = signupOtp,
-            onValueChange = { signupOtp = it.filter { char -> char.isDigit() }.take(6); otpError = null },
-            label = { Text("6-digit verification code") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          if (otpError != null) {
-            Text(otpError!!, color = JTRed, fontSize = 12.sp)
-          }
-        }
-      },
-      confirmButton = {
-        Button(
-          enabled = signupOtp.length == 6 && !authLoading,
-          onClick = {
-            authLoading = true
-            otpError = null
-            coroutineScope.launch {
-              val result = SupabaseAuthService.verifySignupOtp(pendingSignupEmail, signupOtp, context)
-              authLoading = false
-              if (result.isSuccess) {
-                showOtpDialog = false
-                signupOtp = ""
-                Toast.makeText(context, "Email verified. Welcome to JTBazar!", Toast.LENGTH_LONG).show()
-              } else {
-                otpError = result.exceptionOrNull()?.message ?: "Verification failed"
-              }
-            }
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
-        ) {
-          if (authLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-          else Text("Verify email")
-        }
-      },
-      dismissButton = {
-        Row {
-          TextButton(
-            enabled = !authLoading,
-            onClick = {
-              authLoading = true
-              otpError = null
-              coroutineScope.launch {
-                val result = SupabaseAuthService.resendSignupOtp(pendingSignupEmail)
-                authLoading = false
-                if (result.isSuccess) otpError = "A new code was requested. Check inbox and spam."
-                else otpError = result.exceptionOrNull()?.message ?: "Could not resend code"
-              }
-            }
-          ) { Text("Resend code") }
-          TextButton(onClick = { showOtpDialog = false }, enabled = !authLoading) { Text("Cancel") }
-        }
-      }
-    )
-  }
-
-  if (showLoginOtpDialog) {
-    AlertDialog(
-      onDismissRequest = { if (!authLoading) showLoginOtpDialog = false },
-      title = { Text("Sign in verification", fontWeight = FontWeight.Bold) },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("Enter the six-digit sign-in code sent to $pendingSignupEmail.")
-          OutlinedTextField(
-            value = loginOtp,
-            onValueChange = { loginOtp = it.filter(Char::isDigit).take(6); loginOtpError = null },
-            label = { Text("6-digit sign-in code") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          if (loginOtpError != null) Text(loginOtpError!!, color = JTRed, fontSize = 12.sp)
-        }
-      },
-      confirmButton = {
-        Button(
-          enabled = loginOtp.length == 6 && !authLoading,
-          onClick = {
-            authLoading = true
-            loginOtpError = null
-            coroutineScope.launch {
-              val result = SupabaseAuthService.verifyLoginOtp(pendingSignupEmail, loginOtp, context)
-              authLoading = false
-              if (result.isSuccess) {
-                showLoginOtpDialog = false
-                loginOtp = ""
-                Toast.makeText(context, "Welcome back to JTBazar!", Toast.LENGTH_LONG).show()
-              } else loginOtpError = result.exceptionOrNull()?.message ?: "Code verification failed"
-            }
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
-        ) {
-          if (authLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-          else Text("Verify and sign in")
-        }
-      },
-      dismissButton = {
-        Row {
-          TextButton(
-            enabled = !authLoading,
-            onClick = {
-              authLoading = true
-              loginOtpError = null
-              coroutineScope.launch {
-                val result = SupabaseAuthService.sendLoginOtp(pendingSignupEmail)
-                authLoading = false
-                loginOtpError = if (result.isSuccess) "A new code was requested." else result.exceptionOrNull()?.message ?: "Could not resend code"
-              }
-            }
-          ) { Text("Resend code") }
-          TextButton(onClick = { showLoginOtpDialog = false }, enabled = !authLoading) { Text("Cancel") }
-        }
-      }
-    )
-  }
-
-  // ----------------------------------------------------
-  // EDIT PROFILE DIALOG
-  // ----------------------------------------------------
-  if (showEditProfileDialog) {
-    AlertDialog(
-      onDismissRequest = { showEditProfileDialog = false },
-      title = { Text("Edit Customer Profile", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          OutlinedTextField(
-            value = editFullName,
-            onValueChange = { editFullName = it },
-            label = { Text("Full Name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = editPhone,
-            onValueChange = { editPhone = it },
-            label = { Text("Phone Number") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = editCity,
-            onValueChange = { editCity = it },
-            label = { Text("City") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-        }
-      },
-      confirmButton = {
-        Button(
-          onClick = {
-            val userId = SupabaseClient.currentUserId
-            if (userId.isNullOrBlank()) {
-              Toast.makeText(context, "Please sign in again to update your profile.", Toast.LENGTH_LONG).show()
-              return@Button
-            }
-            val newProfile = SupabaseProfile(
-              id = userId,
-              fullName = editFullName.trim(),
-              phone = editPhone.trim(),
-              email = currentSession?.user?.email ?: userProfile?.email.orEmpty(),
-              city = editCity.trim()
-            )
-            if (newProfile.fullName.isBlank()) {
-              Toast.makeText(context, "Please enter your full name.", Toast.LENGTH_SHORT).show()
-              return@Button
-            }
-            coroutineScope.launch {
-              val result = SupabaseAuthService.upsertProfile(newProfile)
-              if (result.isSuccess) {
-                selectedAddress?.let { addr ->
-                  MarketplaceRepository.addOrUpdateAddress(
-                    addr.copy(name = newProfile.fullName, phone = newProfile.phone, city = newProfile.city)
-                  )
-                }
-                showEditProfileDialog = false
-                Toast.makeText(context, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
-              } else {
-                Toast.makeText(context, result.exceptionOrNull()?.message ?: "Profile update failed.", Toast.LENGTH_LONG).show()
-              }
-            }
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
-        ) {
-          Text("Save Profile")
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { showEditProfileDialog = false }) {
-          Text("Cancel", color = JTTextSecondary)
-        }
-      }
-    )
-  }
-
-  // ----------------------------------------------------
-  // NOTIFICATIONS DIALOG
-  // ----------------------------------------------------
-  if (showNotificationsDialog) {
-    AlertDialog(
-      onDismissRequest = { showNotificationsDialog = false },
-      title = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(Icons.Filled.Notifications, contentDescription = null, tint = JTOrange, modifier = Modifier.size(20.dp))
-          Spacer(modifier = Modifier.width(8.dp))
-          Text("Notifications", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
-      },
-      text = {
-        LazyColumn(
-          modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          if (notifications.isEmpty()) {
-            item {
-              Text("No notifications right now.", fontSize = 12.sp, color = JTTextSecondary)
-            }
-          } else {
-            items(notifications) { notif ->
-              Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = JTSurfaceVariant,
-                modifier = Modifier.fillMaxWidth()
-              ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                  Text(text = notif.title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = JTTextPrimary)
-                  Spacer(modifier = Modifier.height(2.dp))
-                  Text(text = notif.message, fontSize = 11.sp, color = JTTextSecondary)
-                  Spacer(modifier = Modifier.height(4.dp))
-                  Text(text = notif.createdAt, fontSize = 9.sp, color = JTTextTertiary)
-                }
-              }
-            }
-          }
-        }
-      },
-      confirmButton = {
-        TextButton(onClick = { showNotificationsDialog = false }) {
-          Text("Close", color = JTPurplePrimary)
-        }
-      }
-    )
-  }
-
-  // ----------------------------------------------------
-  // MY REVIEWS DIALOG
-  // ----------------------------------------------------
-  if (showReviewsDialog) {
-    AlertDialog(
-      onDismissRequest = { showReviewsDialog = false },
-      title = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(Icons.Filled.RateReview, contentDescription = null, tint = JTAmberDark, modifier = Modifier.size(20.dp))
-          Spacer(modifier = Modifier.width(8.dp))
-          Text("My Product Reviews", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
-      },
-      text = {
-        LazyColumn(
-          modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          if (reviews.isEmpty()) {
-            item {
-              Text(
-                "You haven't reviewed any products yet. Go to any product details screen to submit your verified review!",
-                fontSize = 11.sp,
-                color = JTTextSecondary
-              )
-            }
-          } else {
-            items(reviews) { rev ->
-              Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = JTSurfaceVariant,
-                modifier = Modifier.fillMaxWidth()
-              ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                  Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                  ) {
-                    Text(text = rev.title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = JTTextPrimary)
-                    Row {
-                      repeat(rev.rating) {
-                        Icon(Icons.Filled.Star, contentDescription = null, tint = JTAmber, modifier = Modifier.size(11.dp))
-                      }
-                    }
-                  }
-                  Spacer(modifier = Modifier.height(2.dp))
-                  Text(text = rev.comment, fontSize = 11.sp, color = JTTextSecondary)
-                }
-              }
-            }
-          }
-        }
-      },
-      confirmButton = {
-        TextButton(onClick = { showReviewsDialog = false }) {
-          Text("Close", color = JTPurplePrimary)
-        }
-      }
-    )
-  }
-
-  // ----------------------------------------------------
-  // RETURN & REFUND REQUEST DIALOG
-  // ----------------------------------------------------
-  if (showReturnDialog) {
-    var returnOrderId by remember { mutableStateOf(activeOrder?.orderId ?: "") }
-    AlertDialog(
-      onDismissRequest = { showReturnDialog = false },
-      title = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(Icons.Filled.AssignmentReturn, contentDescription = null, tint = JTRed, modifier = Modifier.size(20.dp))
-          Spacer(modifier = Modifier.width(8.dp))
-          Text("Return & Refund Request", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
-      },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          OutlinedTextField(
-            value = returnOrderId,
-            onValueChange = { returnOrderId = it },
-            label = { Text("Order Number") },
-            placeholder = { Text("e.g. JT-12345-PK") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = returnReason,
-            onValueChange = { returnReason = it },
-            label = { Text("Reason for Return") },
-            placeholder = { Text("e.g. Damaged item, wrong size") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = returnDescription,
-            onValueChange = { returnDescription = it },
-            label = { Text("Detailed Description") },
-            placeholder = { Text("Explain the issue in detail...") },
-            minLines = 3,
-            modifier = Modifier.fillMaxWidth()
-          )
-          Text(
-            "Under JTBazar 7-day guarantee, our central team coordinates courier pickup and refund.",
-            fontSize = 10.sp,
-            color = JTTextSecondary
-          )
-        }
-      },
-      confirmButton = {
-        Button(
-          onClick = {
-            if (returnOrderId.isNotBlank() && returnDescription.isNotBlank()) {
-              MarketplaceRepository.submitReturnRequest(returnOrderId.trim(), returnReason, returnDescription)
-              showReturnDialog = false
-              returnDescription = ""
-              Toast.makeText(context, "Return requests require the delivered order item and supporting evidence. This app flow is not ready yet.", Toast.LENGTH_LONG).show()
-            } else {
-              Toast.makeText(context, "Please enter order number and description", Toast.LENGTH_SHORT).show()
-            }
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = JTRed)
-        ) {
-          Text("Submit Request")
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { showReturnDialog = false }) {
-          Text("Cancel", color = JTTextSecondary)
-        }
-      }
-    )
-  }
-
-  // ----------------------------------------------------
-  // CUSTOMER SUPPORT / COMPLAINT DIALOG
-  // ----------------------------------------------------
-  if (showComplaintDialog) {
-    AlertDialog(
-      onDismissRequest = { showComplaintDialog = false },
-      title = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(Icons.Filled.SupportAgent, contentDescription = null, tint = JTPurplePrimary, modifier = Modifier.size(20.dp))
-          Spacer(modifier = Modifier.width(8.dp))
-          Text("Customer Support & Complaints", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
-      },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text(
-            "Our customer support team is available 9 AM – 10 PM PKT.",
-            fontSize = 11.sp,
-            color = JTTextSecondary
-          )
-          OutlinedTextField(
-            value = complaintSubject,
-            onValueChange = { complaintSubject = it },
-            label = { Text("Subject") },
-            placeholder = { Text("e.g. Delivery delay / Order query") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = complaintMessage,
-            onValueChange = { complaintMessage = it },
-            label = { Text("Message / Complaint Details") },
-            placeholder = { Text("Tell us how we can help you...") },
-            minLines = 3,
-            modifier = Modifier.fillMaxWidth()
-          )
-        }
-      },
-      confirmButton = {
-        Button(
-          onClick = {
-            if (complaintMessage.isNotBlank()) {
-              MarketplaceRepository.submitComplaint(activeOrder?.orderId, complaintSubject, complaintMessage)
-              showComplaintDialog = false
-              complaintSubject = ""
-              complaintMessage = ""
-              Toast.makeText(context, "Ticket submitted to JTBazar Support!", Toast.LENGTH_SHORT).show()
-            } else {
-              Toast.makeText(context, "Please enter your message", Toast.LENGTH_SHORT).show()
-            }
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
-        ) {
-          Text("Send Ticket")
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { showComplaintDialog = false }) {
-          Text("Cancel", color = JTTextSecondary)
-        }
-      }
-    )
-  }
-
-  // ----------------------------------------------------
-  // POLICY & STORE INFO DIALOG
-  // ----------------------------------------------------
-  if (showPolicyDialog) {
-    AlertDialog(
-      onDismissRequest = { showPolicyDialog = false },
-      title = { Text(policyTitle, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-      text = {
-        Column(modifier = Modifier.heightIn(max = 300.dp)) {
-          Text(
-            text = policyContent,
-            fontSize = 12.sp,
-            color = JTTextSecondary,
-            lineHeight = 17.sp
-          )
-        }
-      },
-      confirmButton = {
-        Button(
-          onClick = { showPolicyDialog = false },
-          colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
-        ) {
-          Text("Got It")
-        }
-      }
-    )
-  }
-
-  // ----------------------------------------------------
-  // DELIVERY ADDRESS SELECTION SHEET
-  // ----------------------------------------------------
-  if (showAddressDialog) {
-    AddressSelectionSheet(
-      addresses = addresses,
-      selectedAddress = selectedAddress,
-      onSelect = {
-        MarketplaceRepository.selectAddress(it)
-        showAddressDialog = false
-      },
-      onDismiss = { showAddressDialog = false },
-      onAddNewAddress = { MarketplaceRepository.addOrUpdateAddress(it) }
-    )
-  }
+  val unreadNotifications = notifications.count { !it.isRead }
 
   Scaffold(
     containerColor = Color.White,
     topBar = {
       JTBazarTopBar(
-        title = "My Account",
+        title = "Account",
         onCartClick = onCartClick,
-        onAvatarClick = {},
         cartCount = cartCount,
         currentLocation = currentLocation
       )
     },
     modifier = modifier.fillMaxSize()
   ) { paddingValues ->
-    LazyColumn(
+    Column(
       modifier = Modifier
         .fillMaxSize()
-        .padding(paddingValues),
-      contentPadding = PaddingValues(16.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp)
+        .padding(paddingValues)
+        .verticalScroll(rememberScrollState())
+        .padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-      // 1. User Header Card
-      item {
+      if (!isLoggedIn) {
+        // Unauthenticated Welcome Card
         Surface(
-          shape = RoundedCornerShape(18.dp),
+          shape = RoundedCornerShape(16.dp),
+          color = JTPurpleContainer,
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              UserAvatarView(
+                avatarUrl = null,
+                fullName = null,
+                size = 54.dp
+              )
+              Spacer(modifier = Modifier.width(14.dp))
+              Column {
+                Text(
+                  text = "Welcome to JTBazar",
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 17.sp,
+                  color = JTPurplePrimary
+                )
+                Text(
+                  text = "Sign in to track orders, manage addresses & wishlist",
+                  fontSize = 12.sp,
+                  color = JTTextSecondary,
+                  lineHeight = 16.sp
+                )
+              }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              Button(
+                onClick = onNavigateToLogin,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
+                modifier = Modifier
+                  .weight(1f)
+                  .height(44.dp)
+                  .testTag("account_signin_button")
+              ) {
+                Text("Sign In", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              }
+
+              OutlinedButton(
+                onClick = onNavigateToRegister,
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, JTOrange),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = JTOrange),
+                modifier = Modifier
+                  .weight(1f)
+                  .height(44.dp)
+                  .testTag("account_register_button")
+              ) {
+                Text("Register", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              }
+            }
+          }
+        }
+      } else {
+        // Authenticated Customer Profile Card
+        val displayName = userProfile?.fullName ?: currentUser?.fullName ?: "JTBazar Customer"
+        val displayEmail = userProfile?.email ?: currentUser?.email ?: ""
+        val displayPhone = userProfile?.phone ?: currentUser?.phone ?: ""
+
+        Surface(
+          shape = RoundedCornerShape(16.dp),
           color = JTCardBg,
           border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onNavigateToProfile)
+            .testTag("account_header_profile")
         ) {
           Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Box(
-              modifier = Modifier
-                .size(60.dp)
-                .clip(CircleShape)
-                .border(2.dp, JTPurplePrimary, CircleShape)
-            ) {
-              Image(
-                painter = painterResource(id = R.drawable.user_avatar),
-                contentDescription = "User Avatar",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-              )
-            }
+            // Actual user uploaded profile photo or initial badge (NO default stock person photo)
+            UserAvatarView(
+              avatarUrl = userProfile?.avatarUrl,
+              fullName = displayName,
+              size = 60.dp,
+              modifier = Modifier.testTag("account_avatar_badge")
+            )
 
             Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = userProfile?.fullName ?: if (isLoggedIn) "JTBazar Customer" else "Welcome to JTBazar",
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 16.sp,
-                color = JTTextPrimary
-              )
-              Text(
-                text = userProfile?.email ?: if (isLoggedIn) (currentSession?.user?.email ?: "Verified Account") else "Sign in or create an account",
-                fontSize = 12.sp,
-                color = JTTextSecondary
-              )
-              Spacer(modifier = Modifier.height(4.dp))
-              if (isLoggedIn) {
-                Surface(shape = RoundedCornerShape(6.dp), color = JTPurpleContainer) {
-                  Text("Verified account", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                }
-              }
-            }
-
-            // Edit Profile / Sign In button
-            IconButton(
-              onClick = {
-                if (isLoggedIn) {
-                  showEditProfileDialog = true
-                } else {
-                  showAuthDialog = true
-                }
-              },
-              modifier = Modifier.size(36.dp)
-            ) {
-              Icon(
-                imageVector = if (isLoggedIn) Icons.Filled.Edit else Icons.Filled.Login,
-                contentDescription = if (isLoggedIn) "Edit Profile" else "Sign In",
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(20.dp)
-              )
-            }
-          }
-        }
-      }
-
-      // 2. Active Order Card (Rendered only when customer has an active order)
-      if (activeOrder != null) {
-        item {
-          Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = JTPurpleSurface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, JTPurpleContainerBorder),
-            modifier = Modifier
-              .fillMaxWidth()
-              .clickable { onViewOrderTracking() }
-          ) {
-            Row(
-              modifier = Modifier.padding(14.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.SpaceBetween
-            ) {
               Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                  modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(JTPurplePrimary),
-                  contentAlignment = Alignment.Center
-                ) {
-                  Icon(
-                    imageVector = Icons.Filled.LocalShipping,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                  )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                  Text(
-                    text = "Order #${activeOrder!!.orderId}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = JTTextPrimary
-                  )
-                  Text(
-                    text = "${activeOrder!!.statusHeader} • ${activeOrder!!.orderStatus}",
-                    fontSize = 11.sp,
-                    color = JTPurplePrimary,
-                    fontWeight = FontWeight.SemiBold
-                  )
-                }
+                Text(
+                  text = displayName,
+                  fontSize = 16.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = JTTextPrimary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                  imageVector = Icons.Filled.Verified,
+                  contentDescription = "Verified Customer",
+                  tint = JTPurplePrimary,
+                  modifier = Modifier.size(16.dp)
+                )
               }
 
-              Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = "Track Order",
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(18.dp)
-              )
+              if (displayEmail.isNotBlank()) {
+                Text(
+                  text = displayEmail,
+                  fontSize = 12.sp,
+                  color = JTTextSecondary,
+                  maxLines = 1
+                )
+              }
+
+              if (displayPhone.isNotBlank()) {
+                Text(
+                  text = displayPhone,
+                  fontSize = 12.sp,
+                  color = JTTextSecondary,
+                  maxLines = 1
+                )
+              }
             }
+
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+              contentDescription = "Edit Profile",
+              tint = JTTextSecondary,
+              modifier = Modifier.size(18.dp)
+            )
           }
         }
       }
 
-
-      // 3. Main Menu Settings
-      item {
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier.fillMaxWidth()
+      // Quick Hub Banner: Budget Shopping
+      Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFFFEF3C7),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+        modifier = Modifier
+          .fillMaxWidth()
+          .clickable(onClick = onNavigateToBudget)
+          .testTag("account_budget_hub")
+      ) {
+        Row(
+          modifier = Modifier.padding(14.dp),
+          verticalAlignment = Alignment.CenterVertically
         ) {
-          Column(modifier = Modifier.padding(vertical = 4.dp)) {
-            // Authentication Action
-            AccountMenuItem(
-              icon = if (isLoggedIn) Icons.Filled.Logout else Icons.Filled.AccountCircle,
-              title = if (isLoggedIn) "Log Out (${userProfile?.email ?: "Active"})" else "Customer Sign In / Register",
-              subtitle = if (isLoggedIn) "Sign out of your Supabase session" else "Sync orders, addresses & persistent cart",
-              onClick = {
-                if (isLoggedIn) {
-                  coroutineScope.launch {
-                    val result = SupabaseAuthService.signOut(context)
-                    if (result.isSuccess) {
-                      Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
-                    } else {
-                      Toast.makeText(context, result.exceptionOrNull()?.message ?: "Sign out failed", Toast.LENGTH_LONG).show()
-                    }
-                  }
-                } else {
-                  showAuthDialog = true
-                }
-              }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            // Delivery Addresses
-            AccountMenuItem(
-              icon = Icons.Outlined.LocationOn,
-              title = "Delivery Addresses",
-              subtitle = selectedAddress?.let { "${it.area}, ${it.city}" } ?: "Add or manage delivery addresses",
-              onClick = { showAddressDialog = true }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            // Track Orders
-            AccountMenuItem(
-              icon = Icons.AutoMirrored.Outlined.ReceiptLong,
-              title = "Track Orders & COD Status",
-              subtitle = "Live tracking on JTBazar centralized logistics",
-              onClick = { onViewOrderTracking() }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            // Notifications
-            AccountMenuItem(
-              icon = Icons.Outlined.Notifications,
-              title = "Notifications (${notifications.size})",
-              subtitle = "Order updates, dispatch notices and savings deals",
-              onClick = { showNotificationsDialog = true }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            // My Reviews
-            AccountMenuItem(
-              icon = Icons.Outlined.RateReview,
-              title = "My Product Reviews",
-              subtitle = "Verified ratings and reviews submitted by you",
-              onClick = { showReviewsDialog = true }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            // Returns & Refunds
-            AccountMenuItem(
-              icon = Icons.Outlined.AssignmentReturn,
-              title = "Return & Refund Requests",
-              subtitle = "Return requests within 7 calendar days of delivery",
-              onClick = { showReturnDialog = true }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            // Customer Support
-            AccountMenuItem(
-              icon = Icons.Outlined.SupportAgent,
-              title = "Customer Support & Complaints",
-              subtitle = "Direct helpdesk ticket for order resolution",
-              onClick = { showComplaintDialog = true }
-            )
+          Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = JTAmberDark, modifier = Modifier.size(24.dp))
+          Spacer(modifier = Modifier.width(12.dp))
+          Column(modifier = Modifier.weight(1f)) {
+            Text("Budget Shopping", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF92400E))
+            Text("Find handcrafted items under Rs. 500, 1,000 & 2,000", fontSize = 11.sp, color = Color(0xFFB45309))
           }
+          Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFF92400E), modifier = Modifier.size(16.dp))
         }
       }
 
-      // 4. Store Policies & Info
-      item {
+      // Main Menu Sections
+      Text(
+        text = "Orders & Activity",
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        color = JTTextSecondary
+      )
+
+      Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = JTCardBg,
+        border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column {
+          AccountMenuItem(
+            icon = Icons.Filled.ShoppingBag,
+            title = "My Orders",
+            subtitle = "Track orders, dispatches & history",
+            onClick = {
+              if (isLoggedIn) onNavigateToOrders() else onNavigateToLogin()
+            },
+            tag = "menu_my_orders"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.Filled.Favorite,
+            title = "Wishlist",
+            subtitle = "Saved products & favorite vendor items",
+            onClick = onNavigateToWishlist,
+            tag = "menu_wishlist"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.Filled.Notifications,
+            title = "Notifications",
+            subtitle = if (unreadNotifications > 0) "$unreadNotifications unread notification(s)" else "Updates on orders & store promotions",
+            badge = if (unreadNotifications > 0) "$unreadNotifications" else null,
+            onClick = {
+              if (isLoggedIn) onNavigateToNotifications() else onNavigateToLogin()
+            },
+            tag = "menu_notifications"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.AutoMirrored.Filled.AssignmentReturn,
+            title = "Returns & Refunds",
+            subtitle = "Return requests & store credit status",
+            onClick = {
+              if (isLoggedIn) onNavigateToReturns() else onNavigateToLogin()
+            },
+            tag = "menu_returns"
+          )
+        }
+      }
+
+      Text(
+        text = "Account & Preferences",
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        color = JTTextSecondary
+      )
+
+      Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = JTCardBg,
+        border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column {
+          AccountMenuItem(
+            icon = Icons.Filled.Person,
+            title = "My Profile",
+            subtitle = "Name, mobile number, and city details",
+            onClick = {
+              if (isLoggedIn) onNavigateToProfile() else onNavigateToLogin()
+            },
+            tag = "menu_my_profile"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.Filled.LocationOn,
+            title = "My Addresses",
+            subtitle = "Manage home, work & saved locations",
+            onClick = {
+              if (isLoggedIn) onNavigateToAddresses() else onNavigateToLogin()
+            },
+            tag = "menu_my_addresses"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.Filled.Lock,
+            title = "Security & Password",
+            subtitle = "Update password and secure access",
+            onClick = {
+              if (isLoggedIn) onNavigateToSecurity() else onNavigateToLogin()
+            },
+            tag = "menu_security"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.Filled.Settings,
+            title = "Account Settings",
+            subtitle = "App settings, notifications & version",
+            onClick = onNavigateToSettings,
+            tag = "menu_settings"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.Filled.HeadsetMic,
+            title = "Customer Support & Complaints",
+            subtitle = "File an inquiry or message live support",
+            onClick = onNavigateToSupport,
+            tag = "menu_support"
+          )
+        }
+      }
+
+      // Logout Button (Only if authenticated)
+      if (isLoggedIn) {
         Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(vertical = 4.dp)) {
-            AccountMenuItem(
-              icon = Icons.Outlined.Description,
-              title = "Terms & Conditions",
-              subtitle = "Marketplace buyer agreements & COD conditions",
-              onClick = {
-                policyTitle = "Terms & Conditions"
-                policyContent = "Welcome to JTBazar. All orders placed through our mobile application are governed by Pakistani e-commerce laws. JTBazar coordinates centralized order delivery and handles payment collection exclusively via Cash on Delivery (COD) or verified bank channels. Customers are entitled to inspect exterior delivery packaging before payment."
-                showPolicyDialog = true
-              }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            AccountMenuItem(
-              icon = Icons.Outlined.Policy,
-              title = "Privacy Policy",
-              subtitle = "Data protection & zero third-party disclosure",
-              onClick = {
-                policyTitle = "Privacy Policy"
-                policyContent = "JTBazar values your privacy. Customer information such as delivery address, contact numbers, and purchase history is securely stored on Supabase with Row Level Security (RLS). We never sell or distribute your personal data to unauthorized third parties."
-                showPolicyDialog = true
-              }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            AccountMenuItem(
-              icon = Icons.Outlined.LocalShipping,
-              title = "Shipping & Delivery Policy",
-              subtitle = "Central delivery across supported locations",
-              onClick = {
-                policyTitle = "Shipping & Delivery Policy"
-                policyContent = "JTBazar manages centralized delivery. We collect products from participating vendors and deliver orders through the JTBazar delivery operation. Delivery fee and availability are confirmed at checkout. General return requests must be submitted within 7 calendar days of delivery, subject to the published return conditions."
-                showPolicyDialog = true
-              }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            AccountMenuItem(
-              icon = Icons.Outlined.AssignmentReturn,
-              title = "Return & Refund Policy",
-              subtitle = "Request within 7 calendar days of delivery",
-              onClick = {
-                policyTitle = "Return & Refund Policy"
-                policyContent = "JTBazar accepts eligible general return requests within 7 calendar days of delivery. The request must relate to the original order and include the information and evidence required by the return process. Refund or replacement is subject to review under the published return conditions."
-                showPolicyDialog = true
-              }
-            )
-            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 14.dp))
-
-            AccountMenuItem(
-              icon = Icons.Outlined.Info,
-              title = "About JTBazar & Contact Us",
-              subtitle = "JTBazar marketplace and customer support",
-              onClick = {
-                policyTitle = "About JTBazar"
-                policyContent = "JTBazar is a centralized multi-vendor marketplace in Pakistan. Customers place orders through JTBazar, and the JTBazar team coordinates vendor collection and customer delivery. For support, use the contact details published on the JTBazar website."
-                showPolicyDialog = true
-              }
-            )
-          }
-        }
-      }
-
-      // 5. Version info
-      item {
-        Column(
+          shape = RoundedCornerShape(14.dp),
+          color = Color(0xFFFEF2F2),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5)),
           modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-          horizontalAlignment = Alignment.CenterHorizontally
+            .clickable { showLogoutConfirmDialog = true }
+            .testTag("account_logout_button")
         ) {
-          Text(
-            text = "JTBazar v1.0.0 (Production)",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = JTTextSecondary
-          )
-          Text(
-            text = "Securely connected to JTBazar",
-            fontSize = 10.sp,
-            color = JTTextTertiary
-          )
+          Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.Logout,
+              contentDescription = null,
+              tint = Color(0xFFDC2626),
+              modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+              text = "Log Out of JTBazar",
+              fontWeight = FontWeight.Bold,
+              fontSize = 14.sp,
+              color = Color(0xFFDC2626)
+            )
+          }
         }
       }
+
+      Spacer(modifier = Modifier.height(16.dp))
     }
+  }
+
+  // Logout Confirmation Dialog (Requirement 5)
+  if (showLogoutConfirmDialog) {
+    AlertDialog(
+      onDismissRequest = { showLogoutConfirmDialog = false },
+      icon = {
+        Icon(
+          imageVector = Icons.AutoMirrored.Filled.Logout,
+          contentDescription = null,
+          tint = Color(0xFFDC2626),
+          modifier = Modifier.size(28.dp)
+        )
+      },
+      title = {
+        Text("Log Out of JTBazar?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+      },
+      text = {
+        Text(
+          "Are you sure you want to log out of your account? Your cart and saved wishlist will remain secure for your next visit.",
+          fontSize = 13.sp,
+          color = JTTextSecondary,
+          lineHeight = 17.sp
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showLogoutConfirmDialog = false
+            coroutineScope.launch {
+              SupabaseAuthService.signOut(context)
+              MarketplaceRepository.clearUserData()
+              Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+            }
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White),
+          modifier = Modifier.testTag("confirm_logout_button")
+        ) {
+          Text("Log Out", fontWeight = FontWeight.Bold)
+        }
+      },
+      dismissButton = {
+        TextButton(
+          onClick = { showLogoutConfirmDialog = false },
+          modifier = Modifier.testTag("cancel_logout_button")
+        ) {
+          Text("Cancel", fontWeight = FontWeight.SemiBold)
+        }
+      }
+    )
   }
 }
 
 @Composable
 private fun AccountMenuItem(
-  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  icon: ImageVector,
   title: String,
   subtitle: String,
-  onClick: () -> Unit
+  badge: String? = null,
+  onClick: () -> Unit,
+  tag: String
 ) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp, vertical = 11.dp),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.SpaceBetween
+      .padding(horizontal = 16.dp, vertical = 14.dp)
+      .testTag(tag),
+    verticalAlignment = Alignment.CenterVertically
   ) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-      Box(
-        modifier = Modifier
-          .size(36.dp)
-          .clip(RoundedCornerShape(8.dp))
-          .background(JTSurfaceVariant),
-        contentAlignment = Alignment.Center
+    Box(
+      modifier = Modifier
+        .size(36.dp)
+        .background(JTSurfaceVariant, RoundedCornerShape(10.dp)),
+      contentAlignment = Alignment.Center
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = JTPurplePrimary,
+        modifier = Modifier.size(20.dp)
+      )
+    }
+
+    Spacer(modifier = Modifier.width(14.dp))
+
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = title,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = JTTextPrimary
+      )
+      Text(
+        text = subtitle,
+        fontSize = 11.sp,
+        color = JTTextSecondary,
+        maxLines = 1
+      )
+    }
+
+    if (badge != null) {
+      Surface(
+        shape = CircleShape,
+        color = JTOrange,
+        modifier = Modifier.padding(end = 8.dp)
       ) {
-        Icon(
-          imageVector = icon,
-          contentDescription = null,
-          tint = JTPurplePrimary,
-          modifier = Modifier.size(18.dp)
-        )
-      }
-      Spacer(modifier = Modifier.width(12.dp))
-      Column {
         Text(
-          text = title,
-          fontWeight = FontWeight.Bold,
-          fontSize = 13.sp,
-          color = JTTextPrimary
-        )
-        Text(
-          text = subtitle,
+          text = badge,
+          color = Color.White,
           fontSize = 10.sp,
-          color = JTTextSecondary
+          fontWeight = FontWeight.Bold,
+          modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
       }
     }
@@ -1184,7 +521,7 @@ private fun AccountMenuItem(
     Icon(
       imageVector = Icons.AutoMirrored.Filled.ArrowForward,
       contentDescription = null,
-      tint = JTTextSecondary,
+      tint = JTTextSecondary.copy(alpha = 0.6f),
       modifier = Modifier.size(16.dp)
     )
   }
