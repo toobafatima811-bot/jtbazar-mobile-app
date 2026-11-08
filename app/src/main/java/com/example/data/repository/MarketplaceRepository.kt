@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -206,10 +207,23 @@ object MarketplaceRepository {
     val userId = SupabaseClient.currentUserId
     if (userId != null) {
       scope.launch {
-        if (newWishlistedState) {
+        val result = if (newWishlistedState) {
           SupabaseApiService.addToWishlist(userId, productId)
         } else {
-          SupabaseApiService.removeFromWishlist(userId, productId)
+          SupabaseApiService.removeFromWishlist(userId, productId).map { "removed" }
+        }
+        result.onFailure { error ->
+          // Roll back the optimistic UI update when Supabase rejects the change.
+          _products.update { list ->
+            list.map { product ->
+              if (product.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+            }
+          }
+          _selectedProduct.update { product ->
+            if (product?.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+          }
+          _errorMessage.value = "Wishlist update failed: ${error.message ?: "Please try again."}"
+          Log.e(TAG, "Wishlist update failed for product $productId", error)
         }
       }
     }
@@ -687,7 +701,7 @@ object MarketplaceRepository {
 
     // Observe customer authentication session
     scope.launch {
-      SupabaseClient.session.collect { session ->
+      SupabaseClient.session.drop(1).collect { session ->
         if (session != null) {
           loadUserData(session.user.id)
         } else {
