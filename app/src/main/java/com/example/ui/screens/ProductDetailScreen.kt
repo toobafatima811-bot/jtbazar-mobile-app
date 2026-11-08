@@ -349,23 +349,14 @@ fun ProductDetailScreen(
             .clip(RoundedCornerShape(20.dp))
             .background(JTSurfaceVariant)
         ) {
-          if (!product.imageUrl.isNullOrBlank()) {
-            AsyncImage(
-              model = product.imageUrl,
-              contentDescription = product.title,
-              contentScale = ContentScale.Crop,
-              placeholder = painterResource(id = product.drawableRes),
-              error = painterResource(id = product.drawableRes),
-              modifier = Modifier.fillMaxSize()
-            )
-          } else {
-            Image(
-              painter = painterResource(id = product.drawableRes),
-              contentDescription = product.title,
-              contentScale = ContentScale.Crop,
-              modifier = Modifier.fillMaxSize()
-            )
-          }
+          // Load remote and bundled fallback images with Coil to avoid eager
+          // painterResource() calls during composition.
+          AsyncImage(
+            model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
+            contentDescription = product.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+          )
 
           // Discount Tag
           Column(
