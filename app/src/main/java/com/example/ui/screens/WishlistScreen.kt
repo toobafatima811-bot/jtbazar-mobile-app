@@ -122,23 +122,13 @@ fun WishlistScreen(
                   .clip(RoundedCornerShape(12.dp))
                   .background(JTSurfaceVariant)
               ) {
-                if (!product.imageUrl.isNullOrBlank()) {
-                  coil.compose.AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = product.title,
-                    contentScale = ContentScale.Crop,
-                    placeholder = painterResource(id = product.drawableRes),
-                    error = painterResource(id = product.drawableRes),
-                    modifier = Modifier.fillMaxSize()
-                  )
-                } else {
-                  Image(
-                    painter = painterResource(id = product.drawableRes),
-                    contentDescription = product.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                  )
-                }
+                // Coil handles both remote URLs and bundled drawable fallbacks safely.
+                coil.compose.AsyncImage(
+                  model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
+                  contentDescription = product.title,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
+                )
               }
 
               Spacer(modifier = Modifier.width(12.dp))
