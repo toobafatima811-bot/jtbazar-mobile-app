@@ -50,10 +50,6 @@ enum class AppScreen {
 
 @Composable
 fun MainApp() {
-  LaunchedEffect(Unit) {
-    MarketplaceRepository.refreshLiveCatalog()
-  }
-
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
