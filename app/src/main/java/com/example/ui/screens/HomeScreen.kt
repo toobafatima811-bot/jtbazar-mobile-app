@@ -251,14 +251,14 @@ fun HomeScreen(
                   ) {
                     if (!category.imageUrl.isNullOrBlank()) {
                       AsyncImage(
-                        model = category.imageUrl,
+                        model = category.imageUrl?.takeIf { it.isNotBlank() } ?: category.drawableRes,
                         contentDescription = category.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                       )
                     } else {
-                      Image(
-                        painter = painterResource(id = category.drawableRes),
+                      AsyncImage(
+                        model = category.drawableRes,
                         contentDescription = category.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
