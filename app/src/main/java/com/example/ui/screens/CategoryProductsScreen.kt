@@ -99,7 +99,8 @@ fun CategoryProductsScreen(
               horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
               AsyncImage(
-                model = product.imageUrl,
+                model = product.imageUrl?.takeIf { it.isNotBlank() }
+                  ?: com.example.R.drawable.ic_launcher_background,
                 contentDescription = product.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(92.dp)
