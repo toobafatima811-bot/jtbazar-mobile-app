@@ -410,21 +410,15 @@ private fun CartView(
                 .clip(RoundedCornerShape(10.dp))
                 .background(JTSurfaceVariant)
             ) {
-              if (!item.product.imageUrl.isNullOrBlank()) {
-                AsyncImage(
-                  model = item.product.imageUrl,
-                  contentDescription = item.product.title,
-                  contentScale = ContentScale.Crop,
-                  modifier = Modifier.fillMaxSize()
-                )
-              } else {
-                Image(
-                  painter = painterResource(id = R.drawable.ic_launcher_background),
-                  contentDescription = item.product.title,
-                  contentScale = ContentScale.Crop,
-                  modifier = Modifier.fillMaxSize()
-                )
-              }
+              // Use Coil for remote and bundled images consistently. This avoids
+              // Compose painterResource decoding failures for unsupported assets.
+              AsyncImage(
+                model = item.product.imageUrl?.takeIf { it.isNotBlank() }
+                  ?: R.drawable.ic_launcher_background,
+                contentDescription = item.product.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+              )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
