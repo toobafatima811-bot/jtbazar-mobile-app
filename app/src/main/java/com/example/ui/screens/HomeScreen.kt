@@ -846,23 +846,15 @@ fun ProductCard(
           .height(145.dp)
           .background(JTSurfaceVariant)
       ) {
-        if (!product.imageUrl.isNullOrBlank()) {
-          AsyncImage(
-            model = product.imageUrl,
-            contentDescription = product.title,
-            contentScale = ContentScale.Crop,
-            placeholder = painterResource(id = product.drawableRes),
-            error = painterResource(id = product.drawableRes),
-            modifier = Modifier.fillMaxSize()
-          )
-        } else {
-          Image(
-            painter = painterResource(id = product.drawableRes),
-            contentDescription = product.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-          )
-        }
+        // Use Coil for both remote and bundled product images. Calling
+        // painterResource() here can crash composition when a fallback resource
+        // is not a supported Android drawable (for example an unsupported asset).
+        AsyncImage(
+          model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
+          contentDescription = product.title,
+          contentScale = ContentScale.Crop,
+          modifier = Modifier.fillMaxSize()
+        )
 
         // Discount tag top left
         if (product.badge != null) {
