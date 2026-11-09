@@ -152,7 +152,8 @@ object MarketplaceRepository {
     for (index in 0 until cartRows.length()) {
       val row = cartRows.optJSONObject(index) ?: continue
       val productId = row.optString("product_id")
-      val product = _products.value.firstOrNull { it.id == productId } ?: continue
+      val product = _products.value.firstOrNull { it.id == productId }
+      if (product == null) { cartMerged = false; continue }
       val palette = row.optString("palette").takeIf { it.isNotBlank() && it != "null" }
       val size = row.optString("size").takeIf { it.isNotBlank() && it != "null" }
       val variantId = if (!size.isNullOrBlank()) product.variantIds["size:$size"] else if (!palette.isNullOrBlank()) product.variantIds["color:$palette"] else null
@@ -232,6 +233,7 @@ object MarketplaceRepository {
     _cartItems.update { list -> list.filterNot { it.id == itemId } }
     updateCartCount()
     val userId = SupabaseClient.currentUserId
+    if (userId == null) persistGuestCart()
     if (userId != null && !itemId.startsWith("cart_")) scope.launch {
       SupabaseApiService.removeCartItem(itemId).onFailure { _errorMessage.value = it.message }
     }
