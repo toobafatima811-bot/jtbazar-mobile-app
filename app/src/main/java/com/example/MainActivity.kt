@@ -17,12 +17,28 @@ import androidx.compose.ui.graphics.Color
 import com.example.ui.MainApp
 import com.example.notifications.FirebasePushManager
 import com.example.data.supabase.SupabaseClient
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import kotlinx.coroutines.launch
 import com.example.ui.theme.JTBazarTheme
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+
+    // The Google Services plugin normally creates these options from google-services.json.
+    // Keep an explicit fallback so FCM can initialize even in build environments where
+    // generated Google Services resources are missing.
+    if (FirebaseApp.getApps(this).none { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
+      val options = FirebaseOptions.Builder()
+        .setApplicationId("1:763074877925:android:58381e5cfd5c3a839df70c")
+        .setApiKey("AIzaSyC48PiIR-Jnn4Kunx62-2MlSYSZYRrrzU")
+        .setProjectId("jtbazar-9fc3d")
+        .setGcmSenderId("763074877925")
+        .setStorageBucket("jtbazar-9fc3d.firebasestorage.app")
+        .build()
+      FirebaseApp.initializeApp(this, options)
+    }
 
     FirebasePushManager.ensureNotificationChannel(applicationContext)
 
@@ -66,7 +82,7 @@ class MainActivity : ComponentActivity() {
     handleGoogleOAuthIntent(intent)
   }
 
-  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     if (requestCode == 7301 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
       lifecycleScope.launch { FirebasePushManager.register(applicationContext) }
