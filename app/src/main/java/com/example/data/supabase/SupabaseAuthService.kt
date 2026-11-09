@@ -17,6 +17,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
+import com.example.notifications.FirebasePushManager
 
 /**
  * Service managing Supabase GoTrue authentication and user profile synchronization.
