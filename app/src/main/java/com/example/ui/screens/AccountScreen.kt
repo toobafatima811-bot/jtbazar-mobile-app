@@ -67,6 +67,14 @@ fun AccountScreen(
 
   val unreadNotifications = notifications.count { !it.isRead }
 
+  // Refresh the persisted profile whenever the signed-in account screen is opened.
+  LaunchedEffect(currentUser?.id) {
+    val userId = currentUser?.id
+    if (!userId.isNullOrBlank()) {
+      SupabaseAuthService.fetchProfile(userId)
+    }
+  }
+
   Scaffold(
     containerColor = Color.White,
     topBar = {
