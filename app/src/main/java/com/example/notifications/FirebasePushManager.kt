@@ -21,6 +21,13 @@ object FirebasePushManager {
   private const val TAG = "FirebasePushManager"
   private val jsonType = "application/json; charset=utf-8".toMediaType()
 
+  fun ensureNotificationChannel(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val manager = context.getSystemService(android.app.NotificationManager::class.java)
+      manager.createNotificationChannel(android.app.NotificationChannel("jtbazar_updates", "JTBazar updates", android.app.NotificationManager.IMPORTANCE_DEFAULT))
+    }
+  }
+
   fun hasNotificationPermission(context: Context): Boolean = Build.VERSION.SDK_INT < 33 ||
     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
