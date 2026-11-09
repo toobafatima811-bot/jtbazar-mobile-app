@@ -72,9 +72,9 @@ fun HomeScreen(
 
   var dismissedLaunchAdId by remember { mutableStateOf<String?>(null) }
   val nowIso = remember { java.time.Instant.now().toString() }
-  val visibleBannerCampaigns = homepagePromotions.filter { campaign -> campaign.campaignType == "banner" && (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") && (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) && (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso) }
+  val visibleBannerCampaigns = homepagePromotions.filter { campaign -> campaign.campaignType == "banner" && !campaign.showOnLaunch && (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") && (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) && (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso) }
   val launchAd = homepagePromotions.firstOrNull { campaign ->
-    campaign.campaignType == "popup" && campaign.showOnLaunch &&
+    campaign.showOnLaunch &&
       (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") &&
       (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) &&
       (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso)
