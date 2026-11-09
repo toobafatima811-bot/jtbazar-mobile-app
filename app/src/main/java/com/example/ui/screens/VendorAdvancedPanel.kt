@@ -175,6 +175,35 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
           Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
           Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
+          var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
+          var dailyQuantity by remember(id) { mutableStateOf(product.optInt("daily_available_quantity", 0).toString()) }
+          Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Checkbox(checked = dailyItem, onCheckedChange = { dailyItem = it })
+            Text("Daily food item")
+          }
+          if (dailyItem) {
+            VendorAdvancedField("Available quantity today", dailyQuantity) { dailyQuantity = it.filter(Char::isDigit).take(8) }
+            Button(enabled = !saving, onClick = {
+              scope.launch {
+                saving = true
+                try {
+                  VendorService.setDailyAvailability(id, true, dailyQuantity.toIntOrNull() ?: error("Enter today's available quantity."), 1, minimumOrderValue.toIntOrNull(), shopIsOpen)
+                  message = "Today's food availability updated."
+                  onRefresh()
+                } catch (e: Exception) { errorMessage = e.message ?: "Daily availability could not be updated." }
+                finally { saving = false }
+              }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save today's availability") }
+          } else if (product.optBoolean("is_daily_item", false)) {
+            TextButton(enabled = !saving, onClick = {
+              scope.launch {
+                saving = true
+                try { VendorService.setDailyAvailability(id, false, 0); message = "Daily availability disabled."; onRefresh() }
+                catch (e: Exception) { errorMessage = e.message ?: "Availability setting could not be changed." }
+                finally { saving = false }
+              }
+            }) { Text("Disable daily availability") }
+          }
           OutlinedButton(enabled = !saving, onClick = { imageProductId = id; imagePicker.launch("image/*") }) { Text("Upload product image") }
           TextButton(enabled = !saving, onClick = { deletionProductId = id; deletionReason = "" }) { Text("Request product deletion") }
           var stock by remember(id) { mutableStateOf(product.optString("stock_quantity", product.optString("quantity", "0"))) }
