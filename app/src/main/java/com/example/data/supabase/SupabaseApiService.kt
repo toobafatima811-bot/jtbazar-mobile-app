@@ -28,6 +28,7 @@ object SupabaseApiService {
         "select=id,category_id,seller_id,name,slug,sku,short_description,description,price,discount_percent,food_selling_unit,food_unit_price,food_quantity_increment,food_minimum_quantity,is_daily_item,daily_available_quantity,daily_minimum_quantity,daily_available_on,daily_status,currency,specifications,publication_status,moderation_status,stock_verification_status,is_featured,track_inventory,seo_title,seo_description,created_at",
         "publication_status=eq.published",
         "moderation_status=eq.approved",
+        "vendor_hidden=eq.false",
         "order=created_at.desc",
         "limit=${limit.coerceIn(1, 100)}"
       )
