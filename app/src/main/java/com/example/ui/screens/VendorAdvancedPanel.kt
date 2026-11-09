@@ -31,6 +31,16 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   var currentAddress by remember { mutableStateOf(application.currentAddress) }
   var completeAddress by remember { mutableStateOf(application.completeAddress) }
   var locationText by remember { mutableStateOf(application.shopLocationText) }
+  var shopImageUrl by remember { mutableStateOf(application.shopImageUrl) }
+  var showShopOnMap by remember { mutableStateOf(application.showShopOnMap) }
+  var shopLat by remember { mutableStateOf(application.shopLat?.toString().orEmpty()) }
+  var shopLng by remember { mutableStateOf(application.shopLng?.toString().orEmpty()) }
+  var shopIsOpen by remember { mutableStateOf(application.shopIsOpen) }
+  var minimumOrderValue by remember { mutableStateOf(application.minimumOrderValue.toString()) }
+  var deletionProductId by remember { mutableStateOf<String?>(null) }
+  var deletionReason by remember { mutableStateOf("") }
+  var deletionRequests by remember { mutableStateOf(JSONArray()) }
+  var inventoryHistory by remember { mutableStateOf(JSONArray()) }
   var imageProductId by remember { mutableStateOf<String?>(null) }
   var variantProductId by remember { mutableStateOf<String?>(null) }
   var variantLabel by remember { mutableStateOf("Size") }
@@ -45,7 +55,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
 
   fun reload() {
     scope.launch {
-      try { cases = VendorService.listCases(); tickets = VendorService.listSupportTickets() }
+      try { cases = VendorService.listCases(); tickets = VendorService.listSupportTickets(); deletionRequests = VendorService.listProductDeletionRequests(); inventoryHistory = VendorService.listInventoryMovements() }
       catch (e: Exception) { errorMessage = e.message ?: "Vendor information could not be loaded." }
     }
   }
@@ -66,6 +76,46 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
     }
   }
 
+
+  val shopImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+    if (uri != null) scope.launch {
+      saving = true; errorMessage = ""; message = ""
+      try {
+        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Shop image could not be read.")
+        shopImageUrl = VendorService.uploadShopImage(bytes, mime)
+        VendorService.updateOwnShop(JSONObject().put("shop_image_url", shopImageUrl))
+        message = "Shop image updated."
+      } catch (e: Exception) { errorMessage = e.message ?: "Shop image upload failed." }
+      finally { saving = false }
+    }
+  }
+
+  if (deletionProductId != null) {
+    AlertDialog(
+      onDismissRequest = { deletionProductId = null },
+      title = { Text("Request product deletion") },
+      text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("This sends a deletion request to JTBazar admin. It does not delete the product immediately.")
+        OutlinedTextField(value = deletionReason, onValueChange = { deletionReason = it }, label = { Text("Reason") }, minLines = 2)
+      } },
+      confirmButton = { TextButton(enabled = !saving, onClick = {
+        val id = deletionProductId ?: return@TextButton
+        scope.launch {
+          saving = true
+          try {
+            VendorService.requestProductDeletion(id, deletionReason)
+            deletionRequests = VendorService.listProductDeletionRequests()
+            deletionReason = ""; deletionProductId = null
+            message = "Deletion request submitted for admin review."
+          } catch (e: Exception) { errorMessage = e.message ?: "Deletion request failed." }
+          finally { saving = false }
+        }
+      }) { Text("Submit request") } },
+      dismissButton = { TextButton(onClick = { deletionProductId = null }) { Text("Cancel") } }
+    )
+  }
+
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
@@ -80,6 +130,20 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       VendorAdvancedField("Current address", currentAddress) { currentAddress = it }
       VendorAdvancedField("Complete address", completeAddress, 2) { completeAddress = it }
       VendorAdvancedField("Shop location / verification address", locationText, 2) { locationText = it }
+      OutlinedButton(enabled = !saving, onClick = { shopImagePicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (shopImageUrl.isBlank()) "Upload shop picture" else "Change shop picture") }
+      Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Checkbox(checked = showShopOnMap, onCheckedChange = { showShopOnMap = it })
+        Text("Show shop on public map")
+      }
+      if (showShopOnMap) {
+        VendorAdvancedField("Shop latitude", shopLat) { shopLat = it }
+        VendorAdvancedField("Shop longitude", shopLng) { shopLng = it }
+      }
+      Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Checkbox(checked = shopIsOpen, onCheckedChange = { shopIsOpen = it })
+        Text("Shop is open for daily food orders")
+      }
+      VendorAdvancedField("Minimum order value (PKR)", minimumOrderValue) { minimumOrderValue = it.filter(Char::isDigit).take(9) }
       Button(enabled = !saving, onClick = {
         scope.launch {
           saving = true; errorMessage = ""; message = ""
@@ -90,7 +154,12 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani mobile number." }
             VendorService.updateOwnShop(JSONObject().put("shop_name", shopName.trim()).put("slug", slug.trim())
               .put("description", description.trim()).put("phone", phone.trim()).put("current_address", currentAddress.trim())
-              .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim()))
+              .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim())
+              .put("shop_image_url", shopImageUrl.ifBlank { JSONObject.NULL })
+              .put("show_shop_on_map", showShopOnMap)
+              .put("shop_lat", if (showShopOnMap) shopLat.toDoubleOrNull() ?: error("Enter a valid shop latitude.") else JSONObject.NULL)
+              .put("shop_lng", if (showShopOnMap) shopLng.toDoubleOrNull() ?: error("Enter a valid shop longitude.") else JSONObject.NULL)
+              .put("shop_location_label", locationText.trim())
             message = "Shop details updated."; shopOpen = false
           } catch (e: Exception) { errorMessage = e.message ?: "Shop details could not be saved." }
           finally { saving = false }
@@ -107,6 +176,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
           Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
           Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
           OutlinedButton(enabled = !saving, onClick = { imageProductId = id; imagePicker.launch("image/*") }) { Text("Upload product image") }
+          TextButton(enabled = !saving, onClick = { deletionProductId = id; deletionReason = "" }) { Text("Request product deletion") }
           var stock by remember(id) { mutableStateOf(product.optString("stock_quantity", product.optString("quantity", "0"))) }
           Row {
             OutlinedTextField(value = stock, onValueChange = { stock = it.filter(Char::isDigit).take(8) },
@@ -165,6 +235,22 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
           }
         }
       }
+    }
+
+    Text("Product deletion requests", style = MaterialTheme.typography.titleMedium)
+    if (deletionRequests.length() == 0) Text("No deletion requests yet.")
+    for (i in 0 until deletionRequests.length()) {
+      val request = deletionRequests.optJSONObject(i) ?: continue
+      Text("${request.optString("product_id")} • ${request.optString("status", "pending")}", style = MaterialTheme.typography.bodySmall)
+    }
+
+    Text("Inventory history", style = MaterialTheme.typography.titleMedium)
+    if (inventoryHistory.length() == 0) Text("No inventory movements recorded yet.")
+    for (i in 0 until minOf(inventoryHistory.length(), 30)) {
+      val movement = inventoryHistory.optJSONObject(i) ?: continue
+      val productName = movement.optJSONObject("products")?.optString("name") ?: "Product"
+      val delta = movement.optInt("quantity_delta")
+      Text("$productName • ${if (delta > 0) "+" else ""}$delta • ${movement.optString("movement_type")} • ${movement.optString("note")}", style = MaterialTheme.typography.bodySmall)
     }
 
     Text("Customer cases and complaints", style = MaterialTheme.typography.titleMedium)
