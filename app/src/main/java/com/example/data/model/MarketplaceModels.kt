@@ -134,6 +134,8 @@ data class OrderRecord(
 data class ShopRecord(
   val id: String,
   val name: String,
+  val slug: String = "",
+  val productCount: Int = 0,
   val description: String = "",
   val logoUrl: String? = null,
   val bannerUrl: String? = null,
