@@ -437,7 +437,20 @@ object MarketplaceRepository {
       try {
         val currentUser = SupabaseClient.currentUser.value
         val dto = SupabaseOrderDto(id="", orderNumber="", userId=userId, subtotal=0, discount=0, deliveryFee=0, grandTotal=0, paymentMethod="cod", paymentStatus="pending", orderStatus="pending", deliveryNote=deliveryNote, addressName=address.name, addressPhone=address.phone, addressLine=address.addressLine, addressArea=address.area, addressCity=address.city, createdAt="", addressProvince=address.province, customerEmail=currentUser?.email, idempotencyKey=java.util.UUID.randomUUID().toString())
-        val lines = items.map { item -> SupabaseOrderItemDto(id="", orderId="", productId=item.product.id, productTitle=item.product.title, unitPrice=0, quantity=item.quantity, totalPrice=0, selectedPalette=item.selectedPalette, selectedSize=item.selectedSize) }
+        val lines = items.map { item ->
+          SupabaseOrderItemDto(
+            id = "",
+            orderId = "",
+            productId = item.product.id,
+            productTitle = item.product.title,
+            unitPrice = 0,
+            quantity = item.quantity,
+            totalPrice = 0,
+            selectedPalette = item.selectedPalette,
+            selectedSize = item.selectedSize,
+            variantId = item.variantId
+          )
+        }
         val createdId = SupabaseApiService.createOrder(
           dto, lines,
           deliveryLat = deliveryLat,
