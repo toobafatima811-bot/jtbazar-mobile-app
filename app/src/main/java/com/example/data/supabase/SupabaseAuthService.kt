@@ -518,6 +518,9 @@ object SupabaseAuthService {
         .post("{}".toRequestBody(JSON_MEDIA_TYPE))
         .build()
 
+      // Remove this device's push token before clearing the authenticated session.
+      if (context != null) FirebasePushManager.unregister(context.applicationContext, SupabaseClient.session.value?.accessToken)
+
       // We attempt the backend call, but always clear local session
       try {
         SupabaseClient.okHttpClient.newCall(request).execute().close()
