@@ -202,5 +202,10 @@ data class SupabasePromotionDto(
   val ctaText: String? = null,
   val ctaDestination: String? = null,
   val displayPosition: String = "",
-  val priority: Int = 0
+  val priority: Int = 0,
+  val targetPlatform: String = "both",
+  val campaignType: String = "banner",
+  val showOnLaunch: Boolean = false,
+  val startsAt: String? = null,
+  val endsAt: String? = null
 )
