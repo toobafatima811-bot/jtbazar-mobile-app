@@ -161,9 +161,9 @@ fun AccountScreen(
         }
       } else {
         // Authenticated Customer Profile Card
-        val displayName = userProfile?.fullName ?: currentUser?.fullName ?: "JTBazar Customer"
-        val displayEmail = userProfile?.email ?: currentUser?.email ?: ""
-        val displayPhone = userProfile?.phone ?: currentUser?.phone ?: ""
+        val displayName = userProfile?.fullName?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: currentUser?.fullName?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: "JTBazar Customer"
+        val displayEmail = userProfile?.email?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: currentUser?.email?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: ""
+        val displayPhone = userProfile?.phone?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: currentUser?.phone?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: ""
 
         Surface(
           shape = RoundedCornerShape(16.dp),
