@@ -173,8 +173,32 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       val id = product.optString("id")
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          var editing by remember(id) { mutableStateOf(false) }
+          var editName by remember(id) { mutableStateOf(product.optString("name", "")) }
+          var editDescription by remember(id) { mutableStateOf(product.optString("description", "")) }
+          var editPrice by remember(id) { mutableStateOf(product.optString("price", "")) }
+          var editStock by remember(id) { mutableStateOf(product.optString("stock_quantity", product.optString("quantity", "0"))) }
           Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
           Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
+          TextButton(onClick = { editing = !editing }) { Text(if (editing) "Close product editor" else "Edit product details") }
+          if (editing) {
+            VendorAdvancedField("Product name", editName) { editName = it }
+            VendorAdvancedField("Product description", editDescription, 3) { editDescription = it }
+            VendorAdvancedField("Price (PKR)", editPrice) { editPrice = it.filter(Char::isDigit) }
+            VendorAdvancedField("Stock quantity", editStock) { editStock = it.filter(Char::isDigit) }
+            Button(enabled = !saving, onClick = {
+              scope.launch {
+                saving = true
+                try {
+                  VendorService.updateProduct(id, editName, editDescription, editPrice.toIntOrNull() ?: error("Enter a valid price."), editStock.toIntOrNull() ?: error("Enter valid stock."))
+                  message = "Product updated. Any changes requiring review follow JTBazar's publishing rules."
+                  editing = false
+                  onRefresh()
+                } catch (e: Exception) { errorMessage = e.message ?: "Product update failed." }
+                finally { saving = false }
+              }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save product changes") }
+          }
           var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
           var dailyQuantity by remember(id) { mutableStateOf(product.optInt("daily_available_quantity", 0).toString()) }
           Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
