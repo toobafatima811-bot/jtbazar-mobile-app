@@ -82,6 +82,17 @@ class MainActivity : ComponentActivity() {
     handleGoogleOAuthIntent(intent)
   }
 
+  // Retry token registration whenever the app returns to the foreground. This covers
+  // restored sessions and cases where the initial permission/session events raced.
+  override fun onResume() {
+    super.onResume()
+    if (SupabaseClient.session.value != null && FirebasePushManager.hasNotificationPermission(this)) {
+      lifecycleScope.launch {
+        FirebasePushManager.register(applicationContext)
+      }
+    }
+  }
+
   override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     if (requestCode == 7301 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {

@@ -32,11 +32,21 @@ object FirebasePushManager {
     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
   suspend fun register(context: Context, tokenOverride: String? = null) = withContext(Dispatchers.IO) {
-    val session = SupabaseClient.session.value ?: return@withContext
-    if (!hasNotificationPermission(context)) return@withContext
+    val session = SupabaseClient.session.value ?: run {
+      Log.d(TAG, "Token registration deferred: no signed-in Supabase session")
+      return@withContext
+    }
+    if (!hasNotificationPermission(context)) {
+      Log.d(TAG, "Token registration deferred: notification permission not granted")
+      return@withContext
+    }
     try {
       val token = tokenOverride ?: Tasks.await(FirebaseMessaging.getInstance().token)
-      if (token.isBlank()) return@withContext
+      if (token.isBlank()) {
+        Log.w(TAG, "Firebase returned an empty FCM token")
+        return@withContext
+      }
+      Log.d(TAG, "Retrieved Android FCM token (length=" + token.length + "); registering with Supabase")
       val body = JSONObject().put("action", "register").put("platform", "android")
         .put("token", token).put("device_label", Build.MANUFACTURER + " " + Build.MODEL)
       val request = Request.Builder()
