@@ -591,7 +591,7 @@ object SupabaseApiService {
 
   suspend fun fetchShops(): Result<List<com.example.data.model.ShopRecord>> = withContext(Dispatchers.IO) {
     try {
-      val res = SupabaseClient.get("seller_profiles?select=id,shop_name,description,shop_image_url,phone,shop_lat,shop_lng,shop_location_label,current_address,complete_address,status,shop_is_open&status=eq.approved&limit=100")
+      val res = SupabaseClient.rpc("list_public_shops")
       res.fold(
         onSuccess = { jsonStr ->
           val arr = JSONArray(jsonStr)
@@ -603,15 +603,17 @@ object SupabaseApiService {
               com.example.data.model.ShopRecord(
                 id = obj.optString("id", "shop_$i"),
                 name = name,
+                slug = obj.optString("slug", ""),
+                productCount = obj.optInt("product_count", 0),
                 description = obj.optString("description", "Verified Vendor"),
                 logoUrl = obj.optString("shop_image_url").takeIf { it.startsWith("http") },
                 bannerUrl = null,
-                city = obj.optString("shop_location_label", obj.optString("current_address", "")),
-                address = obj.optString("complete_address", obj.optString("current_address", "")),
+                city = obj.optString("shop_location_label", ""),
+                address = obj.optString("shop_location_label", ""),
                 latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 0.0) else 0.0,
                 longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 0.0) else 0.0,
-                isVerified = obj.optString("status") == "approved",
-                phone = obj.optString("phone", ""),
+                isVerified = true,
+                phone = "",
                 deliveryRadiusKm = 5.0
               )
             )
@@ -619,7 +621,7 @@ object SupabaseApiService {
           Result.success(list)
         },
         onFailure = {
-          Log.w(TAG, "seller_profiles access: ${it.message}")
+          Log.w(TAG, "Public shop directory: ${it.message}")
           Result.success(emptyList())
         }
       )
