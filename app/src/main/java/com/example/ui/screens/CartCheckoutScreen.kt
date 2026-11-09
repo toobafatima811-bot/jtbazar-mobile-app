@@ -288,6 +288,7 @@ fun CartCheckoutScreen(
               val unavailableCartItem = cartItems.firstOrNull { item ->
                 (item.product.availabilityKnown && !item.product.isAvailable) ||
                   (item.product.foodSellingUnit != null && item.product.dailyStatus != null && item.product.dailyStatus != "available") ||
+                  (item.product.variantAvailability.isNotEmpty() && item.variantId.isNullOrBlank()) ||
                   (!item.variantId.isNullOrBlank() && item.product.variantAvailability.isNotEmpty() && item.product.variantAvailability[item.variantId] != true)
               }
               if (unavailableCartItem != null) {
