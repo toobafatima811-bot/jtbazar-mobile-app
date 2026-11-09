@@ -45,7 +45,8 @@ enum class AppScreen {
   CUSTOMER_SUPPORT,
   ACCOUNT_SETTINGS,
   SECURITY_PASSWORD,
-  BUDGET_SHOPPING
+  BUDGET_SHOPPING,
+  VENDOR_CENTER
 }
 
 @Composable
@@ -77,6 +78,7 @@ fun MainApp() {
       AppScreen.NOTIFICATIONS, AppScreen.RETURNS_REFUNDS, AppScreen.CUSTOMER_SUPPORT,
       AppScreen.ACCOUNT_SETTINGS, AppScreen.SECURITY_PASSWORD -> currentScreen = AppScreen.ACCOUNT
       AppScreen.BUDGET_SHOPPING -> currentScreen = previousScreen
+      AppScreen.VENDOR_CENTER -> currentScreen = AppScreen.ACCOUNT
       else -> {
         if (currentScreen != AppScreen.HOME) {
           currentScreen = AppScreen.HOME
@@ -340,6 +342,7 @@ fun MainApp() {
             onNavigateToSettings = { navigateTo(AppScreen.ACCOUNT_SETTINGS) },
             onNavigateToSecurity = { navigateTo(AppScreen.SECURITY_PASSWORD) },
             onNavigateToBudget = { navigateTo(AppScreen.BUDGET_SHOPPING) },
+            onNavigateToVendorCenter = { navigateTo(AppScreen.VENDOR_CENTER) },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) }
           )
         }
@@ -475,6 +478,10 @@ fun MainApp() {
 
         AppScreen.SECURITY_PASSWORD -> {
           SecurityPasswordScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.VENDOR_CENTER -> {
+          VendorCenterScreen(onBack = { navigateBack() })
         }
 
         AppScreen.BUDGET_SHOPPING -> {
