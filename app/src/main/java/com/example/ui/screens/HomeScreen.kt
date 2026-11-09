@@ -564,13 +564,14 @@ fun HomeScreen(
       }
 
       // Approved marketplace promotions; no invented offers are displayed.
-      if (searchQuery.isBlank() && homepagePromotions.isNotEmpty()) {
+      val visibleBannerCampaigns = homepagePromotions.filter { it.campaignType == "banner" && (it.targetPlatform == "android" || it.targetPlatform == "both") && (it.startsAt.isNullOrBlank() || it.startsAt <= nowIso) && (it.endsAt.isNullOrBlank() || it.endsAt >= nowIso) }
+      if (searchQuery.isBlank() && visibleBannerCampaigns.isNotEmpty()) {
         item {
           Column(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
           ) {
-            homepagePromotions.take(3).forEach { promotion ->
+            visibleBannerCampaigns.take(3).forEach { promotion ->
               val image = promotion.bannerImageUrls.firstOrNull() ?: promotion.bannerImageUrl
               if (image != null) {
                 Card(
