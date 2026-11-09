@@ -77,6 +77,7 @@ fun CartCheckoutScreen(
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
   val configuredDeliveryFee by MarketplaceRepository.deliveryFee.collectAsState()
+  val freeDeliveryEnabled by MarketplaceRepository.freeDeliveryEnabled.collectAsState()
   val codEnabled by MarketplaceRepository.codEnabled.collectAsState()
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
   val currentUser by SupabaseClient.currentUser.collectAsState()
@@ -139,7 +140,7 @@ fun CartCheckoutScreen(
 
   // Server-aligned Calculations
   val subtotal = cartItems.sumOf { it.totalPrice }
-  val deliveryCharges = if (subtotal == 0) 0 else configuredDeliveryFee
+  val deliveryCharges = if (subtotal == 0 || freeDeliveryEnabled) 0 else configuredDeliveryFee
   val grandTotal = (subtotal + deliveryCharges).coerceAtLeast(0)
 
   Scaffold(
