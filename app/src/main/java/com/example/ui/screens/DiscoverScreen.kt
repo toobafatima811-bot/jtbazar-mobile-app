@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +52,15 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.theme.*
 import kotlin.math.*
+import java.util.Locale
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 
 enum class DiscoverTab {
   NEARBY_SHOPS,
@@ -85,41 +94,41 @@ fun DiscoverScreen(
   var showCityPickerDialog by remember { mutableStateOf(false) }
   var selectedShop by remember { mutableStateOf<ShopRecord?>(null) }
 
-  // Location permission launcher
+  fun loadCurrentLocation() {
+    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    if (!fine && !coarse) return
+    try {
+      LocationServices.getFusedLocationProviderClient(context)
+        .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token)
+        .addOnSuccessListener { location ->
+          if (location != null) {
+            userLatitude = location.latitude
+            userLongitude = location.longitude
+            selectedCityName = "Your current area"
+          } else {
+            Toast.makeText(context, "Current location unavailable. Please enable device location.", Toast.LENGTH_SHORT).show()
+          }
+        }
+        .addOnFailureListener {
+          Toast.makeText(context, "Unable to get your location. Try again.", Toast.LENGTH_SHORT).show()
+        }
+    } catch (_: SecurityException) {
+      hasLocationPermission = false
+    }
+  }
+
   val locationPermissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestMultiplePermissions()
   ) { permissions ->
     val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     hasLocationPermission = granted
-    if (granted) {
-      try {
-        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-          ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        if (loc != null) {
-          userLatitude = loc.latitude
-          userLongitude = loc.longitude
-          selectedCityName = "Current GPS Location"
-          Toast.makeText(context, "Location updated successfully", Toast.LENGTH_SHORT).show()
-        }
-      } catch (_: SecurityException) {}
-    }
+    if (granted) loadCurrentLocation()
   }
 
-  // Initial location fetch if permission already granted
   LaunchedEffect(hasLocationPermission) {
-    if (hasLocationPermission && userLatitude == null) {
-      try {
-        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-          ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        if (loc != null) {
-          userLatitude = loc.latitude
-          userLongitude = loc.longitude
-        }
-      } catch (_: SecurityException) {}
-    }
+    if (hasLocationPermission && userLatitude == null) loadCurrentLocation()
   }
 
   Scaffold(
@@ -326,42 +335,61 @@ private fun NearbyShopsMapView(
   onSelectShop: (ShopRecord) -> Unit,
   onExploreShopProducts: (ShopRecord) -> Unit
 ) {
-  Column(modifier = Modifier.fillMaxSize()) {
-    // Location Header & GPS Action
-    Surface(
-      color = JTSurfaceVariant,
-      modifier = Modifier.fillMaxWidth()
-    ) {
+  val context = LocalContext.current
+  val validShops = remember(shops) {
+    shops.filter { it.latitude in -90.0..90.0 && it.longitude in -180.0..180.0 &&
+      !(it.latitude == 0.0 && it.longitude == 0.0) }
+  }
+  fun distanceKm(shop: ShopRecord): Double? {
+    if (userLat == null || userLng == null) return null
+    val result = FloatArray(1)
+    Location.distanceBetween(userLat, userLng, shop.latitude, shop.longitude, result)
+    return result[0] / 1000.0
+  }
+  val nearbyShops = remember(validShops, userLat, userLng, cityName) {
+    validShops.map { it to distanceKm(it) }
+      .filter { (shop, distance) ->
+        if (distance != null) distance <= 50.0
+        else cityName == "Current Area" || shop.city.contains(cityName, ignoreCase = true) ||
+          shop.address.contains(cityName, ignoreCase = true)
+      }
+      .sortedBy { it.second ?: Double.MAX_VALUE }
+  }
+  val mapCenter = remember(userLat, userLng, nearbyShops) {
+    when {
+      userLat != null && userLng != null -> GeoPoint(userLat, userLng)
+      nearbyShops.firstOrNull() != null -> GeoPoint(nearbyShops.first().first.latitude, nearbyShops.first().first.longitude)
+      else -> GeoPoint(31.5204, 74.3587)
+    }
+  }
+
+  DisposableEffect(Unit) {
+    Configuration.getInstance().userAgentValue = context.packageName
+    onDispose { }
+  }
+
+  Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+    Surface(color = JTSurfaceVariant, modifier = Modifier.fillMaxWidth()) {
       Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.weight(1f)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
           Icon(Icons.Filled.MyLocation, contentDescription = null, tint = JTOrange, modifier = Modifier.size(18.dp))
-          Spacer(modifier = Modifier.width(6.dp))
+          Spacer(Modifier.width(7.dp))
           Column {
             Text(
-              text = if (hasPermission && userLat != null) "Current GPS Location" else cityName,
-              fontWeight = FontWeight.Bold,
-              fontSize = 12.sp,
-              color = JTTextPrimary
+              if (hasPermission && userLat != null) "Your current location" else cityName,
+              fontWeight = FontWeight.Bold, fontSize = 12.sp, color = JTTextPrimary
             )
-            if (userLat != null && userLng != null) {
-              Text(
-                text = "Lat: ${String.format("%.4f", userLat)}, Lng: ${String.format("%.4f", userLng)}",
-                fontSize = 10.sp,
-                color = JTTextSecondary
-              )
-            }
+            Text(
+              if (userLat != null && userLng != null) "Showing shops nearest to you"
+              else "Choose a city or enable location",
+              fontSize = 10.sp, color = JTTextSecondary
+            )
           }
         }
-
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
           if (!hasPermission) {
             Button(
@@ -370,203 +398,112 @@ private fun NearbyShopsMapView(
               colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
               contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
               modifier = Modifier.height(32.dp).testTag("nearby_gps_button")
-            ) {
-              Text("Enable GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
+            ) { Text("Use my location", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
           }
-
           OutlinedButton(
             onClick = onPickCity,
             shape = RoundedCornerShape(8.dp),
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             modifier = Modifier.height(32.dp).testTag("nearby_city_picker")
-          ) {
-            Text("Change City", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-          }
+          ) { Text("City", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
         }
       }
     }
 
-    if (shops.isEmpty()) {
-      // Empty State for Shops
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .padding(24.dp),
-        contentAlignment = Alignment.Center
-      ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTTextSecondary, modifier = Modifier.size(48.dp))
-          Spacer(modifier = Modifier.height(12.dp))
-          Text("No Nearby Shops Found", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = JTTextPrimary)
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(
-            text = "Vendors in your area will appear on the radar as they come online.",
-            fontSize = 12.sp,
-            color = JTTextSecondary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-          )
+    AndroidView(
+      modifier = Modifier.fillMaxWidth().weight(1f).testTag("nearby_shops_real_map"),
+      factory = { ctx ->
+        MapView(ctx).apply {
+          setTileSource(TileSourceFactory.MAPNIK)
+          setMultiTouchControls(true)
+          controller.setZoom(12.0)
+          controller.setCenter(mapCenter)
         }
+      },
+      update = { map ->
+        map.overlays.clear()
+        map.controller.setCenter(mapCenter)
+        if (userLat != null && userLng != null) {
+          Marker(map).apply {
+            position = GeoPoint(userLat, userLng)
+            title = "You are here"
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            map.overlays.add(this)
+          }
+        }
+        nearbyShops.forEach { (shop, distance) ->
+          Marker(map).apply {
+            position = GeoPoint(shop.latitude, shop.longitude)
+            title = shop.name
+            snippet = distance?.let { String.format(Locale.US, "%.1f km away", it) } ?: shop.city
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            setOnMarkerClickListener { _, _ ->
+              onSelectShop(shop)
+              true
+            }
+            map.overlays.add(this)
+          }
+        }
+        map.invalidate()
+      }
+    )
+
+    if (nearbyShops.isEmpty()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        Text("No shops with map locations found nearby", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
+        Text(
+          if (validShops.isEmpty()) "Approved shops need valid latitude and longitude to appear on the map."
+          else "Try another city or expand your search area.",
+          fontSize = 11.sp, color = JTTextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
       }
     } else {
-      // Interactive Radar Canvas + Marker View
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .weight(1f)
-          .background(Color(0xFFF8FAFC))
-      ) {
-        // Radar Drawing Canvas
-        Canvas(modifier = Modifier.fillMaxSize()) {
-          val center = Offset(size.width / 2f, size.height / 2f)
-          val maxRadius = min(size.width, size.height) * 0.42f
-
-          // Radar Concentric Circles (1km, 3km, 5km)
-          listOf(0.33f, 0.66f, 1.0f).forEach { fraction ->
-            drawCircle(
-              color = Color(0xFFE2E8F0),
-              radius = maxRadius * fraction,
-              center = center,
-              style = Stroke(width = 1.5f)
-            )
-          }
-
-          // Cross-hairs
-          drawLine(Color(0xFFE2E8F0), Offset(center.x, center.y - maxRadius), Offset(center.x, center.y + maxRadius), strokeWidth = 1f)
-          drawLine(Color(0xFFE2E8F0), Offset(center.x - maxRadius, center.y), Offset(center.x + maxRadius, center.y), strokeWidth = 1f)
-
-          // Center pulse (user location)
-          drawCircle(color = JTPurplePrimary.copy(alpha = 0.2f), radius = 18f, center = center)
-          drawCircle(color = JTPurplePrimary, radius = 7f, center = center)
-        }
-
-        // Shop Markers placed along radar
-        shops.take(8).forEachIndexed { index, shop ->
-          val angle = (index * (360.0 / min(shops.size, 8))) * (Math.PI / 180.0)
-          val distFraction = 0.35 + (index % 3) * 0.25
-          val isSelected = selectedShop?.id == shop.id
-
-          Box(
-            modifier = Modifier
-              .fillMaxSize()
-              .wrapContentSize(Alignment.Center)
-          ) {
-            val offsetX = (cos(angle) * 120 * distFraction).dp
-            val offsetY = (sin(angle) * 120 * distFraction).dp
-
+      val activeShop = selectedShop?.takeIf { selected -> nearbyShops.any { it.first.id == selected.id } }
+        ?: nearbyShops.first().first
+      val activeDistance = distanceKm(activeShop)
+      Surface(color = Color.White, shadowElevation = 5.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-              modifier = Modifier
-                .offset(x = offsetX, y = offsetY)
-                .clickable { onSelectShop(shop) }
+              modifier = Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(JTPurpleContainer),
+              contentAlignment = Alignment.Center
             ) {
-              Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (isSelected) JTOrange else Color.White,
-                shadowElevation = if (isSelected) 6.dp else 3.dp,
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) JTOrangeDark else JTBorder),
-                modifier = Modifier.padding(4.dp)
-              ) {
-                Row(
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                  verticalAlignment = Alignment.CenterVertically
-                ) {
-                  Icon(
-                    imageVector = Icons.Filled.Store,
-                    contentDescription = null,
-                    tint = if (isSelected) Color.White else JTPurplePrimary,
-                    modifier = Modifier.size(13.dp)
-                  )
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text(
-                    text = shop.name,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
-                    color = if (isSelected) Color.White else JTTextPrimary,
-                    maxLines = 1
-                  )
-                }
+              if (!activeShop.logoUrl.isNullOrBlank()) {
+                AsyncImage(model = activeShop.logoUrl, contentDescription = activeShop.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+              } else {
+                Icon(Icons.Filled.Store, contentDescription = null, tint = JTPurplePrimary)
               }
             }
-          }
-        }
-      }
-
-      // Selected Shop Card / Carousel at bottom
-      val activeShop = selectedShop ?: shops.firstOrNull()
-      if (activeShop != null) {
-        Surface(
-          shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-          color = Color.White,
-          shadowElevation = 8.dp,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
               Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                  modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(JTPurpleContainer),
-                  contentAlignment = Alignment.Center
-                ) {
-                  Icon(Icons.Filled.Store, contentDescription = null, tint = JTPurplePrimary)
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(activeShop.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTTextPrimary)
-                    if (activeShop.isVerified) {
-                      Spacer(modifier = Modifier.width(4.dp))
-                      Icon(Icons.Filled.Verified, contentDescription = "Verified", tint = JTPurplePrimary, modifier = Modifier.size(14.dp))
-                    }
-                  }
-                  Text(
-                    text = if (activeShop.city.isNotBlank()) "${activeShop.city} • Verified Vendor" else "Authentic Pakistani Vendor",
-                    fontSize = 11.sp,
-                    color = JTTextSecondary
-                  )
+                Text(activeShop.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (activeShop.isVerified) {
+                  Spacer(Modifier.width(4.dp))
+                  Icon(Icons.Filled.Verified, contentDescription = "Verified", tint = JTPurplePrimary, modifier = Modifier.size(14.dp))
                 }
               }
-
-              Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Color(0xFFDEF7EC)
-              ) {
-                Text(
-                  text = "Within 5km",
-                  color = Color(0xFF03543F),
-                  fontSize = 10.sp,
-                  fontWeight = FontWeight.Bold,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                )
-              }
+              Text(
+                activeDistance?.let { String.format(Locale.US, "%.1f km from you", it) } ?: activeShop.city.ifBlank { activeShop.address },
+                fontSize = 11.sp, color = JTTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+              )
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-              text = activeShop.description,
-              fontSize = 11.sp,
-              color = JTTextSecondary,
-              maxLines = 2,
-              lineHeight = 15.sp
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Button(
-              onClick = { onExploreShopProducts(activeShop) },
-              shape = RoundedCornerShape(10.dp),
-              colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
-              modifier = Modifier.fillMaxWidth().height(42.dp).testTag("open_shop_button")
-            ) {
-              Text("Open Shop & View Products", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
+            Text("${nearbyShops.size} nearby", fontSize = 10.sp, color = JTPurplePrimary, fontWeight = FontWeight.Bold)
           }
+          if (activeShop.description.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(activeShop.description, fontSize = 11.sp, color = JTTextSecondary, maxLines = 2, lineHeight = 15.sp)
+          }
+          Spacer(Modifier.height(10.dp))
+          Button(
+            onClick = { onExploreShopProducts(activeShop) },
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
+            modifier = Modifier.fillMaxWidth().height(40.dp).testTag("open_shop_button")
+          ) { Text("Open Shop & View Products", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
         }
       }
     }
