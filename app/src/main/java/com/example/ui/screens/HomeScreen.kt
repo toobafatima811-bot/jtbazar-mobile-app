@@ -59,6 +59,7 @@ fun HomeScreen(
   onAccountClick: () -> Unit,
   onBudgetClick: () -> Unit = {},
   onExploreShopsClick: () -> Unit = {},
+  onBecomeSellerClick: () -> Unit = onExploreShopsClick,
   modifier: Modifier = Modifier
 ) {
   val products by MarketplaceRepository.products.collectAsState()
@@ -73,6 +74,17 @@ fun HomeScreen(
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
 
   var dismissedLaunchAdId by remember { mutableStateOf<String?>(null) }
+  var activeHeroIndex by remember { mutableStateOf(0) }
+  LaunchedEffect(homepageHeroes.size) {
+    activeHeroIndex = 0
+    if (homepageHeroes.size > 1) {
+      while (true) {
+        kotlinx.coroutines.delay(6000)
+        activeHeroIndex = (activeHeroIndex + 1) % homepageHeroes.size
+      }
+    }
+  }
+  val activeHero = homepageHeroes.getOrNull(activeHeroIndex)
   val nowIso = remember { java.time.Instant.now().toString() }
   val visibleBannerCampaigns = homepagePromotions.filter { campaign -> campaign.campaignType == "banner" && !campaign.showOnLaunch && (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") && (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) && (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso) }
   val launchAd = homepagePromotions.firstOrNull { campaign ->
@@ -185,48 +197,112 @@ fun HomeScreen(
 
       if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "top_promo", onExploreCategoriesClick) }
 
-      // Published homepage hero banners from the same Supabase table as the website.
-      if (searchQuery.isBlank() && homepageHeroes.isNotEmpty()) {
+      // Website-parity homepage hero: full-width editorial layout, live admin slides,
+      // responsive mobile artwork, auto-advance, CTA, and slide controls.
+      if (searchQuery.isBlank()) {
         item {
-          LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(top = 8.dp)
+          Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F2EA)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 8.dp)
           ) {
-            items(homepageHeroes, key = { it.id }) { hero ->
-              Card(
-                shape = RoundedCornerShape(18.dp),
+            Column(modifier = Modifier.fillMaxWidth()) {
+              Column(
                 modifier = Modifier
-                  .width(320.dp)
-                  .height(168.dp)
-                  .clickable { onExploreCategoriesClick() }
+                  .fillMaxWidth()
+                  .padding(horizontal = 20.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
               ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                  AsyncImage(
-                    model = hero.mobileImageUrl ?: hero.imageUrl,
-                    contentDescription = hero.imageAltText ?: hero.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Box(Modifier.width(22.dp).height(2.dp).background(JTOrange))
+                  Spacer(Modifier.width(8.dp))
+                  Text(
+                    "ONE MARKETPLACE, MORE POSSIBILITIES",
+                    color = JTOrange,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.1.sp
                   )
-                  Box(
-                    modifier = Modifier
-                      .fillMaxSize()
-                      .background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.68f), Color.Transparent)))
-                  )
-                  Column(
-                    modifier = Modifier
-                      .align(Alignment.CenterStart)
-                      .fillMaxWidth(0.72f)
-                      .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                }
+                Text(
+                  text = activeHero?.title ?: "Everything You Need,\nAll in One Place",
+                  color = JTTextPrimary,
+                  fontSize = 30.sp,
+                  lineHeight = 34.sp,
+                  fontWeight = FontWeight.ExtraBold,
+                  maxLines = 3,
+                  overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                  text = activeHero?.subtitle
+                    ?: "Discover quality products and trusted sellers across multiple categories. Shop conveniently with reliable support and Cash on Delivery.",
+                  color = JTTextSecondary,
+                  fontSize = 13.sp,
+                  lineHeight = 19.sp,
+                  maxLines = 4,
+                  overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                  Button(
+                    onClick = onExploreCategoriesClick,
+                    shape = RoundedCornerShape(7.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White)
                   ) {
-                    Text(hero.title, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    hero.subtitle?.let { Text(it, color = Color.White, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                    hero.ctaText?.let {
-                      Surface(shape = RoundedCornerShape(8.dp), color = JTOrange) {
-                        Text(it, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
-                      }
-                    }
+                    Text(activeHero?.ctaText?.takeIf { it.isNotBlank() } ?: "Start Shopping", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(Modifier.width(5.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(15.dp))
+                  }
+                  TextButton(onClick = onBecomeSellerClick) {
+                    Text("Become a Seller", color = JTPurplePrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                  }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(Icons.Filled.Verified, contentDescription = null, tint = Color(0xFF66805C), modifier = Modifier.size(16.dp))
+                  Spacer(Modifier.width(6.dp))
+                  Text("Trusted by buyers and sellers", color = JTTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                }
+              }
+
+              AsyncImage(
+                model = activeHero?.let { it.mobileImageUrl ?: it.imageUrl }
+                  ?: "https://raw.githubusercontent.com/jtbazar/front-ecommerce/main/public/images/marketplace-shopper.webp",
+                contentDescription = activeHero?.imageAltText ?: "JTBazar marketplace homepage",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(220.dp)
+              )
+
+              if (homepageHeroes.size > 1) {
+                Row(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                  horizontalArrangement = Arrangement.Center,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  IconButton(onClick = { activeHeroIndex = (activeHeroIndex - 1 + homepageHeroes.size) % homepageHeroes.size }) {
+                    Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous hero")
+                  }
+                  homepageHeroes.forEachIndexed { index, hero ->
+                    Box(
+                      modifier = Modifier
+                        .padding(horizontal = 3.dp)
+                        .size(if (index == activeHeroIndex) 18.dp else 7.dp, 7.dp)
+                        .clip(CircleShape)
+                        .background(if (index == activeHeroIndex) JTOrange else JTBorder)
+                        .clickable { activeHeroIndex = index }
+                    )
+                  }
+                  IconButton(onClick = { activeHeroIndex = (activeHeroIndex + 1) % homepageHeroes.size }) {
+                    Icon(Icons.Filled.ChevronRight, contentDescription = "Next hero")
                   }
                 }
               }
