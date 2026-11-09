@@ -267,6 +267,17 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                   variantLabel = row.optString("option_label")
                   variantValue = row.optString("option_value")
                   variantPrice = if (row.isNull("price_override")) "" else row.optString("price_override")
+                  scope.launch {
+                    try {
+                      val inventory = VendorService.listInventory()
+                      var quantity = 0
+                      for (m in 0 until inventory.length()) {
+                        val inv = inventory.optJSONObject(m) ?: continue
+                        if (inv.optString("variant_id") == row.optString("id")) { quantity = inv.optInt("quantity"); break }
+                      }
+                      variantStock = quantity.toString()
+                    } catch (e: Exception) { errorMessage = e.message ?: "Variant stock could not be loaded." }
+                  }
                 }) { Text("Edit") }
                 TextButton(enabled = !saving, onClick = {
                   scope.launch {
