@@ -85,6 +85,7 @@ fun HomeScreen(
     }
   }
   val activeHero = homepageHeroes.getOrNull(activeHeroIndex)
+  val context = LocalContext.current
   val nowIso = remember { java.time.Instant.now().toString() }
   val visibleBannerCampaigns = homepagePromotions.filter { campaign -> campaign.campaignType == "banner" && !campaign.showOnLaunch && (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") && (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) && (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso) }
   val launchAd = homepagePromotions.firstOrNull { campaign ->
@@ -251,7 +252,16 @@ fun HomeScreen(
                   horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                   Button(
-                    onClick = onExploreCategoriesClick,
+                    onClick = {
+                      val destination = activeHero?.ctaDestination.orEmpty()
+                      if (destination.startsWith("https://")) {
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(destination))) }
+                      } else if (destination.startsWith("/vendor")) {
+                        onBecomeSellerClick()
+                      } else {
+                        onExploreCategoriesClick()
+                      }
+                    },
                     shape = RoundedCornerShape(7.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White)
                   ) {
