@@ -57,8 +57,12 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
 
   fun reload() {
     scope.launch {
-      try { cases = VendorService.listCases(); tickets = VendorService.listSupportTickets(); deletionRequests = VendorService.listProductDeletionRequests(); inventoryHistory = VendorService.listInventoryMovements() }
-      catch (e: Exception) { errorMessage = e.message ?: "Vendor information could not be loaded." }
+      errorMessage = ""
+      val failures = mutableListOf<String>()
+      try { cases = VendorService.listCases() } catch (_: Exception) { failures.add("Cases could not be loaded.") }
+      try { tickets = VendorService.listSupportTickets() } catch (_: Exception) { failures.add("Support tickets could not be loaded.") }
+      try { inventoryHistory = VendorService.listInventoryMovements() } catch (_: Exception) { failures.add("Inventory history could not be loaded.") }
+      if (failures.isNotEmpty()) errorMessage = failures.joinToString("\n")
     }
   }
   LaunchedEffect(application.id) { reload() }
@@ -107,7 +111,6 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
           saving = true
           try {
             VendorService.requestProductDeletion(id, deletionReason)
-            deletionRequests = VendorService.listProductDeletionRequests()
             deletionReason = ""; deletionProductId = null
             message = "Deletion request submitted for admin review."
           } catch (e: Exception) { errorMessage = e.message ?: "Deletion request failed." }
@@ -350,11 +353,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
     }
 
     Text("Product deletion requests", style = MaterialTheme.typography.titleMedium)
-    if (deletionRequests.length() == 0) Text("No deletion requests yet.")
-    for (i in 0 until deletionRequests.length()) {
-      val request = deletionRequests.optJSONObject(i) ?: continue
-      Text("${request.optString("product_id")} • ${request.optString("status", "pending")}", style = MaterialTheme.typography.bodySmall)
-    }
+    Text("Deletion requests are sent to JTBazar admin for review. Products are not deleted directly from the vendor app.", style = MaterialTheme.typography.bodySmall)
 
     Text("Inventory history", style = MaterialTheme.typography.titleMedium)
     if (inventoryHistory.length() == 0) Text("No inventory movements recorded yet.")
@@ -404,7 +403,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
         Column(Modifier.padding(10.dp)) {
           Text("${ticket.optString("subject")} • ${ticket.optString("status", "open")}")
           Text(ticket.optString("message"), style = MaterialTheme.typography.bodySmall)
-          if (ticket.optString("admin_reply").isNotBlank()) Text("Admin reply: ${ticket.optString("admin_reply")}")
+          if (ticket.optString("admin_response").isNotBlank()) Text("Admin reply: ${ticket.optString("admin_reply")}")
         }
       }
     }
