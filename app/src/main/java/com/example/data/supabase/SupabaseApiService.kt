@@ -98,7 +98,7 @@ object SupabaseApiService {
         val id = row.optString("product_id")
         available[id] = (available[id] ?: false) || row.optBoolean("is_available", false)
       }
-      Result.success(parseProductsJson(products.toString(), quantities, available, availability != null))
+      Result.success(parseProductsJson(products.toString(), quantities, available, availability != null, availability))
     } catch (e: Exception) {
       Log.e(TAG, "fetchProducts error", e)
       Result.failure(e)
@@ -111,7 +111,7 @@ object SupabaseApiService {
 
   suspend fun fetchProductById(id:String):Result<SupabaseProductDto> = fetchProducts(limit=100).mapCatching{it.firstOrNull{p->p.id==id}?:throw IOException("Product not found")}
 
-  private fun parseProductsJson(jsonStr: String, quantities: Map<String, Int> = emptyMap(), availability: Map<String, Boolean> = emptyMap(), availabilityKnown: Boolean = false): List<SupabaseProductDto> {
+  private fun parseProductsJson(jsonStr: String, quantities: Map<String, Int> = emptyMap(), availability: Map<String, Boolean> = emptyMap(), availabilityKnown: Boolean = false, availabilityRows: JSONArray? = null): List<SupabaseProductDto> {
     val rows = JSONArray(jsonStr)
     return (0 until rows.length()).mapNotNull { index ->
       val obj = rows.optJSONObject(index) ?: return@mapNotNull null
@@ -139,7 +139,14 @@ object SupabaseApiService {
         if (spec.optString("label").isNotBlank() && spec.optString("value").isNotBlank()) highlights.add(spec.optString("label") + ": " + spec.optString("value"))
       }
       val id = obj.optString("id"); val known = availabilityKnown && availability.containsKey(id); val stock = known && availability[id] == true
-      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=true)
+      val variantAvailability = mutableMapOf<String, Boolean>()
+      if (availabilityRows != null) for (availabilityIndex in 0 until availabilityRows.length()) {
+        val availabilityRow = availabilityRows.optJSONObject(availabilityIndex) ?: continue
+        if (availabilityRow.optString("product_id") == id && !availabilityRow.isNull("variant_id")) variantAvailability[availabilityRow.optString("variant_id")] = availabilityRow.optBoolean("is_available", false)
+      }
+      val foodUnit = obj.optString("food_selling_unit").takeIf { it.isNotBlank() && it != "null" }
+      val dailyStatus = obj.optString("daily_status").takeIf { it.isNotBlank() && it != "null" }
+      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=true,availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
     }
   }
 
