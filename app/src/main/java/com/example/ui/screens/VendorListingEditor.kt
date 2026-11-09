@@ -26,6 +26,7 @@ private data class ListingVariant(
   val stock: String = "0"
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
   val context = LocalContext.current
@@ -52,12 +53,12 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
   var variants by remember { mutableStateOf(listOf<ListingVariant>()) }
   var images by remember { mutableStateOf<List<Uri>>(emptyList()) }
   var saving by remember { mutableStateOf(false) }
-  var error by remember { mutableStateOf("") }
+  var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
 
   LaunchedEffect(Unit) {
     try { categories = VendorService.listCategories() }
-    catch (e: Exception) { error = e.message ?: "Categories could not be loaded." }
+    catch (e: Exception) { errorMessage = e.message ?: "Categories could not be loaded." }
   }
 
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
@@ -67,7 +68,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
   }
 
   fun fieldNumber(value: String, label: String, allowDecimal: Boolean = true): Double {
-    val parsed = value.toDoubleOrNull() ?: error("Enter a valid $label.")
+    val parsed = value.toDoubleOrNull() ?: throw IllegalArgumentException("Enter a valid $label.")
     require(parsed >= 0) { "$label cannot be negative." }
     if (!allowDecimal) require(parsed % 1.0 == 0.0) { "$label must be a whole number." }
     return parsed
@@ -142,11 +143,11 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
       Text("Track inventory for this listing")
     }
     if (trackInventory) ListingField("Initial stock quantity", initialStock) { initialStock = it.filter(Char::isDigit) }
-    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+    if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
     Button(enabled = !saving, onClick = {
       scope.launch {
-        saving = true; error = ""; message = ""
+        saving = true; errorMessage = ""; message = ""
         try {
           require(name.trim().length >= 2) { "Enter a product name." }
           require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid slug." }
@@ -162,7 +163,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
             require(seen.add("${v.optionName.trim().lowercase()}::${v.optionValue.trim().lowercase()}")) { "Duplicate variant option and value." }
             val stock = fieldNumber(v.stock, "variant stock", false).toInt()
             val row = JSONObject().put("option_label", v.optionName.trim()).put("option_value", v.optionValue.trim())
-              .put("sku", v.sku.trim().ifBlank { JSONObject.NULL })
+              .put("sku", if (v.sku.isBlank()) JSONObject.NULL else v.sku.trim())
               .put("price_override", if (v.price.isBlank()) JSONObject.NULL else fieldNumber(v.price, "variant price"))
               .put("attributes", JSONObject()).put("quantity", stock)
             variantJson.put(row)
@@ -186,7 +187,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
           }
           message = "Listing submitted for moderation."
           onSaved()
-        } catch (e: Exception) { error = e.message ?: "Listing could not be submitted." }
+        } catch (e: Exception) { errorMessage = e.message ?: "Listing could not be submitted." }
         finally { saving = false }
       }
     }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
