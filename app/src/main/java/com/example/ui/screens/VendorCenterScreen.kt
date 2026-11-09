@@ -260,7 +260,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             VendorField("Shop name", shopName) { shopName = it }
             VendorField("Shop description (at least 10 characters)", description, minLines = 3) { description = it }
             VendorField("Owner full legal name", ownerName) { ownerName = it }
-            VendorField("Vendor type (individual_seller / registered_business / sole_proprietor / partnership / company)", vendorType) { vendorType = it }
+            VendorTypeDropdown(selectedType = vendorType, onTypeSelected = { vendorType = it })
             VendorField("CNIC number (13 digits, no dashes)", cnic) { cnic = it.filter(Char::isDigit).take(13) }
             VendorField("Contact phone (03XXXXXXXXX)", phone) { phone = it }
             VendorField("Current address", currentAddress) { currentAddress = it }
@@ -306,6 +306,50 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             Text("Your application will remain pending until JTBazar admin approves it.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
           }
         }
+      }
+    }
+  }
+}
+
+@Composable
+private fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
+  val types = listOf(
+    "individual_seller" to "Individual Seller",
+    "registered_business" to "Registered Business",
+    "sole_proprietor" to "Sole Proprietor",
+    "partnership" to "Partnership",
+    "company" to "Company"
+  )
+  var expanded by remember { mutableStateOf(false) }
+  val selectedLabel = types.firstOrNull { it.first == selectedType }?.second ?: "Individual Seller"
+
+  ExposedDropdownMenuBox(
+    expanded = expanded,
+    onExpandedChange = { expanded = !expanded },
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    OutlinedTextField(
+      value = selectedLabel,
+      onValueChange = {},
+      readOnly = true,
+      label = { Text("Vendor type") },
+      trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+      modifier = Modifier.fillMaxWidth().menuAnchor(),
+      singleLine = true
+    )
+    ExposedDropdownMenu(
+      expanded = expanded,
+      onDismissRequest = { expanded = false }
+    ) {
+      types.forEach { (value, label) ->
+        DropdownMenuItem(
+          text = { Text(label) },
+          onClick = {
+            onTypeSelected(value)
+            expanded = false
+          },
+          contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+        )
       }
     }
   }
