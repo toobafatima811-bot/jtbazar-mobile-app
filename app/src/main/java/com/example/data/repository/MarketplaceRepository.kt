@@ -181,7 +181,8 @@ object MarketplaceRepository {
     if (latest.availabilityKnown && !latest.isAvailable) return false
     if (latest.foodSellingUnit != null && isUnavailableStatus(latest.dailyStatus)) return false
     val variantKey = if (!size.isNullOrBlank()) "size:$size" else if (!palette.isNullOrBlank()) "color:$palette" else null
-    if (variantKey != null && latest.variantAvailability.isNotEmpty() && latest.variantAvailability[variantKey] != true) return false
+    val variantId = variantKey?.let { latest.variantIds[it] }
+    if (variantId != null && latest.variantAvailability.isNotEmpty() && latest.variantAvailability[variantId] != true) return false
     return true
   }
 
