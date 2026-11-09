@@ -90,7 +90,7 @@ fun DiscoverScreen(
   }
   var userLatitude by remember { mutableStateOf<Double?>(null) }
   var userLongitude by remember { mutableStateOf<Double?>(null) }
-  var selectedCityName by remember { mutableStateOf("Current Area") }
+  var selectedCityName by remember { mutableStateOf("Select city") }
   var showCityPickerDialog by remember { mutableStateOf(false) }
   var selectedShop by remember { mutableStateOf<ShopRecord?>(null) }
 
@@ -350,8 +350,8 @@ private fun NearbyShopsMapView(
     validShops.map { it to distanceKm(it) }
       .filter { (shop, distance) ->
         if (distance != null) distance <= 50.0
-        else cityName == "Current Area" || shop.city.contains(cityName, ignoreCase = true) ||
-          shop.address.contains(cityName, ignoreCase = true)
+        else cityName != "Select city" && (shop.city.contains(cityName, ignoreCase = true) ||
+          shop.address.contains(cityName, ignoreCase = true))
       }
       .sortedBy { it.second ?: Double.MAX_VALUE }
   }
@@ -359,7 +359,7 @@ private fun NearbyShopsMapView(
     when {
       userLat != null && userLng != null -> GeoPoint(userLat, userLng)
       nearbyShops.firstOrNull() != null -> GeoPoint(nearbyShops.first().first.latitude, nearbyShops.first().first.longitude)
-      else -> GeoPoint(31.5204, 74.3587)
+      else -> GeoPoint(30.3753, 69.3451)
     }
   }
 
@@ -416,7 +416,7 @@ private fun NearbyShopsMapView(
         MapView(ctx).apply {
           setTileSource(TileSourceFactory.MAPNIK)
           setMultiTouchControls(true)
-          controller.setZoom(12.0)
+          controller.setZoom(if (userLat == null && userLng == null) 5.5 else 12.0)
           controller.setCenter(mapCenter)
         }
       },
