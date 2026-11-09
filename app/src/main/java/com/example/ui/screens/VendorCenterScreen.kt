@@ -122,6 +122,12 @@ fun VendorCenterScreen(onBack: () -> Unit) {
         if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
         if (info.isNotBlank()) Text(info, color = Color(0xFF16803C))
         when {
+          application?.vendorLocked == true -> {
+            Text("Vendor account restricted", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            StatusPanel(application!!)
+            Text(application?.lockReason ?: "Vendor tools are temporarily unavailable. Contact JTBazar support for details.", color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = { refresh() }) { Text("Refresh status") }
+          }
           isVendor && application?.status == "approved" -> {
             Text("Vendor Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
