@@ -149,8 +149,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
           }
           isVendor && application?.status == "approved" -> {
             Text("Vendor Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            ScrollableTabRow(selectedTabIndex = listOf("overview", "listings", "fulfilment", "tools").indexOf(vendorTab).coerceAtLeast(0), edgePadding = 0.dp) {
-              listOf("overview" to "Overview", "listings" to "Listings", "fulfilment" to "Fulfilment", "tools" to "More tools").forEach { item ->
+            ScrollableTabRow(selectedTabIndex = listOf("overview", "listings", "inventory", "fulfilment", "tools").indexOf(vendorTab).coerceAtLeast(0), edgePadding = 0.dp) {
+              listOf("overview" to "Overview", "listings" to "Listings", "inventory" to "Inventory", "fulfilment" to "Fulfilment", "tools" to "More tools").forEach { item ->
                 Tab(selected = vendorTab == item.first, onClick = { vendorTab = item.first }, text = { Text(item.second) })
               }
             }
@@ -203,6 +203,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             }
 
               }
+              "inventory" -> VendorInventoryPanel()
               "fulfilment" -> {
             Text("Vendor orders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             OutlinedTextField(value = ordersSearch, onValueChange = { ordersSearch = it }, label = { Text("Search order number or product") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
