@@ -180,7 +180,7 @@ object SupabaseApiService {
 
   suspend fun fetchStoreSettings(): Result<SupabaseStoreSettingsDto> = withContext(Dispatchers.IO) {
     try {
-      SupabaseClient.get("store_settings?id=eq.default&select=delivery_fee,cod_enabled,return_window_days,free_delivery_enabled,additional_delivery_fee&limit=1").mapCatching { json ->
+      SupabaseClient.get("store_settings?id=eq.default&select=delivery_fee,cod_enabled,return_window_days,free_delivery_enabled,additional_delivery_fee,support_email,support_whatsapp&limit=1").mapCatching { json ->
         val rows = JSONArray(json)
         if (rows.length() == 0) throw IOException("Store settings are not configured.")
         val row = rows.getJSONObject(0)
@@ -189,7 +189,9 @@ object SupabaseApiService {
           codEnabled = row.optBoolean("cod_enabled", false),
           returnWindowDays = row.optInt("return_window_days", 7),
           freeDeliveryEnabled = row.optBoolean("free_delivery_enabled", false),
-          additionalDeliveryFee = row.optDouble("additional_delivery_fee", 0.0).toInt()
+          additionalDeliveryFee = row.optDouble("additional_delivery_fee", 0.0).toInt(),
+          supportEmail = row.optString("support_email").takeIf { it.isNotBlank() && it != "null" },
+          supportWhatsapp = row.optString("support_whatsapp").takeIf { it.isNotBlank() && it != "null" }
         )
       }
     } catch (e: Exception) { Result.failure(e) }
