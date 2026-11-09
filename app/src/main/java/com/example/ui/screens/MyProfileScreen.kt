@@ -204,7 +204,7 @@ fun MyProfileScreen(
                 phone = phone.trim(),
                 email = currentUser?.email ?: userProfile?.email ?: "",
                 avatarUrl = avatarUrl,
-                city = city.trim()
+                city = userProfile?.city ?: ""
               )
               val res = SupabaseAuthService.upsertProfile(updated)
               if (res.isSuccess) {
