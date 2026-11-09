@@ -403,7 +403,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
         Column(Modifier.padding(10.dp)) {
           Text("${ticket.optString("subject")} • ${ticket.optString("status", "open")}")
           Text(ticket.optString("message"), style = MaterialTheme.typography.bodySmall)
-          if (ticket.optString("admin_response").isNotBlank()) Text("Admin reply: ${ticket.optString("admin_reply")}")
+          if (ticket.optString("admin_response").isNotBlank()) Text("Admin reply: ${ticket.optString("admin_response")}")
         }
       }
     }
