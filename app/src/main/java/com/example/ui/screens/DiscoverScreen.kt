@@ -691,21 +691,23 @@ private fun ProductsFeedReelsView(
             )
           }
 
-          // 2. Add to Cart Action
+          // 2. Add to Cart / out-of-stock state
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            FloatingReelsAction(
-              icon = Icons.Filled.AddShoppingCart,
-              tint = JTOrange,
-              onClick = { onAddToCart(product) },
-              tag = "reels_add_cart_btn_${product.id}"
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-              text = "Add",
-              color = Color.White,
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Medium
-            )
+            val dailyState = product.dailyStatus?.trim()?.lowercase()
+            val isOutOfStock = (product.availabilityKnown && !product.isAvailable) ||
+              dailyState in setOf("out_of_stock", "out-of-stock", "unavailable", "not_available", "not available", "sold_out", "sold out", "closed")
+            if (isOutOfStock) {
+              Text("Out of Stock", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            } else {
+              FloatingReelsAction(
+                icon = Icons.Filled.AddShoppingCart,
+                tint = JTOrange,
+                onClick = { onAddToCart(product) },
+                tag = "reels_add_cart_btn_${product.id}"
+              )
+              Spacer(modifier = Modifier.height(2.dp))
+              Text("Add", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            }
           }
 
           // 3. Share Action
