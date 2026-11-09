@@ -519,6 +519,7 @@ object MarketplaceRepository {
           val latest = latestProducts[item.product.id]
           latest == null || (latest.availabilityKnown && !latest.inStock) ||
             (latest.foodSellingUnit != null && latest.dailyStatus != null && latest.dailyStatus != "available") ||
+            (latest.variantAvailability.isNotEmpty() && item.variantId.isNullOrBlank()) ||
             (!item.variantId.isNullOrBlank() && latest.variantAvailability.containsKey(item.variantId) && latest.variantAvailability[item.variantId] != true) ||
             (!item.variantId.isNullOrBlank() && latest.variantAvailability.isNotEmpty() && !latest.variantAvailability.containsKey(item.variantId))
         }
