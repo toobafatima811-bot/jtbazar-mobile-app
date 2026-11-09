@@ -419,6 +419,7 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
   var slug by remember { mutableStateOf(application.slug) }
   var description by remember { mutableStateOf(application.description) }
   var ownerName by remember { mutableStateOf(application.ownerFullName) }
+  var vendorType by remember { mutableStateOf(application.vendorType) }
   var cnic by remember { mutableStateOf(application.cnicNumber) }
   var phone by remember { mutableStateOf(application.phone) }
   var currentAddress by remember { mutableStateOf(application.currentAddress) }
@@ -432,6 +433,7 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
     VendorAdvancedField("Shop URL slug", slug) { slug = it }
     VendorAdvancedField("Shop description", description, 3) { description = it }
     VendorAdvancedField("Owner full legal name", ownerName) { ownerName = it }
+    VendorTypeDropdown(selectedType = vendorType, onTypeSelected = { vendorType = it })
     VendorAdvancedField("CNIC number (13 digits)", cnic) { cnic = it.filter(Char::isDigit).take(13) }
     VendorAdvancedField("Business phone", phone) { phone = it }
     VendorAdvancedField("Current address", currentAddress) { currentAddress = it }
@@ -448,7 +450,7 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
           require(cnic.length == 13 && phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Check CNIC and Pakistani mobile number." }
           require(currentAddress.trim().length >= 3 && completeAddress.trim().length >= 10 && locationText.trim().length >= 10) { "Complete all address fields." }
           VendorService.updateOwnShop(JSONObject().put("shop_name", shopName.trim()).put("slug", slug.trim())
-            .put("description", description.trim()).put("owner_full_name", ownerName.trim()).put("cnic_number", cnic)
+            .put("description", description.trim()).put("owner_full_name", ownerName.trim()).put("vendor_type", vendorType).put("cnic_number", cnic)
             .put("phone", phone.trim()).put("current_address", currentAddress.trim())
             .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim()))
           val updated = VendorService.resubmitApplication()
@@ -459,6 +461,52 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
       }
     }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) {
       Text(if (saving) "Submitting..." else "Save and resubmit application")
+    }
+  }
+}
+
+
+@Composable
+fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
+  val types = listOf(
+    "individual_seller" to "Individual Seller",
+    "registered_business" to "Registered Business",
+    "sole_proprietor" to "Sole Proprietor",
+    "partnership" to "Partnership",
+    "company" to "Company"
+  )
+  var expanded by remember { mutableStateOf(false) }
+  val selectedLabel = types.firstOrNull { it.first == selectedType }?.second ?: "Select vendor type"
+
+  ExposedDropdownMenuBox(
+    expanded = expanded,
+    onExpandedChange = { expanded = !expanded },
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    OutlinedTextField(
+      value = selectedLabel,
+      onValueChange = {},
+      readOnly = true,
+      label = { Text("Vendor type") },
+      placeholder = { Text("Select vendor type") },
+      trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+      modifier = Modifier.fillMaxWidth().menuAnchor(),
+      singleLine = true
+    )
+    ExposedDropdownMenu(
+      expanded = expanded,
+      onDismissRequest = { expanded = false }
+    ) {
+      types.forEach { (value, label) ->
+        DropdownMenuItem(
+          text = { Text(label) },
+          onClick = {
+            onTypeSelected(value)
+            expanded = false
+          },
+          contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+        )
+      }
     }
   }
 }
