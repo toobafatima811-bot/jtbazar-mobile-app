@@ -103,7 +103,7 @@ object VendorService {
     val countRaw = fail(SupabaseClient.get("product_images?product_id=eq.$productId&select=sort_order&order=sort_order.desc&limit=1"))
     val countRows = JSONArray(countRaw)
     val sort = if (countRows.length() > 0) countRows.getJSONObject(0).optInt("sort_order", -1) + 1 else 0
-    val body = JSONObject().put("product_id", productId).put("storage_path", path).put("image_url", url)
+    val body = JSONObject().put("product_id", productId).put("storage_path", path)
       .put("alt_text", altText.take(200)).put("sort_order", sort).put("is_primary", sort == 0)
     fail(SupabaseClient.post("product_images", body.toString(), preferHeader = "return=representation"))
     return url
