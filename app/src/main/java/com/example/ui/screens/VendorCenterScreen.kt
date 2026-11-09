@@ -204,6 +204,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 }
               }
             }
+            VendorAdvancedPanel(application!!) { refresh() }
             OutlinedButton(onClick = { refresh() }) { Text("Refresh dashboard") }
           }
           application != null -> {
@@ -211,6 +212,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             StatusPanel(application!!)
             Text("Your application is connected to the JTBazar website. Once approved, vendor tools will unlock here.", color = Color.Gray)
             if (application?.status == "rejected") Text("Reason: ${application?.rejectionReason ?: "Please review your application."}", color = MaterialTheme.colorScheme.error)
+            if (application?.status == "rejected") VendorApplicationResubmissionPanel(application!!) { application = it; info = "Application resubmitted." }
             OutlinedButton(onClick = { refresh() }) { Text("Refresh application status") }
           }
           else -> {
