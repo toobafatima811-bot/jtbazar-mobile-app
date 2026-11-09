@@ -14,6 +14,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
@@ -52,6 +56,16 @@ enum class AppScreen {
 
 @Composable
 fun MainApp() {
+  val lifecycleOwner = LocalLifecycleOwner.current
+  LaunchedEffect(lifecycleOwner) {
+    lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+      while (true) {
+        MarketplaceRepository.refreshLiveCatalog(showLoading = false)
+        delay(10_000)
+      }
+    }
+  }
+
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
