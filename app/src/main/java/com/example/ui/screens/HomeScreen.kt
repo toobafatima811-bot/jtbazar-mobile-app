@@ -182,35 +182,6 @@ fun HomeScreen(
         }
       }
 
-      // Approved marketplace promotions; no invented offers are displayed.
-      if (searchQuery.isBlank() && homepagePromotions.isNotEmpty()) {
-        item {
-          Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-          ) {
-            homepagePromotions.take(3).forEach { promotion ->
-              val image = promotion.bannerImageUrls.firstOrNull() ?: promotion.bannerImageUrl
-              if (image != null) {
-                Card(
-                  shape = RoundedCornerShape(14.dp),
-                  modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { onExploreCategoriesClick() }
-                ) {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(model = image, contentDescription = promotion.title, contentScale = ContentScale.Crop, modifier = Modifier.size(width = 104.dp, height = 88.dp))
-                    Column(modifier = Modifier.weight(1f).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                      Text(promotion.title, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                      promotion.description?.let { Text(it, fontSize = 11.sp, color = JTTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                      promotion.ctaText?.let { Text(it, fontSize = 11.sp, color = JTOrangeDark, fontWeight = FontWeight.Bold) }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
       if (searchQuery.isBlank()) {
         item {
           OutlinedButton(
@@ -479,6 +450,36 @@ fun HomeScreen(
           }
         }
       }
+
+      // Approved marketplace promotions; no invented offers are displayed.
+      if (searchQuery.isBlank() && homepagePromotions.isNotEmpty()) {
+        item {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            homepagePromotions.take(3).forEach { promotion ->
+              val image = promotion.bannerImageUrls.firstOrNull() ?: promotion.bannerImageUrl
+              if (image != null) {
+                Card(
+                  shape = RoundedCornerShape(14.dp),
+                  modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { onExploreCategoriesClick() }
+                ) {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(model = image, contentDescription = promotion.title, contentScale = ContentScale.Crop, modifier = Modifier.size(width = 104.dp, height = 88.dp))
+                    Column(modifier = Modifier.weight(1f).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                      Text(promotion.title, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                      promotion.description?.let { Text(it, fontSize = 11.sp, color = JTTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                      promotion.ctaText?.let { Text(it, fontSize = 11.sp, color = JTOrangeDark, fontWeight = FontWeight.Bold) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
 
       // New arrivals: same latest-published catalog ordering as the website.
       item {
