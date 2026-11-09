@@ -130,8 +130,16 @@ object SupabaseApiService {
         val variant = variants.optJSONObject(i) ?: continue
         if (!variant.optBoolean("is_active", true)) continue
         val label = variant.optString("option_label"); val value = variant.optString("option_value")
-        if (label.contains("color", true) || label.contains("colour", true)) { palettes.add(value); variantIds["color:" + value] = variant.optString("id") }
-        if (label.contains("size", true)) { sizes.add(value); variantIds["size:" + value] = variant.optString("id") }
+        val rawVariantId = variant.optString("id").takeIf { !variant.isNull("id") && it.isNotBlank() && it != "null" }
+        val validVariantId = rawVariantId?.takeIf { UUID_REGEX.matches(it) }
+        if (label.contains("color", true) || label.contains("colour", true)) {
+          palettes.add(value)
+          if (validVariantId != null) variantIds["color:" + value] = validVariantId
+        }
+        if (label.contains("size", true)) {
+          sizes.add(value)
+          if (validVariantId != null) variantIds["size:" + value] = validVariantId
+        }
       }
       val highlights = mutableListOf<String>(); val specs = obj.optJSONArray("specifications")
       if (specs != null) for (i in 0 until specs.length()) {
@@ -341,6 +349,8 @@ object SupabaseApiService {
     }
   }
 
+  private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+
   private fun normalizePakistaniMobile(value: String): String {
     val phone = value.trim()
     if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(phone)) throw IOException("Enter exactly 03001234567 or +923001234567.")
@@ -404,9 +414,17 @@ object SupabaseApiService {
       }
       val lines = JSONArray()
       items.forEach { item ->
+        val productId = item.productId.trim()
+        if (!UUID_REGEX.matches(productId)) {
+          throw IOException("A cart product has an invalid ID. Remove it and add the product again.")
+        }
+        val rawVariantId = item.variantId?.trim()?.takeIf { it.isNotBlank() && it != "null" }
+        if (rawVariantId != null && !UUID_REGEX.matches(rawVariantId)) {
+          throw IOException("The selected product option is outdated. Refresh the product, select its option again, and retry.")
+        }
         lines.put(JSONObject().apply {
-          put("product_id", item.productId)
-          if (!item.variantId.isNullOrBlank()) put("variant_id", item.variantId)
+          put("product_id", productId)
+          if (rawVariantId != null) put("variant_id", rawVariantId)
           put("quantity", item.quantity)
         })
       }
