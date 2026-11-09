@@ -446,7 +446,7 @@ object SupabaseAuthService {
    * Fetch customer profile from profiles table
    */
   suspend fun fetchProfile(userId: String): Result<SupabaseProfile> = withContext(Dispatchers.IO) {
-    val res = SupabaseClient.get("profiles?id=eq.$userId&select=id,full_name,phone,avatar_url,email")
+    val res = SupabaseClient.get("profiles?id=eq.$userId&select=id,full_name,phone,avatar_url")
     res.mapCatching { jsonStr ->
       val arr = JSONArray(jsonStr)
       if (arr.length() == 0) throw IOException("Profile not found")
