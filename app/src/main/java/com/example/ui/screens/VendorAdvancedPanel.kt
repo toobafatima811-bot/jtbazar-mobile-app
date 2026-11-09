@@ -155,7 +155,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             VendorService.updateOwnShop(JSONObject().put("shop_name", shopName.trim()).put("slug", slug.trim())
               .put("description", description.trim()).put("phone", phone.trim()).put("current_address", currentAddress.trim())
               .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim())
-              .put("shop_image_url", shopImageUrl.ifBlank { JSONObject.NULL })
+              .put("shop_image_url", if (shopImageUrl.isBlank()) JSONObject.NULL else shopImageUrl)
               .put("show_shop_on_map", showShopOnMap)
               .put("shop_lat", if (showShopOnMap) shopLat.toDoubleOrNull() ?: error("Enter a valid shop latitude.") else JSONObject.NULL)
               .put("shop_lng", if (showShopOnMap) shopLng.toDoubleOrNull() ?: error("Enter a valid shop longitude.") else JSONObject.NULL)
