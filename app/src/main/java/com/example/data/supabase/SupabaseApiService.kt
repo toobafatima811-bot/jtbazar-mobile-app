@@ -44,6 +44,24 @@ object SupabaseApiService {
         products.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
       }
       val idFilter = ids.joinToString(",")
+
+      // Resolve seller identity from the public shop directory, matching website seller_id joins.
+      val sellerIds = (0 until products.length()).mapNotNull { index ->
+        products.optJSONObject(index)?.optString("seller_id")?.takeIf { it.isNotBlank() && it != "null" }
+      }.toSet()
+      val publicShops = SupabaseClient.rpc("list_public_shops").getOrNull()?.let(::JSONArray)
+      val shopsById = mutableMapOf<String, JSONObject>()
+      if (publicShops != null) for (shopIndex in 0 until publicShops.length()) {
+        val shop = publicShops.optJSONObject(shopIndex) ?: continue
+        val shopId = shop.optString("id")
+        if (shopId in sellerIds) shopsById[shopId] = shop
+      }
+      for (productIndex in 0 until products.length()) {
+        val product = products.optJSONObject(productIndex) ?: continue
+        val sellerId = product.optString("seller_id")
+        val shop = shopsById[sellerId] ?: continue
+        product.put("seller", JSONObject().put("shop_name", shop.optString("shop_name", "JTBazar")))
+      }
       // Product media and variants are optional enrichment. A failure in one
       // enrichment endpoint must not hide the published product catalog.
       val imageJson = SupabaseClient.get(
@@ -156,7 +174,7 @@ object SupabaseApiService {
       }
       val foodUnit = obj.optString("food_selling_unit").takeIf { it.isNotBlank() && it != "null" }
       val dailyStatus = obj.optString("daily_status").takeIf { it.isNotBlank() && it != "null" }
-      SupabaseProductDto(id=id,title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=true,availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
+      SupabaseProductDto(id=id,sellerId=obj.optString("seller_id").takeIf { it.isNotBlank() && it != "null" },title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=true,availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
     }
   }
 
