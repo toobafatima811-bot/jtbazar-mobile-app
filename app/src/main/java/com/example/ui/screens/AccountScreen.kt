@@ -48,6 +48,7 @@ fun AccountScreen(
   onNavigateToSettings: () -> Unit,
   onNavigateToSecurity: () -> Unit,
   onNavigateToBudget: () -> Unit,
+  onNavigateToVendorCenter: () -> Unit,
   onCartClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -355,6 +356,14 @@ fun AccountScreen(
             subtitle = "App settings, notifications & version",
             onClick = onNavigateToSettings,
             tag = "menu_settings"
+          )
+          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+          AccountMenuItem(
+            icon = Icons.Filled.Storefront,
+            title = "Become a Vendor / Vendor Center",
+            subtitle = "Apply to sell or manage your approved shop",
+            onClick = { if (isLoggedIn) onNavigateToVendorCenter() else onNavigateToLogin() },
+            tag = "menu_vendor_center"
           )
           HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
           AccountMenuItem(
