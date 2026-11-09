@@ -1006,22 +1006,41 @@ fun ProductCard(
             }
           }
 
-          // Add to cart button
-          Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = JTOrange,
-            modifier = Modifier
-              .size(28.dp)
-              .clickable(onClick = onAddToCart)
-              .testTag("add_to_cart_${product.id}")
-          ) {
-            Box(contentAlignment = Alignment.Center) {
-              Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = "Add",
-                tint = Color.White,
-                modifier = Modifier.size(18.dp)
+          // Never offer add-to-cart for confirmed out-of-stock products or unavailable daily food.
+          val dailyState = product.dailyStatus?.trim()?.lowercase()
+          val isOutOfStock = (product.availabilityKnown && !product.isAvailable) ||
+            dailyState in setOf("out_of_stock", "out-of-stock", "unavailable", "not_available", "not available", "sold_out", "sold out", "closed")
+          if (isOutOfStock) {
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = Color(0xFFFFE4E6),
+              modifier = Modifier.testTag("out_of_stock_${product.id}")
+            ) {
+              Text(
+                text = "Out of Stock",
+                color = Color(0xFFBE123C),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)
               )
+            }
+          } else {
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = JTOrange,
+              modifier = Modifier
+                .size(28.dp)
+                .clickable(onClick = onAddToCart)
+                .testTag("add_to_cart_${product.id}")
+            ) {
+              Box(contentAlignment = Alignment.Center) {
+                Icon(
+                  imageVector = Icons.Filled.Add,
+                  contentDescription = "Add",
+                  tint = Color.White,
+                  modifier = Modifier.size(18.dp)
+                )
+              }
             }
           }
         }
