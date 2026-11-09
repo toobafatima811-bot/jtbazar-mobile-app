@@ -522,7 +522,10 @@ object MarketplaceRepository {
             (!item.variantId.isNullOrBlank() && latest.variantAvailability.containsKey(item.variantId) && latest.variantAvailability[item.variantId] != true) ||
             (!item.variantId.isNullOrBlank() && latest.variantAvailability.isNotEmpty() && !latest.variantAvailability.containsKey(item.variantId))
         }
-        if (unavailable != null) throw IllegalStateException("${unavailable.product.title} is out of stock or unavailable. Remove it from your cart before checkout.")
+        if (unavailable != null) throw IllegalStateException(unavailable.product.title + " is out of stock or unavailable. Remove it from your cart before checkout.")
+        if (items.any { latestProducts[it.product.id]?.foodSellingUnit != null } && (deliveryLat == null || deliveryLng == null)) {
+          throw IllegalStateException("Add your current location pin to confirm the 5 km food delivery area.")
+        }
         val currentUser = SupabaseClient.currentUser.value
         val dto = SupabaseOrderDto(id="", orderNumber="", userId=userId, subtotal=0, discount=0, deliveryFee=0, grandTotal=0, paymentMethod="cod", paymentStatus="pending", orderStatus="pending", deliveryNote=deliveryNote, addressName=address.name, addressPhone=address.phone, addressLine=address.addressLine, addressArea=address.area, addressCity=address.city, createdAt="", addressProvince=address.province, customerEmail=currentUser?.email, idempotencyKey=java.util.UUID.randomUUID().toString())
         val lines = items.map { item ->
