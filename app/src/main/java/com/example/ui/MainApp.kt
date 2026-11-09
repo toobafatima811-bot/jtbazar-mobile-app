@@ -60,7 +60,7 @@ fun MainApp() {
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
       while (true) {
-        MarketplaceRepository.refreshLiveCatalog(showLoading = false)
+        MarketplaceRepository.refreshLiveCatalog(showLoading = false, refreshUserData = false)
         delay(10_000)
       }
     }
