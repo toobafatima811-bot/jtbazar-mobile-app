@@ -273,6 +273,18 @@ fun CartCheckoutScreen(
                 Toast.makeText(context, "Please complete all required delivery fields.", Toast.LENGTH_SHORT).show()
                 return@CheckoutView
               }
+              if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(recipientPhone.trim())) {
+                Toast.makeText(context, "Enter exactly 03001234567 or +923001234567.", Toast.LENGTH_LONG).show()
+                return@CheckoutView
+              }
+              if (customerEmail.isNotBlank() && (customerEmail.trim().length > 254 || !android.util.Patterns.EMAIL_ADDRESS.matcher(customerEmail.trim()).matches())) {
+                Toast.makeText(context, "Enter a valid email address.", Toast.LENGTH_LONG).show()
+                return@CheckoutView
+              }
+              if (!codEnabled) {
+                Toast.makeText(context, "Cash on delivery is currently unavailable.", Toast.LENGTH_LONG).show()
+                return@CheckoutView
+              }
 
               // Update/Save Address
               val activeAddr = DeliveryAddress(
