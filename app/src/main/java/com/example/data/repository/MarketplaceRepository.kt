@@ -6,6 +6,7 @@ import com.example.data.model.*
 import com.example.data.supabase.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +23,9 @@ import org.json.JSONArray
  */
 object MarketplaceRepository {
   private const val TAG = "MarketplaceRepo"
-  private val scope = CoroutineScope(Dispatchers.Default)
+  // Repository state and completion callbacks are consumed by Compose UI.
+  // Keep them on Main; SupabaseApiService moves network calls to Dispatchers.IO.
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
   // Loading and error states
   private val _isLoading = MutableStateFlow(false)
