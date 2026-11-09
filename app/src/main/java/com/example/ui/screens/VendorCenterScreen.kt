@@ -466,50 +466,6 @@ private fun ShopLocationPickerDialog(
 }
 
 @Composable
-private fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
-  val types = listOf(
-    "individual_seller" to "Individual Seller",
-    "registered_business" to "Registered Business",
-    "sole_proprietor" to "Sole Proprietor",
-    "partnership" to "Partnership",
-    "company" to "Company"
-  )
-  var expanded by remember { mutableStateOf(false) }
-  val selectedLabel = types.firstOrNull { it.first == selectedType }?.second ?: "Individual Seller"
-
-  ExposedDropdownMenuBox(
-    expanded = expanded,
-    onExpandedChange = { expanded = !expanded },
-    modifier = Modifier.fillMaxWidth()
-  ) {
-    OutlinedTextField(
-      value = selectedLabel,
-      onValueChange = {},
-      readOnly = true,
-      label = { Text("Vendor type") },
-      trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-      modifier = Modifier.fillMaxWidth().menuAnchor(),
-      singleLine = true
-    )
-    ExposedDropdownMenu(
-      expanded = expanded,
-      onDismissRequest = { expanded = false }
-    ) {
-      types.forEach { (value, label) ->
-        DropdownMenuItem(
-          text = { Text(label) },
-          onClick = {
-            onTypeSelected(value)
-            expanded = false
-          },
-          contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-        )
-      }
-    }
-  }
-}
-
-@Composable
 private fun VendorField(label: String, value: String, minLines: Int = 1, onChange: (String) -> Unit) {
   OutlinedTextField(value = value, onValueChange = onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = minLines, singleLine = minLines == 1)
 }
