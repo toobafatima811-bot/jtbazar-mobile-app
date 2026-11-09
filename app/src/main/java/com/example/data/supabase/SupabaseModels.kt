@@ -27,6 +27,7 @@ data class SupabaseProfile(
 )
 
 data class SupabaseProductDto(
+  sellerId: String? = null,
   val id: String,
   val title: String,
   val vendor: String = "JTBazar Official",
