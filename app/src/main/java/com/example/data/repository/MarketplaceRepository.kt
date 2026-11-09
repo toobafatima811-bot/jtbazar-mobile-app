@@ -443,7 +443,8 @@ object MarketplaceRepository {
             )
           }
           _products.value = mappedProducts
-          _selectedProduct.value = _selectedProduct.value?.let { selected -> mappedProducts.firstOrNull { it.id == selected.id } } ?: mappedProducts.firstOrNull()
+          val selectedProductId = _selectedProduct.value?.id
+          _selectedProduct.value = if (selectedProductId == null) mappedProducts.firstOrNull() else mappedProducts.firstOrNull { it.id == selectedProductId }
           _cartItems.update { cart -> cart.map { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } ?: item } }
           updateCartCount()
           if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
