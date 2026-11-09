@@ -1,5 +1,6 @@
 package com.example.data.supabase
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,11 @@ import java.util.concurrent.TimeUnit
 object SupabaseClient {
   private const val TAG = "SupabaseClient"
   private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+  @Volatile private var appContext: Context? = null
+
+  fun initialize(context: Context) { appContext = context.applicationContext }
+  fun preferences(name: String) = appContext?.getSharedPreferences(name, Context.MODE_PRIVATE)
 
   private val _session = MutableStateFlow<SupabaseSession?>(null)
   val session: StateFlow<SupabaseSession?> = _session.asStateFlow()
