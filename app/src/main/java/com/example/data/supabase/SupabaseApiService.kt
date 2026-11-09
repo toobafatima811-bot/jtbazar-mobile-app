@@ -224,7 +224,7 @@ object SupabaseApiService {
   suspend fun fetchActivePromotions(position: String? = null): Result<List<SupabasePromotionDto>> = withContext(Dispatchers.IO) {
     try {
       val positionFilter = position?.takeIf { it.isNotBlank() }?.let { "&display_position=eq.${URLEncoder.encode(it, "UTF-8")}" } ?: ""
-      SupabaseClient.get("promotions?select=id,title,description,banner_image_url,banner_image_urls,cta_text,cta_destination,display_position,priority&status=eq.approved&order=priority.desc$positionFilter")
+      SupabaseClient.get("promotions?select=id,title,description,banner_image_url,banner_image_urls,cta_text,cta_destination,display_position,priority,target_platform,campaign_type,show_on_launch,starts_at,ends_at&status=eq.approved&order=priority.desc$positionFilter")
         .mapCatching { json ->
           val rows = JSONArray(json)
           (0 until rows.length()).mapNotNull { index ->
@@ -240,7 +240,12 @@ object SupabaseApiService {
               ctaText = row.optString("cta_text").takeIf { it.isNotBlank() },
               ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() },
               displayPosition = row.optString("display_position"),
-              priority = row.optInt("priority")
+              priority = row.optInt("priority"),
+              targetPlatform = row.optString("target_platform", "both"),
+              campaignType = row.optString("campaign_type", "banner"),
+              showOnLaunch = row.optBoolean("show_on_launch", false),
+              startsAt = row.optString("starts_at").takeIf { it.isNotBlank() && it != "null" },
+              endsAt = row.optString("ends_at").takeIf { it.isNotBlank() && it != "null" }
             )
           }
         }
