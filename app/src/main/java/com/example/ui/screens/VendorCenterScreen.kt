@@ -42,7 +42,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var orders by remember { mutableStateOf(JSONArray()) }
   var loading by remember { mutableStateOf(true) }
   var saving by remember { mutableStateOf(false) }
-  var error by remember { mutableStateOf("") }
+  var errorMessage by remember { mutableStateOf("") }
   var info by remember { mutableStateOf("") }
   var shopName by remember { mutableStateOf("") }
   var description by remember { mutableStateOf("") }
@@ -67,7 +67,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   fun refresh() {
     scope.launch {
       loading = true
-      error = ""
+      errorMessage = ""
       try {
         application = VendorService.getOwnApplication()
         isVendor = VendorService.isVendor()
@@ -75,7 +75,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
           products = VendorService.listProducts()
           orders = VendorService.listOrders()
         }
-      } catch (e: Exception) { error = e.message ?: "Vendor information could not be loaded." }
+      } catch (e: Exception) { errorMessage = e.message ?: "Vendor information could not be loaded." }
       finally { loading = false }
     }
   }
@@ -95,12 +95,12 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var pendingDoc by remember { mutableStateOf("verification") }
   val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
     if (uri != null) scope.launch {
-      saving = true; error = ""; info = ""
+      saving = true; errorMessage = ""; info = ""
       try {
         val path = upload(uri, pendingDoc)
         when (pendingDoc) { "verification" -> verificationPath = path; "cnic-front" -> frontPath = path; "cnic-back" -> backPath = path }
         info = "Document uploaded securely."
-      } catch (e: Exception) { error = e.message ?: "Document upload failed." }
+      } catch (e: Exception) { errorMessage = e.message ?: "Document upload failed." }
       finally { saving = false }
     }
   }
@@ -119,7 +119,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = JTOrange) }
     } else {
       Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+        if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
         if (info.isNotBlank()) Text(info, color = Color(0xFF16803C))
         when {
           isVendor && application?.status == "approved" -> {
@@ -141,7 +141,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               VendorField("Initial stock", productStock) { productStock = it }
               Button(enabled = !saving, onClick = {
                 scope.launch {
-                  saving = true; error = ""; info = ""
+                  saving = true; errorMessage = ""; info = ""
                   try {
                     val name = productName.trim()
                     require(name.length >= 2) { "Enter a product name." }
@@ -153,7 +153,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                     productName = ""; productDescription = ""; productPrice = ""; productStock = "1"; showProductForm = false
                     info = "Product submitted. It will follow JTBazar's product review and publishing rules."
                     products = VendorService.listProducts()
-                  } catch (e: Exception) { error = e.message ?: "Product could not be created." }
+                  } catch (e: Exception) { errorMessage = e.message ?: "Product could not be created." }
                   finally { saving = false }
                 }
               }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Submit product") }
@@ -172,7 +172,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                     Text(if (hidden) "Hidden" else "Visible", color = if (hidden) Color.Gray else Color(0xFF16803C))
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = {
-                      scope.launch { saving = true; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { error = e.message ?: "Visibility update failed." } finally { saving = false } }
+                      scope.launch { saving = true; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { errorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
                     }) { Text(if (hidden) "Show" else "Hide") }
                   }
                 }
@@ -193,7 +193,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                   Text("Order ${o.optString("order_number","")}  •  Qty: ${o.optString("quantity","1")}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                   Text("Status: ${o.optString("status","processing")}", style = MaterialTheme.typography.bodySmall)
                   Button(enabled = !saving && orderId.isNotBlank() && o.optString("status") != "ready_for_pickup", onClick = {
-                    scope.launch { saving = true; try { VendorService.markOrderReady(orderId); info = "Marked ready for JTBazar pickup."; orders = VendorService.listOrders() } catch (e: Exception) { error = e.message ?: "Could not update order." } finally { saving = false } }
+                    scope.launch { saving = true; try { VendorService.markOrderReady(orderId); info = "Marked ready for JTBazar pickup."; orders = VendorService.listOrders() } catch (e: Exception) { errorMessage = e.message ?: "Could not update order." } finally { saving = false } }
                   }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Ready for pickup") }
                 }
               }
@@ -227,7 +227,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             DocumentButton("CNIC back image", backPath != null) { pendingDoc = "cnic-back"; documentPicker.launch("image/*") }
             Button(enabled = !saving, onClick = {
               scope.launch {
-                saving = true; error = ""; info = ""
+                saving = true; errorMessage = ""; info = ""
                 try {
                   val u = user ?: error("Please sign in again.")
                   require(shopName.trim().length >= 2) { "Enter a valid shop name." }
@@ -250,7 +250,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                     .put("shop_location_text", shopLocation.trim()).put("shop_lat", lat).put("shop_lng", lng).put("show_shop_on_map", true)
                   application = VendorService.submitApplication(body)
                   info = "Application submitted successfully. JTBazar admin review is pending."
-                } catch (e: Exception) { error = e.message ?: "Application could not be submitted." }
+                } catch (e: Exception) { errorMessage = e.message ?: "Application could not be submitted." }
                 finally { saving = false }
               }
             }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
