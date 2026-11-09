@@ -466,6 +466,7 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
   val types = listOf(
