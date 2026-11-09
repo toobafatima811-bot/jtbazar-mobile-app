@@ -156,7 +156,7 @@ fun HomeScreen(
   }
 
   Scaffold(
-    containerColor = Color.White,
+    containerColor = Color(0xFFFFFCF9),
     topBar = {
       JTBazarTopBar(
         onCartClick = onCartClick,
@@ -171,6 +171,7 @@ fun HomeScreen(
     LazyColumn(
       modifier = Modifier
         .fillMaxSize()
+        .background(Color(0xFFFFFCF9))
         .padding(paddingValues),
       contentPadding = PaddingValues(bottom = 24.dp)
     ) {
@@ -204,8 +205,9 @@ fun HomeScreen(
         item {
           Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F2EA)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, JTOrangeBorder.copy(alpha = 0.75f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             modifier = Modifier
               .fillMaxWidth()
               .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -214,6 +216,7 @@ fun HomeScreen(
               Column(
                 modifier = Modifier
                   .fillMaxWidth()
+                  .background(Brush.linearGradient(listOf(Color(0xFFFFF1E6), Color.White)))
                   .padding(horizontal = 20.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
               ) {
@@ -262,7 +265,7 @@ fun HomeScreen(
                         onExploreCategoriesClick()
                       }
                     },
-                    shape = RoundedCornerShape(7.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White)
                   ) {
                     Text(activeHero?.ctaText?.takeIf { it.isNotBlank() } ?: "Start Shopping", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -326,6 +329,9 @@ fun HomeScreen(
         item {
           OutlinedButton(
             onClick = onExploreShopsClick,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = JTOrangeDark),
+            border = androidx.compose.foundation.BorderStroke(1.dp, JTOrangeBorder),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
           ) {
             Icon(Icons.Filled.Storefront, contentDescription = null)
@@ -395,7 +401,8 @@ fun HomeScreen(
                     modifier = Modifier
                       .size(58.dp)
                       .clip(RoundedCornerShape(16.dp))
-                      .background(JTSurfaceVariant),
+                      .background(JTOrangeContainer)
+                      .border(1.dp, JTOrangeBorder.copy(alpha = 0.65f), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                   ) {
                     if (!category.imageUrl.isNullOrBlank()) {
@@ -785,8 +792,8 @@ fun SearchInputBar(
   val keyboardController = LocalSoftwareKeyboardController.current
   Surface(
     shape = RoundedCornerShape(24.dp),
-    color = JTSurfaceVariant,
-    modifier = modifier.height(48.dp)
+    color = Color(0xFFFFF7F1),
+    modifier = modifier.height(48.dp).border(1.dp, JTOrangeBorder.copy(alpha = 0.55f), RoundedCornerShape(24.dp))
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
