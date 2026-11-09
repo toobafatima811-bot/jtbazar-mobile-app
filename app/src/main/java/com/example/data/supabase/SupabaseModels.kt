@@ -57,7 +57,11 @@ data class SupabaseProductDto(
   val isArtisanCollection: Boolean = false,
   val isFeatured: Boolean = false,
   val isBestSeller: Boolean = false,
-  val isNewArrival: Boolean = false
+  val isNewArrival: Boolean = false,
+  val availabilityKnown: Boolean = false,
+  val dailyStatus: String? = null,
+  val foodSellingUnit: String? = null,
+  val variantAvailability: Map<String, Boolean> = emptyMap()
 )
 
 data class SupabaseCategoryDto(
