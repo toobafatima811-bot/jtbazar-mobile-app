@@ -444,7 +444,7 @@ object MarketplaceRepository {
           }
           _products.value = mappedProducts
           _selectedProduct.value = _selectedProduct.value?.let { selected -> mappedProducts.firstOrNull { it.id == selected.id } } ?: mappedProducts.firstOrNull()
-          _cartItems.update { cart -> cart.mapNotNull { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } } }
+          _cartItems.update { cart -> cart.map { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } ?: item } }
           updateCartCount()
           if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
           Log.d(TAG, "Loaded ${mappedProducts.size} live products from Supabase")
