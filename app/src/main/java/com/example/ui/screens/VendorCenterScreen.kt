@@ -174,11 +174,11 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               val p = products.optJSONObject(i) ?: continue
               val id = p.optString("id")
               val name = p.optString("name", "Product")
-              val hidden = p.optBoolean("is_hidden", false)
+              val hidden = p.optBoolean("vendor_hidden", p.optBoolean("is_hidden", false))
               Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                   Text(name, fontWeight = FontWeight.SemiBold)
-                  Text("PKR ${p.optString("price","0")}  •  ${p.optString("status","draft")}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                  Text("PKR ${p.optString("price","0")}  •  ${p.optString("publication_status", p.optString("status","draft"))}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                   Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(if (hidden) "Hidden" else "Visible", color = if (hidden) Color.Gray else Color(0xFF16803C))
                     Spacer(Modifier.weight(1f))
