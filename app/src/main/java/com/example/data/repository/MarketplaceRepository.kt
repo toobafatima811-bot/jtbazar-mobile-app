@@ -111,6 +111,63 @@ object MarketplaceRepository {
     _cartCount.value = _cartItems.value.sumOf { it.quantity }
   }
 
+  private const val GUEST_PREFS = "jtbazar_guest_shopping"
+  private const val GUEST_CART = "guest_cart"
+  private const val GUEST_WISHLIST = "guest_wishlist"
+  private fun guestPrefs() = SupabaseClient.preferences(GUEST_PREFS)
+  private fun persistGuestCart() {
+    if (SupabaseClient.currentUserId != null) return
+    val rows = JSONArray()
+    _cartItems.value.forEach { item -> rows.put(org.json.JSONObject().apply { put("product_id", item.product.id); put("quantity", item.quantity); put("palette", item.selectedPalette); put("size", item.selectedSize) }) }
+    guestPrefs()?.edit()?.putString(GUEST_CART, rows.toString())?.apply()
+  }
+  private fun persistGuestWishlist() {
+    if (SupabaseClient.currentUserId != null) return
+    val ids = JSONArray()
+    _products.value.filter { it.isWishlisted }.forEach { ids.put(it.id) }
+    guestPrefs()?.edit()?.putString(GUEST_WISHLIST, ids.toString())?.apply()
+  }
+  private fun restoreGuestShoppingData() {
+    if (SupabaseClient.currentUserId != null) return
+    val prefs = guestPrefs() ?: return
+    val cartRows = JSONArray(prefs.getString(GUEST_CART, "[]") ?: "[]")
+    val restored = (0 until cartRows.length()).mapNotNull { index ->
+      val row = cartRows.optJSONObject(index) ?: return@mapNotNull null
+      val productId = row.optString("product_id")
+      val product = _products.value.firstOrNull { it.id == productId } ?: return@mapNotNull null
+      val palette = row.optString("palette").takeIf { it.isNotBlank() && it != "null" }
+      val size = row.optString("size").takeIf { it.isNotBlank() && it != "null" }
+      val variantId = if (!size.isNullOrBlank()) product.variantIds["size:$size"] else if (!palette.isNullOrBlank()) product.variantIds["color:$palette"] else null
+      CartItem(id="cart_guest_${productId}_${index}", product=product, quantity=row.optInt("quantity", 1), selectedPalette=palette, selectedSize=size, variantId=variantId)
+    }
+    if (restored.isNotEmpty()) { _cartItems.value = (restored + _cartItems.value).distinctBy { it.product.id to it.variantId }; updateCartCount() }
+    val wishlistRows = JSONArray(prefs.getString(GUEST_WISHLIST, "[]") ?: "[]")
+    val ids = (0 until wishlistRows.length()).mapNotNull { wishlistRows.optString(it).takeIf(String::isNotBlank) }.toSet()
+    if (ids.isNotEmpty()) _products.update { list -> list.map { it.copy(isWishlisted = it.id in ids) } }
+  }
+  private suspend fun mergeGuestShoppingData(userId: String) {
+    val prefs = guestPrefs() ?: return
+    val cartRows = JSONArray(prefs.getString(GUEST_CART, "[]") ?: "[]")
+    var cartMerged = true
+    for (index in 0 until cartRows.length()) {
+      val row = cartRows.optJSONObject(index) ?: continue
+      val productId = row.optString("product_id")
+      val product = _products.value.firstOrNull { it.id == productId } ?: continue
+      val palette = row.optString("palette").takeIf { it.isNotBlank() && it != "null" }
+      val size = row.optString("size").takeIf { it.isNotBlank() && it != "null" }
+      val variantId = if (!size.isNullOrBlank()) product.variantIds["size:$size"] else if (!palette.isNullOrBlank()) product.variantIds["color:$palette"] else null
+      if (SupabaseApiService.addToCart(userId, productId, row.optInt("quantity", 1), variantId).isFailure) cartMerged = false
+    }
+    if (cartMerged) prefs.edit().remove(GUEST_CART).apply()
+    val wishlistRows = JSONArray(prefs.getString(GUEST_WISHLIST, "[]") ?: "[]")
+    var wishlistMerged = true
+    for (index in 0 until wishlistRows.length()) {
+      val id = wishlistRows.optString(index)
+      if (id.isNotBlank() && SupabaseApiService.addToWishlist(userId, id).isFailure) wishlistMerged = false
+    }
+    if (wishlistMerged) prefs.edit().remove(GUEST_WISHLIST).apply()
+  }
+
   fun addToCart(product: Product, quantity: Int = 1, palette: String? = null, size: String? = null) {
     val variantId = if (!size.isNullOrBlank()) product.variantIds["size:" + size]
       else if (!palette.isNullOrBlank()) product.variantIds["color:" + palette] else null
@@ -140,6 +197,7 @@ object MarketplaceRepository {
     }
     updateCartCount()
     val userId = SupabaseClient.currentUserId
+    if (userId == null) persistGuestCart()
     if (userId != null) scope.launch {
       SupabaseApiService.addToCart(userId, product.id, quantity, variantId)
         .onSuccess { remoteId ->
@@ -164,6 +222,7 @@ object MarketplaceRepository {
     }
     updateCartCount()
     val userId = SupabaseClient.currentUserId
+    if (userId == null) persistGuestCart()
     if (userId != null && !itemId.startsWith("cart_")) scope.launch {
       SupabaseApiService.updateCartQuantity(itemId, quantity).onFailure { _errorMessage.value = it.message }
     }
@@ -182,6 +241,7 @@ object MarketplaceRepository {
     _cartItems.value = emptyList()
     updateCartCount()
     val userId = SupabaseClient.currentUserId
+    if (userId == null) persistGuestCart()
     if (userId != null) scope.launch {
       SupabaseApiService.clearCart(userId).onFailure { _errorMessage.value = it.message }
     }
@@ -208,6 +268,7 @@ object MarketplaceRepository {
     }
 
     val userId = SupabaseClient.currentUserId
+    if (userId == null) persistGuestWishlist()
     if (userId != null) {
       scope.launch {
         val result = if (newWishlistedState) {
@@ -372,6 +433,7 @@ object MarketplaceRepository {
             )
           }
           _products.value = mappedProducts
+          if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
           if (_selectedProduct.value == null && mappedProducts.isNotEmpty()) {
             _selectedProduct.value = mappedProducts.first()
           }
@@ -572,7 +634,8 @@ object MarketplaceRepository {
       _activeOrder.value = null
       _notifications.value = emptyList()
       try {
-        // Load persisted cart and wishlist for this signed-in customer.
+        // Merge anonymous shopping choices into the account before loading remote state.
+        mergeGuestShoppingData(userId)
         val cartRes = SupabaseApiService.fetchCart(userId)
         if (cartRes.isSuccess) {
           val rows = JSONArray(cartRes.getOrNull() ?: "[]")
