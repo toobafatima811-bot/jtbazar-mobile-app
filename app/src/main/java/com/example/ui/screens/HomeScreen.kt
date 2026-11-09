@@ -198,83 +198,6 @@ fun HomeScreen(
         }
       }
 
-      // Approved vendor shops are shown directly on the home page.
-      if (searchQuery.isBlank()) {
-        item {
-          Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-          ) {
-            Row(
-              modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTOrange, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(7.dp))
-                Text("Trusted Vendor Shops", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = JTTextPrimary)
-              }
-              Text(
-                "View All",
-                color = JTPurplePrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { onExploreShopsClick() }.padding(4.dp)
-              )
-            }
-            if (trustedShops.isEmpty()) {
-              Text(
-                "Trusted shops will appear here when vendors are approved.",
-                fontSize = 12.sp,
-                color = JTTextSecondary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-              )
-            } else {
-              LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-              ) {
-                items(trustedShops, key = { it.id }) { shop ->
-                  Card(
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    modifier = Modifier.width(148.dp).clickable { onExploreShopsClick() }
-                  ) {
-                    Column(
-                      modifier = Modifier.fillMaxWidth().padding(10.dp),
-                      horizontalAlignment = Alignment.CenterHorizontally,
-                      verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                      if (!shop.logoUrl.isNullOrBlank()) {
-                        AsyncImage(
-                          model = shop.logoUrl,
-                          contentDescription = shop.name,
-                          contentScale = ContentScale.Crop,
-                          modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp))
-                        )
-                      } else {
-                        Box(
-                          modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).background(JTSurfaceVariant),
-                          contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTTextSecondary, modifier = Modifier.size(30.dp)) }
-                      }
-                      Text(shop.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                      Text(
-                        "${shop.productCount} products",
-                        fontSize = 10.sp,
-                        color = JTTextSecondary
-                      )
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
       // 4. Shop by Category (Horizontal Row)
       if (searchQuery.isBlank()) {
       item {
@@ -373,6 +296,84 @@ fun HomeScreen(
       }
 
       }
+
+      // Approved vendor shops are shown directly on the home page.
+      if (searchQuery.isBlank()) {
+        item {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTOrange, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Trusted Vendor Shops", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = JTTextPrimary)
+              }
+              Text(
+                "View All",
+                color = JTPurplePrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onExploreShopsClick() }.padding(4.dp)
+              )
+            }
+            if (trustedShops.isEmpty()) {
+              Text(
+                "Trusted shops will appear here when vendors are approved.",
+                fontSize = 12.sp,
+                color = JTTextSecondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+              )
+            } else {
+              LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+              ) {
+                items(trustedShops, key = { it.id }) { shop ->
+                  Card(
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier.width(148.dp).clickable { onExploreShopsClick() }
+                  ) {
+                    Column(
+                      modifier = Modifier.fillMaxWidth().padding(10.dp),
+                      horizontalAlignment = Alignment.CenterHorizontally,
+                      verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                      if (!shop.logoUrl.isNullOrBlank()) {
+                        AsyncImage(
+                          model = shop.logoUrl,
+                          contentDescription = shop.name,
+                          contentScale = ContentScale.Crop,
+                          modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp))
+                        )
+                      } else {
+                        Box(
+                          modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).background(JTSurfaceVariant),
+                          contentAlignment = Alignment.Center
+                        ) { Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTTextSecondary, modifier = Modifier.size(30.dp)) }
+                      }
+                      Text(shop.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                      Text(
+                        "${shop.productCount} products",
+                        fontSize = 10.sp,
+                        color = JTTextSecondary
+                      )
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
 
       // 5. Popular Products Section Header
       item {
