@@ -55,6 +55,7 @@ fun HomeScreen(
   onCartClick: () -> Unit,
   onAccountClick: () -> Unit,
   onBudgetClick: () -> Unit = {},
+  onExploreShopsClick: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val products by MarketplaceRepository.products.collectAsState()
@@ -206,6 +207,19 @@ fun HomeScreen(
                 }
               }
             }
+          }
+        }
+      }
+
+      if (searchQuery.isBlank()) {
+        item {
+          OutlinedButton(
+            onClick = onExploreShopsClick,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+          ) {
+            Icon(Icons.Filled.Storefront, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Browse Trusted Shops")
           }
         }
       }
