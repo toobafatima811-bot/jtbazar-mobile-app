@@ -204,7 +204,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 }
               }
             }
-            VendorAdvancedPanel(application!!) { refresh() }
+            VendorAdvancedPanel(application!!, products) { refresh() }
             OutlinedButton(onClick = { refresh() }) { Text("Refresh dashboard") }
           }
           application != null -> {
