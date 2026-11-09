@@ -717,7 +717,7 @@ object MarketplaceRepository {
 
     // Observe customer authentication session
     scope.launch {
-      SupabaseClient.session.drop(1).collect { session ->
+      SupabaseClient.session.collect { session ->
         if (session != null) {
           loadUserData(session.user.id)
         } else {
