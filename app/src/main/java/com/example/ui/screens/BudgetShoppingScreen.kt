@@ -240,108 +240,16 @@ fun BudgetShoppingScreen(
           verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
           items(filteredProducts, key = { it.id }) { product ->
-            Surface(
-              shape = RoundedCornerShape(14.dp),
-              color = JTCardBg,
-              border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-              modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onProductClick(product) }
-                .testTag("budget_product_${product.id}")
-            ) {
-              Column(modifier = Modifier.padding(10.dp)) {
-                Box(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(JTSurfaceVariant)
-                ) {
-                  if (!product.imageUrl.isNullOrBlank()) {
-                    AsyncImage(
-                      model = product.imageUrl,
-                      contentDescription = product.title,
-                      contentScale = ContentScale.Crop,
-                      modifier = Modifier.fillMaxSize()
-                    )
-                  } else {
-                    Image(
-                      painter = painterResource(id = R.drawable.ic_launcher_background),
-                      contentDescription = product.title,
-                      contentScale = ContentScale.Crop,
-                      modifier = Modifier.fillMaxSize()
-                    )
-                  }
-
-                  // Wishlist Icon button
-                  IconButton(
-                    onClick = { MarketplaceRepository.toggleWishlist(product.id) },
-                    modifier = Modifier
-                      .align(Alignment.TopEnd)
-                      .padding(4.dp)
-                      .size(32.dp)
-                      .background(Color.White.copy(alpha = 0.85f), CircleShape)
-                  ) {
-                    Icon(
-                      imageVector = if (product.isWishlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                      contentDescription = "Wishlist",
-                      tint = if (product.isWishlisted) Color.Red else JTTextSecondary,
-                      modifier = Modifier.size(18.dp)
-                    )
-                  }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                  text = product.title,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 12.sp,
-                  color = JTTextPrimary,
-                  maxLines = 2,
-                  overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                  text = product.vendor,
-                  fontSize = 10.sp,
-                  color = JTTextSecondary,
-                  maxLines = 1
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically
-                ) {
-                  Text(
-                    text = "Rs. ${String.format("%,d", product.price)}",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = JTPurplePrimary
-                  )
-
-                  IconButton(
-                    onClick = {
-                      MarketplaceRepository.addToCart(product, 1)
-                      Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier
-                      .size(30.dp)
-                      .background(JTOrange, RoundedCornerShape(8.dp))
-                  ) {
-                    Icon(
-                      imageVector = Icons.Filled.AddShoppingCart,
-                      contentDescription = "Add to Cart",
-                      tint = Color.White,
-                      modifier = Modifier.size(16.dp)
-                    )
-                  }
-                }
-              }
-            }
+            ProductCard(
+              product = product,
+              onProductClick = { onProductClick(product) },
+              onAddToCart = {
+                MarketplaceRepository.addToCart(product, 1)
+                Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
+              },
+              onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
+              modifier = Modifier.testTag("budget_product_${product.id}")
+            )
           }
         }
       }
