@@ -44,7 +44,12 @@ data class Product(
   val isArtisanCollection: Boolean = false,
   val isFeatured: Boolean = false,
   val isNewArrival: Boolean = false,
-  val isWishlisted: Boolean = false
+  val isWishlisted: Boolean = false,
+  val isAvailable: Boolean = true,
+  val availabilityKnown: Boolean = false,
+  val dailyStatus: String? = null,
+  val foodSellingUnit: String? = null,
+  val variantAvailability: Map<String, Boolean> = emptyMap()
 )
 
 data class CartItem(
