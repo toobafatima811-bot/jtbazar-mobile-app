@@ -1,6 +1,9 @@
 package com.example
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -12,6 +15,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.ui.MainApp
+import com.example.notifications.FirebasePushManager
+import com.example.data.supabase.SupabaseClient
 import kotlinx.coroutines.launch
 import com.example.ui.theme.JTBazarTheme
 
@@ -19,8 +24,18 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
+    FirebasePushManager.ensureNotificationChannel(applicationContext)
+
     // Initialize Supabase session persistence
     com.example.data.supabase.SupabaseAuthService.init(applicationContext)
+
+    lifecycleScope.launch {
+      SupabaseClient.session.collect { session ->
+        if (session != null && FirebasePushManager.hasNotificationPermission(this@MainActivity)) {
+          FirebasePushManager.register(applicationContext)
+        }
+      }
+    }
 
     enableEdgeToEdge(
       statusBarStyle = SystemBarStyle.light(
@@ -45,7 +60,17 @@ class MainActivity : ComponentActivity() {
       }
     }
 
+    if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7301)
+    }
     handleGoogleOAuthIntent(intent)
+  }
+
+  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    if (requestCode == 7301 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+      lifecycleScope.launch { FirebasePushManager.register(applicationContext) }
+    }
   }
 
   override fun onNewIntent(intent: Intent) {

@@ -17,6 +17,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
+import com.example.notifications.FirebasePushManager
 
 /**
  * Service managing Supabase GoTrue authentication and user profile synchronization.
@@ -517,6 +518,9 @@ object SupabaseAuthService {
         .url("${SupabaseConfig.authUrl}/logout")
         .post("{}".toRequestBody(JSON_MEDIA_TYPE))
         .build()
+
+      // Remove this device's push token before clearing the authenticated session.
+      if (context != null) FirebasePushManager.unregister(context.applicationContext, SupabaseClient.session.value?.accessToken)
 
       // We attempt the backend call, but always clear local session
       try {
