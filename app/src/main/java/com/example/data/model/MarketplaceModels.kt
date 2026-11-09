@@ -15,7 +15,7 @@ data class SizeOption(
 )
 
 data class Product(
-  sellerId: String? = null
+  val sellerId: String? = null,
   val id: String,
   val title: String,
   val vendor: String,

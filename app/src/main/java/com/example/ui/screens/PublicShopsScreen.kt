@@ -50,6 +50,11 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
     } else {
       LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(shops, key = { it.id }) { shop ->
+          val shopProducts = remember(products, shop.id, shop.name) {
+            products.filter { product ->
+              product.sellerId == shop.id || (product.sellerId.isNullOrBlank() && product.vendor.equals(shop.name, ignoreCase = true))
+            }
+          }
           var sellerReviews by remember(shop.id) { mutableStateOf(JSONArray()) }
           var reviewRating by remember(shop.id) { mutableIntStateOf(5) }
           var reviewComment by remember(shop.id) { mutableStateOf("") }
@@ -102,9 +107,6 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
                   }
                 } else {
                   Text("Sign in and place a delivered order from this shop to leave a review.", style = MaterialTheme.typography.bodySmall)
-                }
-                val shopProducts = products.filter { product ->
-                  product.sellerId == shop.id || (product.sellerId.isNullOrBlank() && product.vendor.equals(shop.name, ignoreCase = true))
                 }
                 if (shopProducts.isEmpty()) {
                   Text("No published products from this shop are currently loaded.", style = MaterialTheme.typography.bodySmall)

@@ -4,11 +4,33 @@ import com.example.data.model.DeliveryAddress
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.AfterClass
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.BeforeClass
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ExampleUnitTest {
+
+  companion object {
+    @BeforeClass
+    @JvmStatic
+    fun setUpClass() {
+      Dispatchers.setMain(UnconfinedTestDispatcher())
+    }
+
+    @AfterClass
+    @JvmStatic
+    fun tearDownClass() {
+      Dispatchers.resetMain()
+    }
+  }
 
   private val testProduct = Product(
     id = "prod_test_001",
