@@ -70,6 +70,37 @@ fun HomeScreen(
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
 
+  var dismissedLaunchAdId by remember { mutableStateOf<String?>(null) }
+  val nowIso = remember { java.time.Instant.now().toString() }
+  val launchAd = homepagePromotions.firstOrNull { campaign ->
+    campaign.campaignType == "popup" && campaign.showOnLaunch &&
+      (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") &&
+      (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) &&
+      (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso)
+  }
+  if (launchAd != null && dismissedLaunchAdId != launchAd.id) {
+    AlertDialog(
+      onDismissRequest = { dismissedLaunchAdId = launchAd.id },
+      title = { Text(launchAd.title) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          (launchAd.bannerImageUrls.firstOrNull() ?: launchAd.bannerImageUrl)?.let { imageUrl ->
+            AsyncImage(model = imageUrl, contentDescription = launchAd.title, modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp), contentScale = ContentScale.Fit)
+          }
+          launchAd.description?.let { Text(it) }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { dismissedLaunchAdId = launchAd.id }) {
+          Text(launchAd.ctaText ?: "Continue shopping")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { dismissedLaunchAdId = launchAd.id }) { Text("Close") }
+      }
+    )
+  }
+
   var showAddressDialog by remember { mutableStateOf(false) }
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
   var searchQuery by remember { mutableStateOf("") }
