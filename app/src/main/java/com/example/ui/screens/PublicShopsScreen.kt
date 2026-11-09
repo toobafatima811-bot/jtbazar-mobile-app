@@ -18,11 +18,18 @@ import androidx.compose.ui.unit.dp
 import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.supabase.SupabaseClient
+import com.example.data.supabase.SellerReviewService
+import org.json.JSONArray
+import kotlinx.coroutines.launch
 
 @Composable
 fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
   val shops by MarketplaceRepository.shops.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
+  val orders by MarketplaceRepository.orders.collectAsState()
+  val user by SupabaseClient.currentUser.collectAsState()
+  val scope = rememberCoroutineScope()
   var selectedShopId by remember { mutableStateOf<String?>(null) }
 
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
@@ -43,6 +50,15 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
     } else {
       LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(shops, key = { it.id }) { shop ->
+          var sellerReviews by remember(shop.id) { mutableStateOf(JSONArray()) }
+          var reviewRating by remember(shop.id) { mutableIntStateOf(5) }
+          var reviewComment by remember(shop.id) { mutableStateOf("") }
+          var reviewOpen by remember(shop.id) { mutableStateOf(false) }
+          LaunchedEffect(shop.id, selectedShopId) {
+            if (selectedShopId == shop.id) {
+              try { sellerReviews = SellerReviewService.listApproved(shop.id) } catch (_: Exception) { sellerReviews = JSONArray() }
+            }
+          }
           Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
               Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable {
@@ -63,6 +79,30 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
               }
               if (selectedShopId == shop.id) {
                 Text(shop.description, style = MaterialTheme.typography.bodySmall)
+                Text("Customer reviews (${sellerReviews.length()})", fontWeight = FontWeight.Bold)
+                for (reviewIndex in 0 until sellerReviews.length()) {
+                  val review = sellerReviews.optJSONObject(reviewIndex) ?: continue
+                  Text("★ ${review.optInt("rating")}/5 • ${review.optString("comment")}", style = MaterialTheme.typography.bodySmall)
+                }
+                if (user != null) {
+                  TextButton(onClick = { reviewOpen = !reviewOpen }) { Text(if (reviewOpen) "Close review" else "Write a seller review") }
+                  if (reviewOpen) {
+                    OutlinedTextField(value = reviewRating.toString(), onValueChange = { reviewRating = it.toIntOrNull()?.coerceIn(1, 5) ?: reviewRating }, label = { Text("Rating (1–5)") }, singleLine = true)
+                    OutlinedTextField(value = reviewComment, onValueChange = { reviewComment = it }, label = { Text("Your review") }, minLines = 2)
+                    Button(onClick = {
+                      scope.launch {
+                        try {
+                          val deliveredIds = orders.filter { it.orderStatus.equals("DELIVERED", true) }.map { it.orderId }
+                          SellerReviewService.submitForDeliveredOrder(shop.id, reviewRating, reviewComment, deliveredIds)
+                          sellerReviews = SellerReviewService.listApproved(shop.id)
+                          reviewComment = ""; reviewOpen = false
+                        } catch (e: Exception) { /* Keep the form open so the customer can correct or retry. */ }
+                      }
+                    }) { Text("Submit review") }
+                  }
+                } else {
+                  Text("Sign in and place a delivered order from this shop to leave a review.", style = MaterialTheme.typography.bodySmall)
+                }
                 val shopProducts = products.filter { it.vendor.equals(shop.name, ignoreCase = true) }
                 if (shopProducts.isEmpty()) {
                   Text("No published products from this shop are currently loaded.", style = MaterialTheme.typography.bodySmall)
