@@ -43,6 +43,8 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   var inventoryHistory by remember { mutableStateOf(JSONArray()) }
   var imageProductId by remember { mutableStateOf<String?>(null) }
   var variantProductId by remember { mutableStateOf<String?>(null) }
+  var variantRows by remember { mutableStateOf(JSONArray()) }
+  var selectedVariantId by remember { mutableStateOf<String?>(null) }
   var variantLabel by remember { mutableStateOf("Size") }
   var variantValue by remember { mutableStateOf("") }
   var variantPrice by remember { mutableStateOf("") }
@@ -247,10 +249,53 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save") }
           }
           TextButton(onClick = {
-            variantProductId = if (variantProductId == id) null else id
-            variantValue = ""; variantPrice = ""; variantStock = "0"
-          }) { Text(if (variantProductId == id) "Close variant editor" else "Add product variant") }
+            if (variantProductId == id) variantProductId = null
+            else {
+              variantProductId = id
+              selectedVariantId = null
+              variantValue = ""; variantPrice = ""; variantStock = "0"
+              scope.launch { try { variantRows = VendorService.listVariants(id) } catch (e: Exception) { errorMessage = e.message ?: "Variants could not be loaded." } }
+            }
+          }) { Text(if (variantProductId == id) "Close variant editor" else "Manage variants (add / edit / delete)") }
           if (variantProductId == id) {
+            for (v in 0 until variantRows.length()) {
+              val row = variantRows.optJSONObject(v) ?: continue
+              Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("${row.optString("option_label")}: ${row.optString("option_value")}", modifier = Modifier.weight(1f))
+                TextButton(onClick = {
+                  selectedVariantId = row.optString("id")
+                  variantLabel = row.optString("option_label")
+                  variantValue = row.optString("option_value")
+                  variantPrice = if (row.isNull("price_override")) "" else row.optString("price_override")
+                }) { Text("Edit") }
+                TextButton(enabled = !saving, onClick = {
+                  scope.launch {
+                    saving = true
+                    try {
+                      val inventory = VendorService.listInventory()
+                      val keep = JSONArray()
+                      for (k in 0 until variantRows.length()) {
+                        val candidate = variantRows.getJSONObject(k)
+                        if (candidate.optString("id") == row.optString("id")) continue
+                        var qty = 0
+                        for (m in 0 until inventory.length()) {
+                          val inv = inventory.optJSONObject(m) ?: continue
+                          if (inv.optString("variant_id") == candidate.optString("id")) { qty = inv.optInt("quantity"); break }
+                        }
+                        keep.put(JSONObject().put("id", candidate.optString("id"))
+                          .put("option_label", candidate.optString("option_label")).put("option_value", candidate.optString("option_value"))
+                          .put("sku", candidate.opt("sku") ?: JSONObject.NULL).put("price_override", candidate.opt("price_override") ?: JSONObject.NULL)
+                          .put("attributes", candidate.optJSONObject("attributes") ?: JSONObject()).put("quantity", qty))
+                      }
+                      VendorService.saveVariants(id, keep)
+                      variantRows = VendorService.listVariants(id)
+                      message = "Variant deleted. Product changes may require review."
+                    } catch (e: Exception) { errorMessage = e.message ?: "Variant could not be deleted." }
+                    finally { saving = false }
+                  }
+                }) { Text("Delete") }
+              }
+            }
             VendorAdvancedField("Option name (Size, Colour, etc.)", variantLabel) { variantLabel = it }
             VendorAdvancedField("Option value", variantValue) { variantValue = it }
             VendorAdvancedField("Price override (optional PKR)", variantPrice) { variantPrice = it }
@@ -271,16 +316,19 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                       val inv = inventory.optJSONObject(j) ?: continue
                       if (inv.optString("variant_id") == old.optString("id")) { oldQty = inv.optInt("quantity", 0); break }
                     }
-                    rows.put(JSONObject().put("id", old.optString("id")).put("option_label", old.optString("option_label"))
-                      .put("option_value", old.optString("option_value")).put("sku", old.opt("sku") ?: JSONObject.NULL)
-                      .put("price_override", old.opt("price_override") ?: JSONObject.NULL)
-                      .put("attributes", old.optJSONObject("attributes") ?: JSONObject()).put("quantity", oldQty))
+                    val editingThis = selectedVariantId == old.optString("id")
+                    rows.put(JSONObject().put("id", old.optString("id"))
+                      .put("option_label", if (editingThis) variantLabel.trim() else old.optString("option_label"))
+                      .put("option_value", if (editingThis) variantValue.trim() else old.optString("option_value"))
+                      .put("sku", old.opt("sku") ?: JSONObject.NULL)
+                      .put("price_override", if (editingThis) variantPrice.toIntOrNull() ?: JSONObject.NULL else old.opt("price_override") ?: JSONObject.NULL)
+                      .put("attributes", old.optJSONObject("attributes") ?: JSONObject()).put("quantity", if (editingThis) qty else oldQty))
                   }
-                  rows.put(JSONObject().put("id", JSONObject.NULL).put("option_label", variantLabel.trim())
+                  if (selectedVariantId == null) rows.put(JSONObject().put("id", JSONObject.NULL).put("option_label", variantLabel.trim())
                     .put("option_value", variantValue.trim()).put("sku", JSONObject.NULL)
                     .put("price_override", variantPrice.toIntOrNull() ?: JSONObject.NULL)
                     .put("attributes", JSONObject()).put("quantity", qty))
-                  VendorService.saveVariants(id, rows); message = "Variant saved."; variantProductId = null
+                  VendorService.saveVariants(id, rows); message = if (selectedVariantId == null) "Variant added." else "Variant updated."; selectedVariantId = null; variantProductId = null
                 } catch (e: Exception) { errorMessage = e.message ?: "Variant could not be saved." }
                 finally { saving = false }
               }
