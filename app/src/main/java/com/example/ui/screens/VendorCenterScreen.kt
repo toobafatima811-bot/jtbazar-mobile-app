@@ -79,11 +79,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var verificationPath by remember { mutableStateOf<String?>(null) }
   var frontPath by remember { mutableStateOf<String?>(null) }
   var backPath by remember { mutableStateOf<String?>(null) }
-  var productName by remember { mutableStateOf("") }
-  var productDescription by remember { mutableStateOf("") }
-  var productPrice by remember { mutableStateOf("") }
-  var productStock by remember { mutableStateOf("1") }
   var showProductForm by remember { mutableStateOf(false) }
+  var vendorTab by remember { mutableStateOf("overview") }
 
   fun refresh() {
     scope.launch {
@@ -152,10 +149,22 @@ fun VendorCenterScreen(onBack: () -> Unit) {
           }
           isVendor && application?.status == "approved" -> {
             Text("Vendor Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-              SummaryTile("Products", products.length().toString(), Modifier.weight(1f))
-              SummaryTile("Order items", orders.length().toString(), Modifier.weight(1f))
+            ScrollableTabRow(selectedTabIndex = listOf("overview", "listings", "fulfilment", "tools").indexOf(vendorTab).coerceAtLeast(0), edgePadding = 0.dp) {
+              listOf("overview" to "Overview", "listings" to "Listings", "fulfilment" to "Fulfilment", "tools" to "More tools").forEach { item ->
+                Tab(selected = vendorTab == item.first, onClick = { vendorTab = item.first }, text = { Text(item.second) })
+              }
             }
+            when (vendorTab) {
+              "overview" -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                  SummaryTile("Listings", products.length().toString(), Modifier.weight(1f))
+                  SummaryTile("Open fulfilment", orders.length().toString(), Modifier.weight(1f))
+                }
+                Text("Recent listings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (products.length() == 0) Text("No listings yet. Create your first listing.")
+                TextButton(onClick = { vendorTab = "listings"; showProductForm = true }) { Icon(Icons.Default.Add, null); Text("Create a listing") }
+              }
+              "listings" -> {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Icon(Icons.Default.Inventory2, null, tint = JTOrange)
               Spacer(Modifier.width(8.dp)); Text("Your products", fontWeight = FontWeight.Bold)
@@ -163,28 +172,14 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               TextButton(onClick = { showProductForm = !showProductForm }) { Icon(Icons.Default.Add, null); Text("Add product") }
             }
             if (showProductForm) {
-              VendorField("Product name", productName) { productName = it }
-              VendorField("Short and full description", productDescription, minLines = 3) { productDescription = it }
-              VendorField("Price (PKR)", productPrice) { productPrice = it }
-              VendorField("Initial stock", productStock) { productStock = it }
-              Button(enabled = !saving, onClick = {
-                scope.launch {
-                  saving = true; errorMessage = ""; info = ""
-                  try {
-                    val name = productName.trim()
-                    require(name.length >= 2) { "Enter a product name." }
-                    val price = productPrice.toIntOrNull() ?: error("Enter a valid price.")
-                    val stock = productStock.toIntOrNull() ?: error("Enter a valid stock quantity.")
-                    require(price > 0 && stock >= 0) { "Price must be above zero and stock cannot be negative." }
-                    val slug = name.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-') + "-" + System.currentTimeMillis().toString().takeLast(5)
-                    VendorService.createProduct(name, slug, productDescription, price, stock)
-                    productName = ""; productDescription = ""; productPrice = ""; productStock = "1"; showProductForm = false
-                    info = "Product submitted. It will follow JTBazar's product review and publishing rules."
-                    products = VendorService.listProducts()
-                  } catch (e: Exception) { errorMessage = e.message ?: "Product could not be created." }
-                  finally { saving = false }
+              VendorListingEditor(
+                onCancel = { showProductForm = false },
+                onSaved = {
+                  showProductForm = false
+                  info = "Listing submitted for JTBazar moderation."
+                  products = VendorService.listProducts()
                 }
-              }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Submit product") }
+              )
             }
             if (products.length() == 0) Text("No products yet. Add your first product.")
             for (i in 0 until products.length()) {
@@ -206,6 +201,9 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 }
               }
             }
+
+              }
+              "fulfilment" -> {
             Text("Vendor orders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             OutlinedTextField(value = ordersSearch, onValueChange = { ordersSearch = it }, label = { Text("Search order number or product") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -260,7 +258,11 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 }
               }
             }
-            VendorAdvancedPanel(application!!, products) { refresh() }
+
+              }
+              else -> VendorAdvancedPanel(application!!, products) { refresh() }
+            }
+
             OutlinedButton(onClick = { refresh() }) { Text("Refresh dashboard") }
           }
           application != null -> {
