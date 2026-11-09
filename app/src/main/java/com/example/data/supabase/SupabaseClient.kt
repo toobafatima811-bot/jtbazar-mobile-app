@@ -103,6 +103,13 @@ object SupabaseClient {
     _currentUser.value = null
   }
 
+  fun updateCurrentUserProfile(fullName: String, phone: String) {
+    val current = _currentUser.value ?: return
+    val updatedUser = current.copy(fullName = fullName, phone = phone)
+    _currentUser.value = updatedUser
+    _session.value = _session.value?.copy(user = updatedUser)
+  }
+
   /**
    * Health check to test connectivity to the configured Supabase endpoint.
    */
@@ -154,15 +161,16 @@ object SupabaseClient {
   /**
    * Raw POST request to PostgREST
    */
-  suspend fun post(path: String, jsonBody: String, preferReturn: Boolean = true): Result<String> = withContext(Dispatchers.IO) {
+  suspend fun post(path: String, jsonBody: String, preferReturn: Boolean = true, preferHeader: String? = null): Result<String> = withContext(Dispatchers.IO) {
     try {
       val url = if (path.startsWith("http")) path else "${SupabaseConfig.restUrl}/$path"
       val builder = Request.Builder()
         .url(url)
         .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
 
-      if (preferReturn) {
-        builder.header("Prefer", "return=representation")
+      when {
+        !preferHeader.isNullOrBlank() -> builder.header("Prefer", preferHeader)
+        preferReturn -> builder.header("Prefer", "return=representation")
       }
 
       okHttpClient.newCall(builder.build()).execute().use { response ->
