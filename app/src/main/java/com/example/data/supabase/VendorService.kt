@@ -199,16 +199,29 @@ object VendorService {
     setInventory(productId, stock)
   }
 
-  suspend fun createProduct(name: String, slug: String, description: String, price: Int, stock: Int, categoryId: String? = null): String {
+  suspend fun listCategories(): JSONArray =
+    JSONArray(fail(SupabaseClient.get("categories?select=id,name,slug,parent_id,is_food_category&is_active=eq.true&order=sort_order.asc&limit=500")))
+
+  suspend fun createProduct(
+    name: String, slug: String, description: String, price: Int, stock: Int,
+    categoryId: String? = null, sku: String? = null, shortDescription: String = "",
+    supplierCost: Double? = null, fulfilmentExpense: Double = 0.0, minimumProfit: Double = 0.0,
+    discountPercent: Double = 0.0, weightGrams: Int? = null,
+    specifications: JSONArray = JSONArray(), dimensions: JSONObject = JSONObject(),
+    seoTitle: String? = null, seoDescription: String? = null, trackInventory: Boolean = true
+  ): String {
+    require(name.trim().length >= 2 && slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid product name and slug." }
+    require(price > 0 && stock >= 0 && discountPercent in 0.0..100.0) { "Check price, discount and stock." }
     val params = JSONObject()
       .put("p_category_id", categoryId ?: JSONObject.NULL)
-      .put("p_name", name).put("p_slug", slug).put("p_sku", JSONObject.NULL)
-      .put("p_short_description", description.take(180)).put("p_description", description)
-      .put("p_price", price).put("p_supplier_cost", JSONObject.NULL)
-      .put("p_fulfillment_expense", 0).put("p_minimum_profit", 0)
-      .put("p_track_inventory", true).put("p_discount_percent", 0)
-      .put("p_weight_grams", JSONObject.NULL).put("p_specifications", JSONObject()).put("p_dimensions", JSONObject())
-      .put("p_seo_title", JSONObject.NULL).put("p_seo_description", JSONObject.NULL).put("p_initial_stock", stock)
+      .put("p_name", name.trim()).put("p_slug", slug).put("p_sku", sku ?: JSONObject.NULL)
+      .put("p_short_description", shortDescription.take(300)).put("p_description", description)
+      .put("p_price", price).put("p_supplier_cost", supplierCost ?: JSONObject.NULL)
+      .put("p_fulfillment_expense", fulfilmentExpense).put("p_minimum_profit", minimumProfit)
+      .put("p_track_inventory", trackInventory).put("p_discount_percent", discountPercent)
+      .put("p_weight_grams", weightGrams ?: JSONObject.NULL).put("p_specifications", specifications)
+      .put("p_dimensions", dimensions).put("p_seo_title", seoTitle ?: JSONObject.NULL)
+      .put("p_seo_description", seoDescription ?: JSONObject.NULL).put("p_initial_stock", stock)
     return fail(SupabaseClient.rpc("vendor_create_product", params.toString())).trim('"')
   }
 }
