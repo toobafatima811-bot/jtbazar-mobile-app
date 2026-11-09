@@ -377,7 +377,7 @@ object MarketplaceRepository {
   // ----------------------------------------------------
   // LIVE SUPABASE CATALOG SYNC
   // ----------------------------------------------------
-  fun refreshLiveCatalog(showLoading: Boolean = true) {
+  fun refreshLiveCatalog(showLoading: Boolean = true, refreshUserData: Boolean = true) {
     scope.launch {
       if (!catalogRefreshMutex.tryLock()) return@launch
       if (showLoading) _isLoading.value = true
@@ -476,7 +476,7 @@ object MarketplaceRepository {
           _errorMessage.value = categoryResult.exceptionOrNull()?.message
         }
         refreshShops()
-        SupabaseClient.currentUserId?.let { loadUserData(it) }
+        if (refreshUserData) SupabaseClient.currentUserId?.let { loadUserData(it) }
       } catch (e: Exception) {
         Log.e(TAG, "Backend sync error: ${e.message}", e)
         _errorMessage.value = e.message
