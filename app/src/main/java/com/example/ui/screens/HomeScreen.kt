@@ -70,7 +70,6 @@ fun HomeScreen(
   var showAddressDialog by remember { mutableStateOf(false) }
   var searchQuery by remember { mutableStateOf("") }
   var isSearching by remember { mutableStateOf(false) }
-  val keyboardController = LocalSoftwareKeyboardController.current
   val voiceSearchLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
     if (result.resultCode == android.app.Activity.RESULT_OK) {
       val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -567,7 +566,8 @@ fun SearchInputBar(
   onQueryChange: (String) -> Unit,
   onVoiceSearch: () -> Unit = {},
   modifier: Modifier = Modifier
-) {
+ ) {
+  val keyboardController = LocalSoftwareKeyboardController.current
   Surface(
     shape = RoundedCornerShape(24.dp),
     color = JTSurfaceVariant,
@@ -601,7 +601,7 @@ fun SearchInputBar(
           onValueChange = onQueryChange,
           singleLine = true,
           keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-          keyboardActions = KeyboardActions(onSearch = { LocalSoftwareKeyboardController.current?.hide() }),
+          keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
           textStyle = androidx.compose.ui.text.TextStyle(
             color = JTTextPrimary,
             fontSize = 13.sp,
