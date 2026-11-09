@@ -42,9 +42,11 @@ object VendorService {
   }
 
   suspend fun isVendor(): Boolean {
-    val user = SupabaseClient.currentUser.value ?: return false
-    val raw = fail(SupabaseClient.get("user_roles?user_id=eq.${user.id}&role=eq.vendor&select=role&limit=1"))
-    return JSONArray(raw).length() > 0
+    if (SupabaseClient.currentUser.value == null) return false
+    // user_roles intentionally denies direct client SELECT; use the narrowly scoped
+    // security-definer RPC which checks only the currently authenticated user's role.
+    val raw = fail(SupabaseClient.rpc("current_user_is_vendor", "{}"))
+    return raw.trim().equals("true", ignoreCase = true)
   }
 
   suspend fun uploadPrivateDocument(path: String, bytes: ByteArray, mime: String): String {
