@@ -431,7 +431,12 @@ object MarketplaceRepository {
               isArtisanCollection = dto.isArtisanCollection,
               isFeatured = dto.isFeatured,
               isNewArrival = dto.isNewArrival,
-              isWishlisted = false
+              isWishlisted = false,
+              isAvailable = dto.inStock,
+              availabilityKnown = dto.availabilityKnown,
+              dailyStatus = dto.dailyStatus,
+              foodSellingUnit = dto.foodSellingUnit,
+              variantAvailability = dto.variantAvailability
             )
           }
           _products.value = mappedProducts
@@ -509,6 +514,15 @@ object MarketplaceRepository {
     _isPlacingOrder.value = true
     scope.launch {
       try {
+        val latestProducts = SupabaseApiService.fetchProducts(limit = 100).getOrThrow().associateBy { it.id }
+        val unavailable = items.firstOrNull { item ->
+          val latest = latestProducts[item.product.id]
+          latest == null || (latest.availabilityKnown && !latest.inStock) ||
+            (latest.foodSellingUnit != null && latest.dailyStatus != null && latest.dailyStatus != "available") ||
+            (!item.variantId.isNullOrBlank() && latest.variantAvailability.containsKey(item.variantId) && latest.variantAvailability[item.variantId] != true) ||
+            (!item.variantId.isNullOrBlank() && latest.variantAvailability.isNotEmpty() && !latest.variantAvailability.containsKey(item.variantId))
+        }
+        if (unavailable != null) throw IllegalStateException("${unavailable.product.title} is out of stock or unavailable. Remove it from your cart before checkout.")
         val currentUser = SupabaseClient.currentUser.value
         val dto = SupabaseOrderDto(id="", orderNumber="", userId=userId, subtotal=0, discount=0, deliveryFee=0, grandTotal=0, paymentMethod="cod", paymentStatus="pending", orderStatus="pending", deliveryNote=deliveryNote, addressName=address.name, addressPhone=address.phone, addressLine=address.addressLine, addressArea=address.area, addressCity=address.city, createdAt="", addressProvince=address.province, customerEmail=currentUser?.email, idempotencyKey=java.util.UUID.randomUUID().toString())
         val lines = items.map { item ->
