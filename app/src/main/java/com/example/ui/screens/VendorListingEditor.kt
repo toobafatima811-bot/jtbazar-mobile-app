@@ -64,7 +64,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
     val remaining = (8 - images.size).coerceAtLeast(0)
     images = (images + selected.take(remaining)).distinct().take(8)
-    if (selected.size > remaining) error = "You can add up to 8 images total."
+    if (selected.size > remaining) errorMessage = "You can add up to 8 images total."
   }
 
   fun fieldNumber(value: String, label: String, allowDecimal: Boolean = true): Double {
