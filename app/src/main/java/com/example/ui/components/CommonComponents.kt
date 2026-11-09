@@ -217,9 +217,10 @@ fun UserAvatarView(
       .then(clickModifier),
     contentAlignment = Alignment.Center
   ) {
-    if (!avatarUrl.isNullOrBlank()) {
+    val validAvatarUrl = avatarUrl?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+    if (validAvatarUrl != null) {
       coil.compose.AsyncImage(
-        model = avatarUrl,
+        model = validAvatarUrl,
         contentDescription = "User Avatar",
         contentScale = ContentScale.Crop,
         modifier = Modifier.fillMaxSize()
