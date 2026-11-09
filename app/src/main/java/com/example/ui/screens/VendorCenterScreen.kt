@@ -1,9 +1,15 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Location
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +32,16 @@ import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
 import com.example.ui.theme.JTOrange
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -59,6 +75,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var shopLocation by remember { mutableStateOf("") }
   var latitude by remember { mutableStateOf("") }
   var longitude by remember { mutableStateOf("") }
+  var showMapPicker by remember { mutableStateOf(false) }
   var verificationPath by remember { mutableStateOf<String?>(null) }
   var frontPath by remember { mutableStateOf<String?>(null) }
   var backPath by remember { mutableStateOf<String?>(null) }
@@ -266,8 +283,17 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             VendorField("Current address", currentAddress) { currentAddress = it }
             VendorField("Complete address", fullAddress, minLines = 2) { fullAddress = it }
             VendorField("Shop location / landmark details", shopLocation, minLines = 2) { shopLocation = it }
-            VendorField("Shop latitude (map pin)", latitude) { latitude = it }
-            VendorField("Shop longitude (map pin)", longitude) { longitude = it }
+            Text("Shop location on map", fontWeight = FontWeight.SemiBold)
+            Text(
+              if (latitude.isNotBlank() && longitude.isNotBlank()) "Selected: $latitude, $longitude" else "Choose your shop location on the map. You can use your current location or move the map pin.",
+              color = Color.Gray,
+              style = MaterialTheme.typography.bodySmall
+            )
+            OutlinedButton(onClick = { showMapPicker = true }, modifier = Modifier.fillMaxWidth()) {
+              Icon(Icons.Default.Storefront, contentDescription = null)
+              Spacer(Modifier.width(8.dp))
+              Text(if (latitude.isNotBlank() && longitude.isNotBlank()) "Change shop location on map" else "Choose shop location on map")
+            }
             Text("Verification documents", fontWeight = FontWeight.Bold)
             DocumentButton("Identity / business verification document", verificationPath != null) { pendingDoc = "verification"; documentPicker.launch("*/*") }
             DocumentButton("CNIC front image", frontPath != null) { pendingDoc = "cnic-front"; documentPicker.launch("image/*") }
@@ -308,6 +334,134 @@ fun VendorCenterScreen(onBack: () -> Unit) {
         }
       }
     }
+  }
+  if (showMapPicker) {
+    ShopLocationPickerDialog(
+      initialLatitude = latitude.toDoubleOrNull(),
+      initialLongitude = longitude.toDoubleOrNull(),
+      onDismiss = { showMapPicker = false },
+      onConfirm = { point ->
+        latitude = String.format(Locale.US, "%.6f", point.latitude)
+        longitude = String.format(Locale.US, "%.6f", point.longitude)
+        showMapPicker = false
+      }
+    )
+  }
+}
+
+@Composable
+private fun ShopLocationPickerDialog(
+  initialLatitude: Double?,
+  initialLongitude: Double?,
+  onDismiss: () -> Unit,
+  onConfirm: (GeoPoint) -> Unit
+) {
+  val context = LocalContext.current
+  val fusedLocation = remember { LocationServices.getFusedLocationProviderClient(context) }
+  val startPoint = remember {
+    if (initialLatitude != null && initialLongitude != null &&
+      initialLatitude in -90.0..90.0 && initialLongitude in -180.0..180.0
+    ) GeoPoint(initialLatitude, initialLongitude) else GeoPoint(30.3753, 69.3451)
+  }
+  var selectedPoint by remember { mutableStateOf(startPoint) }
+  var mapView by remember { mutableStateOf<MapView?>(null) }
+  var locationMessage by remember { mutableStateOf("Move the map and tap your shop location to place the pin.") }
+
+  fun placePin(point: GeoPoint) {
+    selectedPoint = point
+    mapView?.let { map ->
+      map.overlays.filterIsInstance<Marker>().forEach { map.overlays.remove(it) }
+      val marker = Marker(map).apply {
+        position = point
+        title = "Shop location"
+        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+      }
+      map.overlays.add(marker)
+      map.controller.animateTo(point)
+      map.invalidate()
+    }
+  }
+
+  val locationPermission = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+      permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    if (granted) {
+      try {
+        fusedLocation.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token)
+          .addOnSuccessListener { location: Location? ->
+            if (location != null) {
+              placePin(GeoPoint(location.latitude, location.longitude))
+              locationMessage = "Current device location selected. Adjust the pin if needed."
+            } else locationMessage = "Current location unavailable. Move the map and tap your shop location."
+          }
+          .addOnFailureListener { locationMessage = it.message ?: "Could not get current location." }
+      } catch (_: SecurityException) {
+        locationMessage = "Location permission is required to use current location."
+      }
+    } else locationMessage = "Location permission denied. You can still select a location manually on the map."
+  }
+
+  Dialog(onDismissRequest = onDismiss) {
+    Surface(shape = RoundedCornerShape(18.dp), color = Color.White, modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp)) {
+      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Choose shop location", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Drag the map and tap the exact shop location. The pin will be saved automatically.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        AndroidView(
+          modifier = Modifier.fillMaxWidth().height(360.dp),
+          factory = { ctx ->
+            Configuration.getInstance().userAgentValue = ctx.packageName
+            MapView(ctx).apply {
+              setTileSource(TileSourceFactory.MAPNIK)
+              setMultiTouchControls(true)
+              controller.setZoom(if (initialLatitude != null && initialLongitude != null) 16.0 else 5.0)
+              controller.setCenter(startPoint)
+              val receiver = object : MapEventsReceiver {
+                override fun singleTapConfirmedHelper(point: GeoPoint): Boolean {
+                  placePin(point)
+                  locationMessage = "Location pin selected."
+                  return true
+                }
+                override fun longPressHelper(point: GeoPoint): Boolean = false
+              }
+              overlays.add(MapEventsOverlay(receiver))
+              mapView = this
+              if (initialLatitude != null && initialLongitude != null) placePin(startPoint)
+            }
+          },
+          update = { map -> mapView = map }
+        )
+        Text(locationMessage, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(
+          onClick = {
+            val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (fine || coarse) {
+              try {
+                fusedLocation.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token)
+                  .addOnSuccessListener { location ->
+                    if (location != null) {
+                      placePin(GeoPoint(location.latitude, location.longitude))
+                      locationMessage = "Current device location selected. Adjust the pin if needed."
+                    } else locationMessage = "Current location unavailable. Move the map and tap your shop location."
+                  }
+                  .addOnFailureListener { locationMessage = it.message ?: "Could not get current location." }
+              } catch (_: SecurityException) { locationMessage = "Location permission is required." }
+            } else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+          },
+          modifier = Modifier.fillMaxWidth()
+        ) { Text("Use my current location") }
+        Text("Latitude: %.6f   Longitude: %.6f".format(Locale.US, selectedPoint.latitude, selectedPoint.longitude), style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+          Button(onClick = { onConfirm(selectedPoint) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Use this location") }
+        }
+      }
+    }
+  }
+  DisposableEffect(Unit) {
+    onDispose { mapView?.onDetach(); mapView = null }
   }
 }
 
