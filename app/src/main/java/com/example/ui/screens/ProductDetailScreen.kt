@@ -50,6 +50,8 @@ fun ProductDetailScreen(
 ) {
   val context = LocalContext.current
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
+  val liveProducts by MarketplaceRepository.products.collectAsState()
+  val liveProduct = liveProducts.firstOrNull { it.id == product.id } ?: product
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
@@ -161,6 +163,8 @@ fun ProductDetailScreen(
 
   val unitPrice = product.price
   val totalPrice = unitPrice * quantity
+  val selectedSize = product.sizes.getOrNull(selectedSizeIndex)?.title
+  val canPurchase = MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)
 
   Scaffold(
     containerColor = Color.White,
@@ -205,62 +209,42 @@ fun ProductDetailScreen(
             )
           }
 
-          Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Add to Cart
-            Button(
-              onClick = {
-                MarketplaceRepository.addToCart(
-                  product = product,
-                  quantity = quantity,
-                  palette = selectedPaletteName,
-                  size = product.sizes.getOrNull(selectedSizeIndex)?.title
-                )
-                Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
-              },
-              shape = RoundedCornerShape(12.dp),
-              colors = ButtonDefaults.buttonColors(
-                containerColor = JTPurpleContainer,
-                contentColor = JTPurplePrimary
-              ),
-              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-              modifier = Modifier.testTag("add_to_cart_bottom_button")
-            ) {
-              Icon(
-                imageVector = Icons.Outlined.ShoppingBag,
-                contentDescription = null,
-                modifier = Modifier.size(17.dp)
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Add to Cart", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+          if (!canPurchase) {
+            Surface(color = Color(0xFFFFE4E6), shape = RoundedCornerShape(10.dp)) {
+              Text("Out of Stock", color = Color(0xFFBE123C), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
-
-            // Buy Now
-            Button(
-              onClick = {
-                MarketplaceRepository.addToCart(
-                  product = product,
-                  quantity = quantity,
-                  palette = selectedPaletteName,
-                  size = product.sizes.getOrNull(selectedSizeIndex)?.title
-                )
-                onBuyNowClick()
-              },
-              shape = RoundedCornerShape(12.dp),
-              colors = ButtonDefaults.buttonColors(
-                containerColor = JTOrange,
-                contentColor = Color.White
-              ),
-              contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-              modifier = Modifier.testTag("buy_now_bottom_button")
-            ) {
-              Icon(
-                imageVector = Icons.Filled.ElectricBolt,
-                contentDescription = null,
-                tint = JTAmber,
-                modifier = Modifier.size(17.dp)
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Buy Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+          } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+              Button(
+                onClick = {
+                  MarketplaceRepository.addToCart(liveProduct, quantity, selectedPaletteName, selectedSize)
+                  if (MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)) {
+                    Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
+                  }
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = JTPurpleContainer, contentColor = JTPurplePrimary),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                modifier = Modifier.testTag("add_to_cart_bottom_button")
+              ) {
+                Icon(Icons.Outlined.ShoppingBag, contentDescription = null, modifier = Modifier.size(17.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Add to Cart", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              }
+              Button(
+                onClick = {
+                  MarketplaceRepository.addToCart(liveProduct, quantity, selectedPaletteName, selectedSize)
+                  if (MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)) onBuyNowClick()
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.testTag("buy_now_bottom_button")
+              ) {
+                Icon(Icons.Filled.ElectricBolt, contentDescription = null, tint = JTAmber, modifier = Modifier.size(17.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Buy Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              }
             }
           }
         }
