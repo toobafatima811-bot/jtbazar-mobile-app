@@ -560,7 +560,7 @@ object SupabaseApiService {
 
   suspend fun fetchShops(): Result<List<com.example.data.model.ShopRecord>> = withContext(Dispatchers.IO) {
     try {
-      val res = SupabaseClient.get("seller_profiles?select=id,shop_name,description,shop_image_url,phone,shop_lat,shop_lng,shop_location_label,current_address,complete_address,status,shop_is_open&limit=50")
+      val res = SupabaseClient.get("seller_profiles?select=id,shop_name,description,shop_image_url,phone,shop_lat,shop_lng,shop_location_label,current_address,complete_address,status,shop_is_open&status=eq.approved&limit=100")
       res.fold(
         onSuccess = { jsonStr ->
           val arr = JSONArray(jsonStr)
@@ -577,8 +577,8 @@ object SupabaseApiService {
                 bannerUrl = null,
                 city = obj.optString("shop_location_label", obj.optString("current_address", "")),
                 address = obj.optString("complete_address", obj.optString("current_address", "")),
-                latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 31.5204) else 31.5204,
-                longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 74.3587) else 74.3587,
+                latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 0.0) else 0.0,
+                longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 0.0) else 0.0,
                 isVerified = obj.optString("status") == "approved",
                 phone = obj.optString("phone", ""),
                 deliveryRadiusKm = 5.0
