@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import coil.compose.AsyncImage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +50,8 @@ fun MyProfileScreen(
   var phone by remember(userProfile) { mutableStateOf(userProfile?.phone ?: currentUser?.phone ?: "") }
   var city by remember(userProfile) { mutableStateOf(userProfile?.city ?: "") }
   var isSaving by remember { mutableStateOf(false) }
+  var selectedPhoto by remember { mutableStateOf<Uri?>(null) }
+  val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedPhoto = uri }
 
   Scaffold(
     containerColor = Color.White,
@@ -87,12 +93,32 @@ fun MyProfileScreen(
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       // Profile Picture Section - Real picture or initial badge only
-      UserAvatarView(
-        avatarUrl = userProfile?.avatarUrl,
-        fullName = fullName,
-        size = 84.dp,
-        modifier = Modifier.testTag("profile_avatar_large")
-      )
+      Box(contentAlignment = Alignment.BottomEnd) {
+        if (selectedPhoto != null) {
+          AsyncImage(
+            model = selectedPhoto,
+            contentDescription = "Selected profile photo",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(96.dp).clip(CircleShape).testTag("profile_avatar_large")
+          )
+        } else {
+          UserAvatarView(
+            avatarUrl = userProfile?.avatarUrl,
+            fullName = fullName,
+            size = 96.dp,
+            modifier = Modifier.testTag("profile_avatar_large")
+          )
+        }
+        FilledIconButton(
+          onClick = { photoPicker.launch("image/*") },
+          modifier = Modifier.size(34.dp),
+          colors = IconButtonDefaults.filledIconButtonColors(containerColor = JTOrange, contentColor = Color.White)
+        ) {
+          Icon(Icons.Filled.CameraAlt, contentDescription = "Change profile photo", modifier = Modifier.size(18.dp))
+        }
+      }
+      Spacer(modifier = Modifier.height(6.dp))
+      Text("Tap the camera to change your photo (JPG, PNG or WebP, max 5 MB)", fontSize = 11.sp, color = JTTextSecondary)
 
       Spacer(modifier = Modifier.height(12.dp))
 
@@ -172,21 +198,35 @@ fun MyProfileScreen(
           val uid = currentUser?.id ?: userProfile?.id ?: return@Button
           isSaving = true
           coroutineScope.launch {
-            val updated = SupabaseProfile(
-              id = uid,
-              fullName = fullName.trim(),
-              phone = phone.trim(),
-              email = currentUser?.email ?: userProfile?.email ?: "",
-              avatarUrl = userProfile?.avatarUrl,
-              city = city.trim()
-            )
-            val res = SupabaseAuthService.upsertProfile(updated)
-            isSaving = false
-            if (res.isSuccess) {
-              Toast.makeText(context, "Profile saved successfully", Toast.LENGTH_SHORT).show()
-            } else {
-              Toast.makeText(context, "Failed to save profile: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-            }
+            try {
+              var avatarUrl = userProfile?.avatarUrl
+              selectedPhoto?.let { uri ->
+                val mime = context.contentResolver.getType(uri) ?: throw IllegalArgumentException("Choose a JPG, PNG or WebP image.")
+                if (mime !in setOf("image/jpeg", "image/png", "image/webp")) throw IllegalArgumentException("Choose a JPG, PNG or WebP image.")
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("Could not read the selected photo.")
+                if (bytes.size > 5 * 1024 * 1024) throw IllegalArgumentException("Profile photo must be 5 MB or smaller.")
+                val extension = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; else -> "webp" }
+                val path = "$uid/${java.util.UUID.randomUUID()}.$extension"
+                avatarUrl = SupabaseClient.uploadPublicFile("customer-avatars", path, bytes, mime).getOrThrow()
+              }
+              val updated = SupabaseProfile(
+                id = uid,
+                fullName = fullName.trim(),
+                phone = phone.trim(),
+                email = currentUser?.email ?: userProfile?.email ?: "",
+                avatarUrl = avatarUrl,
+                city = city.trim()
+              )
+              val res = SupabaseAuthService.upsertProfile(updated)
+              if (res.isSuccess) {
+                selectedPhoto = null
+                Toast.makeText(context, "Profile saved successfully", Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(context, "Failed to save profile: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+              }
+            } catch (error: Exception) {
+              Toast.makeText(context, "Failed to update profile: ${error.message}", Toast.LENGTH_LONG).show()
+            } finally { isSaving = false }
           }
         },
         enabled = !isSaving,
