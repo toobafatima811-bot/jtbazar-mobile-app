@@ -285,6 +285,19 @@ fun CartCheckoutScreen(
                 Toast.makeText(context, "Cash on delivery is currently unavailable.", Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
+              val unavailableCartItem = cartItems.firstOrNull { item ->
+                (item.product.availabilityKnown && !item.product.isAvailable) ||
+                  (item.product.foodSellingUnit != null && item.product.dailyStatus != null && item.product.dailyStatus != "available") ||
+                  (!item.variantId.isNullOrBlank() && item.product.variantAvailability.isNotEmpty() && item.product.variantAvailability[item.variantId] != true)
+              }
+              if (unavailableCartItem != null) {
+                Toast.makeText(context, unavailableCartItem.product.title + " is out of stock or unavailable. Remove it from your cart.", Toast.LENGTH_LONG).show()
+                return@CheckoutView
+              }
+              if (cartItems.any { it.product.foodSellingUnit != null } && (deliveryLat == null || deliveryLng == null)) {
+                Toast.makeText(context, "Add your current location pin to confirm the 5 km food delivery area.", Toast.LENGTH_LONG).show()
+                return@CheckoutView
+              }
 
               // Update/Save Address
               val activeAddr = DeliveryAddress(
