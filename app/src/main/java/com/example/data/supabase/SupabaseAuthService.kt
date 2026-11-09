@@ -468,27 +468,37 @@ object SupabaseAuthService {
    * Upsert customer profile
    */
   suspend fun upsertProfile(profile: SupabaseProfile): Result<Unit> = withContext(Dispatchers.IO) {
-    val json = JSONObject().apply {
-      put("id", profile.id)
-      put("full_name", profile.fullName)
-      put("phone", profile.phone)
-      put("email", profile.email)
-      if (!profile.avatarUrl.isNullOrBlank()) put("avatar_url", profile.avatarUrl)
-      put("city", profile.city)
-    }
-    val res = SupabaseClient.post("profiles", json.toString(), preferReturn = false)
-    if (res.isSuccess) {
-      _userProfile.value = profile
-      Result.success(Unit)
-    } else {
-      // Try patch if duplicate key
-      val patchRes = SupabaseClient.patch("profiles?id=eq.${profile.id}", json.toString())
-      if (patchRes.isSuccess) {
-        _userProfile.value = profile
-        Result.success(Unit)
-      } else {
-        Result.failure(res.exceptionOrNull() ?: IOException("Failed to save profile"))
+    try {
+      val json = JSONObject().apply {
+        put("id", profile.id)
+        put("full_name", profile.fullName)
+        put("phone", profile.phone)
+        put("email", profile.email)
+        if (!profile.avatarUrl.isNullOrBlank()) put("avatar_url", profile.avatarUrl)
+        put("city", profile.city)
       }
+      val result = SupabaseClient.post(
+        "profiles?on_conflict=id",
+        json.toString(),
+        preferReturn = false,
+        preferHeader = "resolution=merge-duplicates,return=representation"
+      )
+      result.fold(
+        onSuccess = { responseBody ->
+          val rows = JSONArray(responseBody)
+          if (rows.length() == 0) {
+            Result.failure(IOException("Profile was not returned after saving. Check the profiles table permissions."))
+          } else {
+            _userProfile.value = profile
+            SupabaseClient.updateCurrentUserProfile(profile.fullName, profile.phone)
+            Result.success(Unit)
+          }
+        },
+        onFailure = { error -> Result.failure(error) }
+      )
+    } catch (e: Exception) {
+      Log.e(TAG, "upsertProfile error", e)
+      Result.failure(e)
     }
   }
 
