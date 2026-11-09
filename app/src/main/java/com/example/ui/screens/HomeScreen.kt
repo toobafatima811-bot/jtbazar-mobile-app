@@ -72,6 +72,7 @@ fun HomeScreen(
 
   var dismissedLaunchAdId by remember { mutableStateOf<String?>(null) }
   val nowIso = remember { java.time.Instant.now().toString() }
+  val visibleBannerCampaigns = homepagePromotions.filter { campaign -> campaign.campaignType == "banner" && (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") && (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) && (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso) }
   val launchAd = homepagePromotions.firstOrNull { campaign ->
     campaign.campaignType == "popup" && campaign.showOnLaunch &&
       (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") &&
@@ -166,6 +167,8 @@ fun HomeScreen(
         )
       }
 
+      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "top_promo", onExploreCategoriesClick) }
+
       // Published homepage hero banners from the same Supabase table as the website.
       if (searchQuery.isBlank() && homepageHeroes.isNotEmpty()) {
         item {
@@ -217,6 +220,7 @@ fun HomeScreen(
       }
 
       if (searchQuery.isBlank()) {
+        item { PromotionCampaignPlacement(visibleBannerCampaigns, "hero_banner", onExploreCategoriesClick) }
         item {
           OutlinedButton(
             onClick = onExploreShopsClick,
@@ -228,6 +232,8 @@ fun HomeScreen(
           }
         }
       }
+
+      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "seller_banner", onExploreCategoriesClick) }
 
       // 4. Shop by Category (Horizontal Row)
       if (searchQuery.isBlank()) {
@@ -455,6 +461,8 @@ fun HomeScreen(
         }
       }
 
+      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "category_feature", onExploreCategoriesClick) }
+
       // 6. 2x2 Grid of Popular Products
       item {
         Spacer(modifier = Modifier.height(10.dp))
@@ -563,35 +571,7 @@ fun HomeScreen(
         }
       }
 
-      // Approved marketplace promotions; no invented offers are displayed.
-      val visibleBannerCampaigns = homepagePromotions.filter { it.campaignType == "banner" && (it.targetPlatform == "android" || it.targetPlatform == "both") && (it.startsAt.isNullOrBlank() || it.startsAt <= nowIso) && (it.endsAt.isNullOrBlank() || it.endsAt >= nowIso) }
-      if (searchQuery.isBlank() && visibleBannerCampaigns.isNotEmpty()) {
-        item {
-          Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-          ) {
-            visibleBannerCampaigns.take(3).forEach { promotion ->
-              val image = promotion.bannerImageUrls.firstOrNull() ?: promotion.bannerImageUrl
-              if (image != null) {
-                Card(
-                  shape = RoundedCornerShape(14.dp),
-                  modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { onExploreCategoriesClick() }
-                ) {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(model = image, contentDescription = promotion.title, contentScale = ContentScale.Crop, modifier = Modifier.size(width = 104.dp, height = 88.dp))
-                    Column(modifier = Modifier.weight(1f).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                      Text(promotion.title, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                      promotion.description?.let { Text(it, fontSize = 11.sp, color = JTTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                      promotion.ctaText?.let { Text(it, fontSize = 11.sp, color = JTOrangeDark, fontWeight = FontWeight.Bold) }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "product_strip", onExploreCategoriesClick) }
 
 
       // New arrivals: same latest-published catalog ordering as the website.
@@ -641,6 +621,8 @@ fun HomeScreen(
           }
         }
       }
+
+      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "offer_section", onExploreCategoriesClick) }
 
       // 8. Trust Badges
       item {
@@ -755,6 +737,53 @@ fun SearchInputBar(
       }
 
 
+    }
+  }
+}
+
+
+@Composable
+private fun PromotionCampaignPlacement(
+  campaigns: List<com.example.data.supabase.SupabasePromotionDto>,
+  position: String,
+  onExploreCategoriesClick: () -> Unit
+) {
+  val context = LocalContext.current
+  val placedCampaigns = campaigns.filter { it.displayPosition == position }
+  if (placedCampaigns.isEmpty()) return
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp)
+  ) {
+    placedCampaigns.forEach { campaign ->
+      val image = campaign.bannerImageUrls.firstOrNull() ?: campaign.bannerImageUrl
+      if (!image.isNullOrBlank()) {
+        Card(
+          shape = RoundedCornerShape(14.dp),
+          modifier = Modifier.fillMaxWidth().clickable {
+            val destination = campaign.ctaDestination.orEmpty()
+            if (destination.startsWith("https://") || destination.startsWith("http://")) {
+              runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(destination))) }
+            } else {
+              onExploreCategoriesClick()
+            }
+          }
+        ) {
+          Column {
+            AsyncImage(
+              model = image,
+              contentDescription = campaign.title,
+              contentScale = ContentScale.Crop,
+              modifier = Modifier.fillMaxWidth().heightIn(max = 190.dp)
+            )
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              Text(campaign.title, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+              campaign.description?.let { Text(it, fontSize = 12.sp, color = JTTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+              campaign.ctaText?.let { Text(it, fontSize = 11.sp, color = JTOrangeDark, fontWeight = FontWeight.Bold) }
+            }
+          }
+        }
+      }
     }
   }
 }
