@@ -61,7 +61,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
         VendorService.uploadProductImage(productId, bytes, mime, "JTBazar product image")
         message = "Product image uploaded successfully."
         onRefresh()
-      } catch (e: Exception) { error = e.message ?: "Image upload failed." }
+      } catch (e: Exception) { errorMessage = e.message ?: "Image upload failed." }
       finally { saving = false; imageProductId = null }
     }
   }
@@ -82,7 +82,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       VendorAdvancedField("Shop location / verification address", locationText, 2) { locationText = it }
       Button(enabled = !saving, onClick = {
         scope.launch {
-          saving = true; error = ""; message = ""
+          saving = true; errorMessage = ""; message = ""
           try {
             require(shopName.trim().length >= 2) { "Enter a valid shop name." }
             require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Use a valid URL slug." }
@@ -92,7 +92,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
               .put("description", description.trim()).put("phone", phone.trim()).put("current_address", currentAddress.trim())
               .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim()))
             message = "Shop details updated."; shopOpen = false
-          } catch (e: Exception) { error = e.message ?: "Shop details could not be saved." }
+          } catch (e: Exception) { errorMessage = e.message ?: "Shop details could not be saved." }
           finally { saving = false }
         }
       }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) { Text("Save shop details") }
@@ -118,7 +118,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                 try {
                   val qty = stock.toIntOrNull() ?: error("Enter a valid stock quantity.")
                   VendorService.setInventory(id, qty); message = "Inventory updated."
-                } catch (e: Exception) { error = e.message ?: "Inventory update failed." }
+                } catch (e: Exception) { errorMessage = e.message ?: "Inventory update failed." }
                 finally { saving = false }
               }
             }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save") }
@@ -134,7 +134,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             VendorAdvancedField("Variant stock", variantStock) { variantStock = it.filter(Char::isDigit) }
             Button(enabled = !saving, onClick = {
               scope.launch {
-                saving = true; error = ""
+                saving = true; errorMessage = ""
                 try {
                   require(variantLabel.isNotBlank() && variantValue.isNotBlank()) { "Enter a variant option and value." }
                   val qty = variantStock.toIntOrNull() ?: error("Enter valid variant stock.")
@@ -158,7 +158,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     .put("price_override", variantPrice.toIntOrNull() ?: JSONObject.NULL)
                     .put("attributes", JSONObject()).put("quantity", qty))
                   VendorService.saveVariants(id, rows); message = "Variant saved."; variantProductId = null
-                } catch (e: Exception) { error = e.message ?: "Variant could not be saved." }
+                } catch (e: Exception) { errorMessage = e.message ?: "Variant could not be saved." }
                 finally { saving = false }
               }
             }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save variant") }
@@ -181,7 +181,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             scope.launch {
               saving = true
               try { VendorService.respondToCase(item.optString("id"), responseText); responseText = ""; cases = VendorService.listCases(); message = "Case response sent." }
-              catch (e: Exception) { error = e.message ?: "Case response failed." }
+              catch (e: Exception) { errorMessage = e.message ?: "Case response failed." }
               finally { saving = false }
             }
           }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Send response") }
@@ -196,7 +196,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       scope.launch {
         saving = true
         try { VendorService.createSupportTicket(subject, ticketMessage); subject = ""; ticketMessage = ""; tickets = VendorService.listSupportTickets(); message = "Support ticket created." }
-        catch (e: Exception) { error = e.message ?: "Support ticket could not be created." }
+        catch (e: Exception) { errorMessage = e.message ?: "Support ticket could not be created." }
         finally { saving = false }
       }
     }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) { Text("Create support ticket") }
@@ -227,7 +227,7 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
   var completeAddress by remember { mutableStateOf(application.completeAddress) }
   var locationText by remember { mutableStateOf(application.shopLocationText) }
   var saving by remember { mutableStateOf(false) }
-  var error by remember { mutableStateOf("") }
+  var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     VendorAdvancedField("Shop name", shopName) { shopName = it }
@@ -239,11 +239,11 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
     VendorAdvancedField("Current address", currentAddress) { currentAddress = it }
     VendorAdvancedField("Complete address", completeAddress, 2) { completeAddress = it }
     VendorAdvancedField("Shop location / verification address", locationText, 2) { locationText = it }
-    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+    if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
     Button(enabled = !saving, onClick = {
       scope.launch {
-        saving = true; error = ""; message = ""
+        saving = true; errorMessage = ""; message = ""
         try {
           require(shopName.trim().length >= 2 && description.trim().length >= 10 && ownerName.trim().length >= 3) { "Complete shop and owner details." }
           require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid URL slug." }
@@ -256,7 +256,7 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
           val updated = VendorService.resubmitApplication()
           message = "Application resubmitted for review."
           onResubmitted(updated)
-        } catch (e: Exception) { error = e.message ?: "Application could not be resubmitted." }
+        } catch (e: Exception) { errorMessage = e.message ?: "Application could not be resubmitted." }
         finally { saving = false }
       }
     }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) {
