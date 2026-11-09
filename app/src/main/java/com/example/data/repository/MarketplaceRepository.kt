@@ -427,6 +427,7 @@ object MarketplaceRepository {
           val mappedProducts = dtoList.map { dto ->
             Product(
               id = dto.id,
+              sellerId = dto.sellerId,
               title = dto.title,
               vendor = dto.vendor,
               category = dto.category,
