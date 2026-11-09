@@ -195,7 +195,11 @@ fun MyProfileScreen(
 
       Button(
         onClick = {
-          val uid = currentUser?.id ?: userProfile?.id ?: return@Button
+          val uid = currentUser?.id ?: userProfile?.id
+          if (uid.isNullOrBlank()) {
+            Toast.makeText(context, "Please sign in again before updating your profile.", Toast.LENGTH_LONG).show()
+            return@Button
+          }
           isSaving = true
           coroutineScope.launch {
             try {
