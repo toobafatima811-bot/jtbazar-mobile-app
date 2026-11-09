@@ -495,6 +495,16 @@ object MarketplaceRepository {
     if (address == null) { onComplete?.invoke(Result.failure(IllegalStateException("Delivery address is required"))); return null }
     val userId = SupabaseClient.currentUserId
     if (userId == null) { onComplete?.invoke(Result.failure(IllegalStateException("Please sign in before placing an order."))); return null }
+    val phone = address.phone.trim()
+    if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(phone)) {
+      onComplete?.invoke(Result.failure(IllegalArgumentException("Enter exactly 03001234567 or +923001234567.")))
+      return null
+    }
+    val email = SupabaseClient.currentUser.value?.email?.trim().orEmpty()
+    if (email.isNotBlank() && (email.length > 254 || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches())) {
+      onComplete?.invoke(Result.failure(IllegalArgumentException("Invalid email address format.")))
+      return null
+    }
     if (_isPlacingOrder.value) return null
     _isPlacingOrder.value = true
     scope.launch {
