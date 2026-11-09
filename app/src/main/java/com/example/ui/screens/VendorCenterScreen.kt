@@ -236,8 +236,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 Column(Modifier.padding(14.dp)) {
                   Text(o.optString("product_name_snapshot", o.optString("product_name","Order item")), fontWeight = FontWeight.SemiBold)
                   Text("Order ${o.optString("order_number","")}  •  Qty: ${o.optString("quantity","1")}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                  Text("Status: ${o.optString("status","processing")}", style = MaterialTheme.typography.bodySmall)
-                  Button(enabled = !saving && orderId.isNotBlank() && o.optString("status") != "ready_for_pickup", onClick = {
+                  Text("Status: ${o.optString("vendor_fulfillment_status", o.optString("status","processing"))}", style = MaterialTheme.typography.bodySmall)
+                  Button(enabled = !saving && orderId.isNotBlank() && o.optString("vendor_fulfillment_status", o.optString("status")) != "ready_for_pickup", onClick = {
                     scope.launch { saving = true; try { VendorService.markOrderReady(orderId); info = "Marked ready for JTBazar pickup."; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 } catch (e: Exception) { errorMessage = e.message ?: "Could not update order." } finally { saving = false } }
                   }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Ready for pickup") }
                 }
