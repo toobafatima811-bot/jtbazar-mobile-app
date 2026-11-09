@@ -46,9 +46,8 @@ fun MyProfileScreen(
   val userProfile by SupabaseAuthService.userProfile.collectAsState()
   val currentUser by SupabaseClient.currentUser.collectAsState()
 
-  var fullName by remember(userProfile) { mutableStateOf(userProfile?.fullName ?: currentUser?.fullName ?: "") }
-  var phone by remember(userProfile) { mutableStateOf(userProfile?.phone ?: currentUser?.phone ?: "") }
-  var city by remember(userProfile) { mutableStateOf(userProfile?.city ?: "") }
+  var fullName by remember(userProfile, currentUser) { mutableStateOf(userProfile?.fullName?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: currentUser?.fullName?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: "") }
+  var phone by remember(userProfile, currentUser) { mutableStateOf(userProfile?.phone?.takeIf { !it.equals("null", true) } ?: currentUser?.phone ?: "") }
   var isSaving by remember { mutableStateOf(false) }
   var selectedPhoto by remember { mutableStateOf<Uri?>(null) }
   val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedPhoto = uri }
@@ -175,20 +174,6 @@ fun MyProfileScreen(
         modifier = Modifier
           .fillMaxWidth()
           .testTag("profile_phone_input")
-      )
-
-      Spacer(modifier = Modifier.height(14.dp))
-
-      OutlinedTextField(
-        value = city,
-        onValueChange = { city = it },
-        label = { Text("City") },
-        placeholder = { Text("e.g. Lahore, Karachi, Islamabad") },
-        leadingIcon = { Icon(Icons.Filled.LocationCity, contentDescription = null, tint = JTPurplePrimary) },
-        singleLine = true,
-        modifier = Modifier
-          .fillMaxWidth()
-          .testTag("profile_city_input")
       )
 
       Spacer(modifier = Modifier.height(28.dp))
