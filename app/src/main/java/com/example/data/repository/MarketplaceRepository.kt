@@ -171,13 +171,33 @@ object MarketplaceRepository {
     if (wishlistMerged) prefs.edit().remove(GUEST_WISHLIST).apply()
   }
 
+  private fun isUnavailableStatus(status: String?): Boolean {
+    val normalized = status?.trim()?.lowercase()?.replace('-', '_')?.replace(' ', '_')
+    return normalized in setOf("out_of_stock", "unavailable", "not_available", "sold_out", "closed", "paused", "inactive")
+  }
+
+  fun canAddProductToCart(product: Product, palette: String? = null, size: String? = null): Boolean {
+    val latest = _products.value.firstOrNull { it.id == product.id } ?: product
+    if (latest.availabilityKnown && !latest.isAvailable) return false
+    if (latest.foodSellingUnit != null && isUnavailableStatus(latest.dailyStatus)) return false
+    val variantKey = if (!size.isNullOrBlank()) "size:$size" else if (!palette.isNullOrBlank()) "color:$palette" else null
+    if (variantKey != null && latest.variantAvailability.isNotEmpty() && latest.variantAvailability[variantKey] != true) return false
+    return true
+  }
+
   fun addToCart(product: Product, quantity: Int = 1, palette: String? = null, size: String? = null) {
-    val variantId = if (!size.isNullOrBlank()) product.variantIds["size:" + size]
-      else if (!palette.isNullOrBlank()) product.variantIds["color:" + palette] else null
+    val latestProduct = _products.value.firstOrNull { it.id == product.id } ?: product
+    if (!canAddProductToCart(latestProduct, palette, size)) {
+      _errorMessage.value = "${latestProduct.title} is out of stock or unavailable."
+      return
+    }
+    val productToAdd = latestProduct
+    val variantId = if (!size.isNullOrBlank()) productToAdd.variantIds["size:" + size]
+      else if (!palette.isNullOrBlank()) productToAdd.variantIds["color:" + palette] else null
     var localId = ""
     _cartItems.update { current ->
       val existingIndex = current.indexOfFirst {
-        it.product.id == product.id && it.variantId == variantId
+        it.product.id == productToAdd.id && it.variantId == variantId
       }
       if (existingIndex >= 0) {
         current.toMutableList().also { list ->
@@ -188,7 +208,7 @@ object MarketplaceRepository {
       } else {
         val newItem = CartItem(
           id = "cart_" + java.util.UUID.randomUUID().toString(),
-          product = product,
+          product = productToAdd,
           quantity = quantity,
           selectedPalette = palette,
           selectedSize = size,
@@ -202,7 +222,7 @@ object MarketplaceRepository {
     val userId = SupabaseClient.currentUserId
     if (userId == null) persistGuestCart()
     if (userId != null) scope.launch {
-      SupabaseApiService.addToCart(userId, product.id, quantity, variantId)
+      SupabaseApiService.addToCart(userId, productToAdd.id, quantity, variantId)
         .onSuccess { remoteId ->
           _cartItems.update { rows -> rows.map { if (it.id == localId) it.copy(id = remoteId) else it } }
         }
