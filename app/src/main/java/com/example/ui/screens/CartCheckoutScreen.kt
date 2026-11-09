@@ -845,7 +845,7 @@ private fun OrderConfirmationView(
 
     Spacer(modifier = Modifier.height(20.dp))
 
-    Text("Shukriya! Order Placed", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+    Text("Thank You! Order Placed", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
     Spacer(modifier = Modifier.height(6.dp))
 
     if (order != null) {
