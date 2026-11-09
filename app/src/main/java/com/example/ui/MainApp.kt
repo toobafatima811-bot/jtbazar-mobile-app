@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 
@@ -74,6 +75,14 @@ fun MainApp() {
   // Auth navigation state
   var pendingAuthEmail by remember { mutableStateOf("") }
   var pendingFullName by remember { mutableStateOf("") }
+
+  val googleOAuthStatus by SupabaseAuthService.googleOAuthStatus.collectAsState()
+  LaunchedEffect(googleOAuthStatus) {
+    if (googleOAuthStatus == "success") {
+      currentScreen = AppScreen.ACCOUNT
+      SupabaseAuthService.clearGoogleOAuthStatus()
+    }
+  }
 
   fun navigateTo(screen: AppScreen) {
     previousScreen = currentScreen
