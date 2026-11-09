@@ -1,0 +1,204 @@
+package com.example.ui.screens
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.example.data.supabase.VendorService
+import com.example.ui.theme.JTOrange
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Locale
+
+private data class ListingVariant(
+  val optionName: String = "Size",
+  val optionValue: String = "",
+  val sku: String = "",
+  val price: String = "",
+  val stock: String = "0"
+)
+
+@Composable
+fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var categories by remember { mutableStateOf(JSONArray()) }
+  var categoryId by remember { mutableStateOf("") }
+  var name by remember { mutableStateOf("") }
+  var slug by remember { mutableStateOf("") }
+  var sku by remember { mutableStateOf("") }
+  var price by remember { mutableStateOf("") }
+  var discount by remember { mutableStateOf("0") }
+  var weight by remember { mutableStateOf("") }
+  var supplierCost by remember { mutableStateOf("") }
+  var fulfilment by remember { mutableStateOf("0") }
+  var minimumProfit by remember { mutableStateOf("0") }
+  var shortDescription by remember { mutableStateOf("") }
+  var description by remember { mutableStateOf("") }
+  var specifications by remember { mutableStateOf("[]") }
+  var dimensions by remember { mutableStateOf("{}") }
+  var seoTitle by remember { mutableStateOf("") }
+  var seoDescription by remember { mutableStateOf("") }
+  var trackInventory by remember { mutableStateOf(true) }
+  var initialStock by remember { mutableStateOf("0") }
+  var variants by remember { mutableStateOf(listOf<ListingVariant>()) }
+  var images by remember { mutableStateOf<List<Uri>>(emptyList()) }
+  var saving by remember { mutableStateOf(false) }
+  var error by remember { mutableStateOf("") }
+  var message by remember { mutableStateOf("") }
+
+  LaunchedEffect(Unit) {
+    try { categories = VendorService.listCategories() }
+    catch (e: Exception) { error = e.message ?: "Categories could not be loaded." }
+  }
+
+  val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
+    val remaining = (8 - images.size).coerceAtLeast(0)
+    images = (images + selected.take(remaining)).distinct().take(8)
+    if (selected.size > remaining) error = "You can add up to 8 images total."
+  }
+
+  fun fieldNumber(value: String, label: String, allowDecimal: Boolean = true): Double {
+    val parsed = value.toDoubleOrNull() ?: error("Enter a valid $label.")
+    require(parsed >= 0) { "$label cannot be negative." }
+    if (!allowDecimal) require(parsed % 1.0 == 0.0) { "$label must be a whole number." }
+    return parsed
+  }
+
+  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Text("New listing", style = MaterialTheme.typography.titleLarge)
+    Text("Product name", style = MaterialTheme.typography.labelLarge)
+    OutlinedTextField(name, { name = it; if (slug.isBlank() || slug == nameToSlug(name.dropLast(1))) slug = nameToSlug(it) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+    ListingField("Slug", slug) { slug = it.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
+    ListingField("SKU", sku) { sku = it }
+    Text("Category *", style = MaterialTheme.typography.labelLarge)
+    var categoryExpanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = !categoryExpanded }) {
+      val selectedCategory = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }.firstOrNull { it.optString("id") == categoryId }
+      OutlinedTextField(selectedCategory?.optString("name") ?: "", {}, readOnly = true, label = { Text("Select category") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+      ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
+        for (i in 0 until categories.length()) {
+          val category = categories.optJSONObject(i) ?: continue
+          DropdownMenuItem(text = { Text(category.optString("name")) }, onClick = { categoryId = category.optString("id"); categoryExpanded = false })
+        }
+      }
+    }
+    ListingField("Selling price (PKR) *", price) { price = it.filter { c -> c.isDigit() || c == '.' } }
+    ListingField("Discount (%)", discount) { discount = it.filter { c -> c.isDigit() || c == '.' } }
+    ListingField("Shipping weight (grams)", weight) { weight = it.filter(Char::isDigit) }
+    ListingField("Supplier cost (private)", supplierCost) { supplierCost = it.filter { c -> c.isDigit() || c == '.' } }
+    ListingField("Fulfilment expense", fulfilment) { fulfilment = it.filter { c -> c.isDigit() || c == '.' } }
+    ListingField("Minimum profit", minimumProfit) { minimumProfit = it.filter { c -> c.isDigit() || c == '.' } }
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+      Column(Modifier.weight(1f)) {
+        Text("Product variants", style = MaterialTheme.typography.titleMedium)
+        Text("Each option can have its own SKU, price and stock.", style = MaterialTheme.typography.bodySmall)
+      }
+      TextButton(onClick = { variants = variants + ListingVariant() }) { Text("Add variant") }
+    }
+    variants.forEachIndexed { index, variant ->
+      Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          ListingField("Option name", variant.optionName) { v -> variants = variants.toMutableList().also { it[index] = variant.copy(optionName = v) } }
+          ListingField("Option value", variant.optionValue) { v -> variants = variants.toMutableList().also { it[index] = variant.copy(optionValue = v) } }
+          ListingField("Variant SKU", variant.sku) { v -> variants = variants.toMutableList().also { it[index] = variant.copy(sku = v) } }
+          ListingField("Price override (PKR) — blank uses base price", variant.price) { v -> variants = variants.toMutableList().also { it[index] = variant.copy(price = v) } }
+          ListingField("Stock quantity", variant.stock) { v -> variants = variants.toMutableList().also { it[index] = variant.copy(stock = v.filter(Char::isDigit)) } }
+          TextButton(onClick = { variants = variants.filterIndexed { i, _ -> i != index } }) { Text("Remove variant") }
+        }
+      }
+    }
+    Text("Variant changes are sent to JTBazar moderation before publication. Supplier costs and fulfilment details remain private.", style = MaterialTheme.typography.bodySmall)
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+      Text("Product images (${images.size}/8)", style = MaterialTheme.typography.titleMedium)
+      TextButton(enabled = images.size < 8, onClick = { imagePicker.launch("image/*") }) { Text("Select images") }
+    }
+    images.forEachIndexed { index, uri ->
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("Image ${index + 1}: ${uri.lastPathSegment ?: "Selected"}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+        TextButton(onClick = { images = images.filterIndexed { i, _ -> i != index } }) { Text("Remove") }
+      }
+    }
+    Text("Select multiple JPG, PNG, WebP or AVIF images · maximum 10 MB each · up to 8 images total.", style = MaterialTheme.typography.bodySmall)
+
+    ListingField("Short description", shortDescription, 2) { shortDescription = it }
+    ListingField("Full description", description, 4) { description = it }
+    ListingField("Specifications (JSON array)", specifications, 3) { specifications = it }
+    ListingField("Dimensions (JSON object)", dimensions, 3) { dimensions = it }
+    ListingField("SEO title", seoTitle) { seoTitle = it }
+    ListingField("SEO description", seoDescription, 2) { seoDescription = it }
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+      Checkbox(trackInventory, { trackInventory = it })
+      Text("Track inventory for this listing")
+    }
+    if (trackInventory) ListingField("Initial stock quantity", initialStock) { initialStock = it.filter(Char::isDigit) }
+    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+    if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
+    Button(enabled = !saving, onClick = {
+      scope.launch {
+        saving = true; error = ""; message = ""
+        try {
+          require(name.trim().length >= 2) { "Enter a product name." }
+          require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid slug." }
+          require(categoryId.isNotBlank()) { "Select a category." }
+          val basePrice = fieldNumber(price, "selling price")
+          require(basePrice > 0) { "Selling price must be greater than zero." }
+          val discountValue = fieldNumber(discount, "discount")
+          require(discountValue <= 100) { "Discount cannot exceed 100%." }
+          val variantJson = JSONArray()
+          val seen = mutableSetOf<String>()
+          variants.forEach { v ->
+            require(v.optionName.isNotBlank() && v.optionValue.isNotBlank()) { "Complete every variant option." }
+            require(seen.add("${v.optionName.trim().lowercase()}::${v.optionValue.trim().lowercase()}")) { "Duplicate variant option and value." }
+            val stock = fieldNumber(v.stock, "variant stock", false).toInt()
+            val row = JSONObject().put("option_label", v.optionName.trim()).put("option_value", v.optionValue.trim())
+              .put("sku", v.sku.trim().ifBlank { JSONObject.NULL })
+              .put("price_override", if (v.price.isBlank()) JSONObject.NULL else fieldNumber(v.price, "variant price"))
+              .put("attributes", JSONObject()).put("quantity", stock)
+            variantJson.put(row)
+          }
+          val specs = JSONArray(specifications)
+          val dims = JSONObject(dimensions)
+          val id = VendorService.createProduct(
+            name.trim(), slug, description, basePrice.toInt(),
+            if (trackInventory) fieldNumber(initialStock, "initial stock", false).toInt() else 0,
+            categoryId, sku.trim().ifBlank { null }, shortDescription, supplierCost.toDoubleOrNull(),
+            fieldNumber(fulfilment, "fulfilment expense"), fieldNumber(minimumProfit, "minimum profit"),
+            discountValue, weight.toIntOrNull(), specs, dims, seoTitle.trim().ifBlank { null },
+            seoDescription.trim().ifBlank { null }, trackInventory
+          )
+          if (variantJson.length() > 0) VendorService.saveVariants(id, variantJson)
+          images.forEachIndexed { index, uri ->
+            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Image could not be read.")
+            require(bytes.size <= 10 * 1024 * 1024) { "Each image must be 10 MB or smaller." }
+            VendorService.uploadProductImage(id, bytes, mime, name)
+          }
+          message = "Listing submitted for moderation."
+          onSaved()
+        } catch (e: Exception) { error = e.message ?: "Listing could not be submitted." }
+        finally { saving = false }
+      }
+    }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
+      Text(if (saving) "Submitting..." else "Submit listing")
+    }
+    OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth(), enabled = !saving) { Text("Cancel") }
+  }
+}
+
+private fun nameToSlug(value: String): String = value.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
+
+@Composable
+private fun ListingField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
+  OutlinedTextField(value, onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1)
+}
