@@ -175,7 +175,9 @@ data class SupabaseNotificationDto(
 data class SupabaseStoreSettingsDto(
   val deliveryFee: Int,
   val codEnabled: Boolean,
-  val returnWindowDays: Int
+  val returnWindowDays: Int,
+  val freeDeliveryEnabled: Boolean = false,
+  val additionalDeliveryFee: Int = 0
 )
 
 
