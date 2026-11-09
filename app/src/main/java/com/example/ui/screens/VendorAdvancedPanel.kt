@@ -21,7 +21,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   var saving by remember { mutableStateOf(false) }
-  var error by remember { mutableStateOf("") }
+  var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
   var shopOpen by remember { mutableStateOf(false) }
   var shopName by remember { mutableStateOf(application.shopName) }
@@ -46,7 +46,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   fun reload() {
     scope.launch {
       try { cases = VendorService.listCases(); tickets = VendorService.listSupportTickets() }
-      catch (e: Exception) { error = e.message ?: "Vendor information could not be loaded." }
+      catch (e: Exception) { errorMessage = e.message ?: "Vendor information could not be loaded." }
     }
   }
   LaunchedEffect(application.id) { reload() }
@@ -54,7 +54,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
     val productId = imageProductId
     if (uri != null && productId != null) scope.launch {
-      saving = true; error = ""; message = ""
+      saving = true; errorMessage = ""; message = ""
       try {
         val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Image could not be read.")
@@ -67,7 +67,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   }
 
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+    if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
     OutlinedButton(onClick = { shopOpen = !shopOpen }, modifier = Modifier.fillMaxWidth()) {
       Text(if (shopOpen) "Close shop settings" else "Edit shop details")
