@@ -42,15 +42,17 @@ object SupabaseApiService {
         products.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
       }
       val idFilter = ids.joinToString(",")
+      // Product media and variants are optional enrichment. A failure in one
+      // enrichment endpoint must not hide the published product catalog.
       val imageJson = SupabaseClient.get(
         "product_images?select=product_id,image_url,storage_path,is_primary,sort_order&product_id=in.($idFilter)&order=sort_order.asc"
-      ).getOrThrow()
+      ).getOrNull() ?: "[]"
       val variantJson = SupabaseClient.get(
         "product_variants?select=id,product_id,option_label,option_value,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
-      ).getOrThrow()
+      ).getOrNull() ?: "[]"
       val categoryJson = SupabaseClient.get(
         "categories?select=id,name&is_active=eq.true"
-      ).getOrThrow()
+      ).getOrNull() ?: "[]"
 
       val images = JSONArray(imageJson)
       val variants = JSONArray(variantJson)
