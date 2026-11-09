@@ -33,6 +33,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.Intent
 import android.net.Uri
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
@@ -63,6 +70,13 @@ fun HomeScreen(
   var showAddressDialog by remember { mutableStateOf(false) }
   var searchQuery by remember { mutableStateOf("") }
   var isSearching by remember { mutableStateOf(false) }
+  val keyboardController = LocalSoftwareKeyboardController.current
+  val voiceSearchLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    if (result.resultCode == android.app.Activity.RESULT_OK) {
+      val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+      if (spoken.isNotBlank()) { searchQuery = spoken; isSearching = true }
+    }
+  }
 
   if (showAddressDialog) {
     AddressSelectionSheet(
@@ -103,6 +117,14 @@ fun HomeScreen(
           onQueryChange = {
             searchQuery = it
             isSearching = it.isNotBlank()
+          },
+          onVoiceSearch = {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+              putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+              putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-PK")
+              putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak a product name")
+            }
+            runCatching { voiceSearchLauncher.launch(intent) }
           },
           modifier = Modifier
             .fillMaxWidth()
@@ -342,9 +364,10 @@ fun HomeScreen(
           homeProducts.take(4)
         } else {
           products.filter {
-            it.title.contains(searchQuery, ignoreCase = true) ||
-              it.category.contains(searchQuery, ignoreCase = true) ||
-              it.vendor.contains(searchQuery, ignoreCase = true)
+            it.title.contains(searchQuery.trim(), ignoreCase = true) ||
+              it.category.contains(searchQuery.trim(), ignoreCase = true) ||
+              it.vendor.contains(searchQuery.trim(), ignoreCase = true) ||
+              it.craftStory.contains(searchQuery.trim(), ignoreCase = true)
           }
         }
 
@@ -542,6 +565,7 @@ fun HomeScreen(
 fun SearchInputBar(
   query: String,
   onQueryChange: (String) -> Unit,
+  onVoiceSearch: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   Surface(
@@ -576,6 +600,8 @@ fun SearchInputBar(
           value = query,
           onValueChange = onQueryChange,
           singleLine = true,
+          keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+          keyboardActions = KeyboardActions(onSearch = { LocalSoftwareKeyboardController.current?.hide() }),
           textStyle = androidx.compose.ui.text.TextStyle(
             color = JTTextPrimary,
             fontSize = 13.sp,
@@ -586,7 +612,7 @@ fun SearchInputBar(
       }
 
       IconButton(
-        onClick = { /* Voice Search */ },
+        onClick = onVoiceSearch,
         modifier = Modifier.size(28.dp)
       ) {
         Icon(
@@ -597,19 +623,7 @@ fun SearchInputBar(
         )
       }
 
-      Spacer(modifier = Modifier.width(2.dp))
 
-      IconButton(
-        onClick = { /* QR Scanner */ },
-        modifier = Modifier.size(28.dp)
-      ) {
-        Icon(
-          imageVector = Icons.Filled.QrCodeScanner,
-          contentDescription = "Scan",
-          tint = JTTextSecondary,
-          modifier = Modifier.size(19.dp)
-        )
-      }
     }
   }
 }
