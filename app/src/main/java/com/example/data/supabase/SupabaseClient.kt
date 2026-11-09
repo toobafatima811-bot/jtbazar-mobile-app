@@ -254,6 +254,25 @@ object SupabaseClient {
     }
   }
 
+  suspend fun uploadPrivateFile(bucket: String, path: String, bytes: ByteArray, mimeType: String): Result<String> = withContext(Dispatchers.IO) {
+    try {
+      val encodedPath = path.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+      val url = "${SupabaseConfig.storageUrl}/object/$bucket/$encodedPath"
+      val request = Request.Builder().url(url)
+        .post(bytes.toRequestBody(mimeType.toMediaType()))
+        .header("x-upsert", "false")
+        .build()
+      okHttpClient.newCall(request).execute().use { response ->
+        val body = response.body?.string() ?: ""
+        if (response.isSuccessful) Result.success(path)
+        else Result.failure(IOException("Private storage upload error ${response.code}: $body"))
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Private storage upload failed for $bucket/$path", e)
+      Result.failure(e)
+    }
+  }
+
   /**
    * Execute RPC function in Supabase
    */
