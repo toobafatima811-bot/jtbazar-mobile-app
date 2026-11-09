@@ -334,12 +334,18 @@ object SupabaseApiService {
     }
   }
 
+  private fun normalizePakistaniMobile(value: String): String {
+    val phone = value.trim()
+    if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(phone)) throw IOException("Enter exactly 03001234567 or +923001234567.")
+    return if (phone.startsWith("03")) "+92" + phone.substring(1) else phone
+  }
+
   suspend fun saveAddress(address: SupabaseAddressDto): Result<String> = withContext(Dispatchers.IO) {
     val json = JSONObject().apply {
       if (address.id.isNotBlank() && !address.id.startsWith("addr_")) put("id", address.id)
       put("user_id", address.userId)
       put("recipient_name", address.name)
-      put("phone", address.phone)
+      put("phone", normalizePakistaniMobile(address.phone))
       put("address_line_1", address.addressLine)
       if (address.area.isNotBlank()) put("address_line_2", address.area)
       put("city", address.city)
@@ -380,7 +386,7 @@ object SupabaseApiService {
       }
       val address = JSONObject().apply {
         put("recipient_name", order.addressName)
-        put("phone", order.addressPhone)
+        put("phone", normalizePakistaniMobile(order.addressPhone))
         put("address_line_1", order.addressLine)
         if (order.addressArea.isNotBlank()) put("address_line_2", order.addressArea)
         put("city", order.addressCity)
@@ -399,8 +405,8 @@ object SupabaseApiService {
       }
       val params = JSONObject().apply {
         put("p_customer_name", order.addressName)
-        put("p_customer_phone", order.addressPhone)
-        put("p_customer_email", order.customerEmail ?: JSONObject.NULL)
+        put("p_customer_phone", normalizePakistaniMobile(order.addressPhone))
+        put("p_customer_email", order.customerEmail?.trim()?.takeIf { it.isNotBlank() }?.let { if (android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches() && it.length <= 254) it else throw IOException("Invalid email address format.") } ?: JSONObject.NULL)
         put("p_shipping_address", address)
         put("p_items", lines)
         put("p_idempotency_key", order.idempotencyKey)
