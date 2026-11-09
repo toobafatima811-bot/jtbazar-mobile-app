@@ -57,6 +57,92 @@ object VendorService {
   suspend fun setInventory(productId: String, quantity: Int, note: String = "Updated from Android app") {
     fail(SupabaseClient.rpc("vendor_set_product_inventory", JSONObject().put("p_product_id", productId).put("p_variant_id", JSONObject.NULL).put("p_new_quantity", quantity).put("p_note", note).toString()))
   }
+
+  suspend fun uploadProductImage(productId: String, bytes: ByteArray, mime: String, altText: String = ""): String {
+    val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
+    require(bytes.size <= 10 * 1024 * 1024) { "Product images must be 10 MB or smaller." }
+    require(mime in listOf("image/jpeg", "image/png", "image/webp", "image/avif")) { "Choose JPG, PNG, WebP or AVIF." }
+    val ext = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
+    val path = "${user.id}/$productId/${System.currentTimeMillis()}.$ext"
+    val url = SupabaseClient.uploadPublicFile("product-images", path, bytes, mime).getOrThrow()
+    val countRaw = fail(SupabaseClient.get("product_images?product_id=eq.$productId&select=sort_order&order=sort_order.desc&limit=1"))
+    val countRows = JSONArray(countRaw)
+    val sort = if (countRows.length() > 0) countRows.getJSONObject(0).optInt("sort_order", -1) + 1 else 0
+    val body = JSONObject().put("product_id", productId).put("storage_path", path).put("image_url", url)
+      .put("alt_text", altText.take(200)).put("sort_order", sort).put("is_primary", sort == 0)
+    fail(SupabaseClient.post("product_images", body.toString(), preferHeader = "return=representation"))
+    return url
+  }
+
+  suspend fun updateOwnShop(data: JSONObject) {
+    val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
+    val result = fail(SupabaseClient.patch("seller_profiles?user_id=eq.${user.id}", data.toString()))
+    if (result.isBlank() || result == "[]") throw IOException("Shop details were not updated.")
+  }
+
+  suspend fun resubmitApplication(): VendorApplication {
+    val raw = fail(SupabaseClient.rpc("seller_resubmit_application"))
+    val row = if (raw.trim().startsWith("[")) JSONArray(raw).optJSONObject(0) else JSONObject(raw)
+    row ?: throw IOException("Application could not be resubmitted.")
+    return VendorApplication(text(row,"id"), text(row,"status","pending"), text(row,"shop_name"), text(row,"rejection_reason").ifBlank { null })
+  }
+
+  suspend fun saveVariants(productId: String, variants: JSONArray) {
+    require(variants.length() <= 100) { "A product can have no more than 100 variants." }
+    fail(SupabaseClient.rpc("vendor_save_product_variants", JSONObject().put("p_product_id", productId).put("p_variants", variants).toString()))
+  }
+
+  suspend fun listVariants(productId: String): JSONArray =
+    JSONArray(fail(SupabaseClient.get("product_variants?product_id=eq.$productId&select=id,option_label,option_value,sku,price_override,attributes,sort_order&order=sort_order.asc&limit=100")))
+
+  suspend fun listCases(): JSONArray =
+    JSONArray(fail(SupabaseClient.get("marketplace_cases?select=id,order_id,order_item_id,case_type,status,reason,evidence_path,seller_response,admin_decision,created_at,updated_at&order=created_at.desc&limit=100")))
+
+  suspend fun respondToCase(caseId: String, response: String) {
+    require(response.trim().length >= 3) { "Write a response of at least 3 characters." }
+    val body = JSONObject().put("seller_response", response.trim()).put("status", "seller_responded")
+    fail(SupabaseClient.patch("marketplace_cases?id=eq.$caseId", body.toString()))
+  }
+
+  suspend fun listSupportTickets(): JSONArray =
+    JSONArray(fail(SupabaseClient.get("support_tickets?select=id,subject,message,status,admin_reply,created_at,updated_at&order=created_at.desc&limit=100")))
+
+  suspend fun createSupportTicket(subject: String, message: String) {
+    val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
+    val profile = getOwnApplication() ?: throw IOException("Seller profile was not found.")
+    require(subject.trim().length >= 3 && message.trim().length >= 5) { "Enter a subject and a detailed message." }
+    val body = JSONObject().put("seller_id", profile.id).put("created_by", user.id)
+      .put("subject", subject.trim()).put("message", message.trim())
+    fail(SupabaseClient.post("support_tickets", body.toString(), preferHeader = "return=representation"))
+  }
+
+  suspend fun listInventory(): JSONArray =
+    JSONArray(fail(SupabaseClient.get("product_inventory?select=id,product_id,variant_id,quantity,low_stock_threshold,products!inner(name),product_variants(option_label,option_value)&order=updated_at.desc&limit=200")))
+
+  suspend fun setVariantInventory(productId: String, variantId: String?, quantity: Int, note: String = "Updated from Android app") {
+    require(quantity >= 0) { "Stock cannot be negative." }
+    val params = JSONObject().put("p_product_id", productId).put("p_variant_id", variantId ?: JSONObject.NULL)
+      .put("p_new_quantity", quantity).put("p_note", note)
+    fail(SupabaseClient.rpc("vendor_set_product_inventory", params.toString()))
+  }
+
+  suspend fun updateProduct(productId: String, name: String, description: String, price: Int, stock: Int) {
+    require(name.trim().length >= 2 && price > 0 && stock >= 0) { "Check product name, price and stock." }
+    val current = JSONArray(fail(SupabaseClient.rpc("vendor_list_products")))
+    val product = (0 until current.length()).mapNotNull { current.optJSONObject(it) }.firstOrNull { it.optString("id") == productId }
+      ?: throw IOException("Product not found.")
+    val params = JSONObject().put("p_product_id", productId).put("p_category_id", product.optString("category_id").takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+      .put("p_name", name.trim()).put("p_slug", product.optString("slug")).put("p_sku", product.optString("sku").takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+      .put("p_short_description", description.take(180)).put("p_description", description).put("p_price", price)
+      .put("p_supplier_cost", product.opt("supplier_cost") ?: JSONObject.NULL).put("p_fulfillment_expense", product.optInt("fulfillment_expense",0))
+      .put("p_minimum_profit", product.optInt("minimum_profit",0)).put("p_discount_percent", product.optInt("discount_percent",0))
+      .put("p_weight_grams", product.opt("weight_grams") ?: JSONObject.NULL).put("p_specifications", product.optJSONObject("specifications") ?: JSONObject())
+      .put("p_dimensions", product.optJSONObject("dimensions") ?: JSONObject()).put("p_seo_title", product.opt("seo_title") ?: JSONObject.NULL)
+      .put("p_seo_description", product.opt("seo_description") ?: JSONObject.NULL)
+    fail(SupabaseClient.rpc("vendor_update_product", params.toString()))
+    setInventory(productId, stock)
+  }
+
   suspend fun createProduct(name: String, slug: String, description: String, price: Int, stock: Int, categoryId: String? = null): String {
     val params = JSONObject()
       .put("p_category_id", categoryId ?: JSONObject.NULL)
