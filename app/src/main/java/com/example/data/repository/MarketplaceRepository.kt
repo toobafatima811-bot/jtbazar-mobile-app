@@ -45,6 +45,10 @@ object MarketplaceRepository {
   val freeDeliveryEnabled: StateFlow<Boolean> = _freeDeliveryEnabled.asStateFlow()
   private val _additionalDeliveryFee = MutableStateFlow(0)
   val additionalDeliveryFee: StateFlow<Int> = _additionalDeliveryFee.asStateFlow()
+  private val _supportEmail = MutableStateFlow<String?>(null)
+  val supportEmail: StateFlow<String?> = _supportEmail.asStateFlow()
+  private val _supportWhatsapp = MutableStateFlow<String?>(null)
+  val supportWhatsapp: StateFlow<String?> = _supportWhatsapp.asStateFlow()
   private val _codEnabled = MutableStateFlow(false)
   val codEnabled: StateFlow<Boolean> = _codEnabled.asStateFlow()
   private val _returnWindowDays = MutableStateFlow(7)
@@ -413,6 +417,8 @@ object MarketplaceRepository {
           _deliveryFee.value = it.deliveryFee
           _freeDeliveryEnabled.value = it.freeDeliveryEnabled
           _additionalDeliveryFee.value = it.additionalDeliveryFee
+          _supportEmail.value = it.supportEmail
+          _supportWhatsapp.value = it.supportWhatsapp
           _codEnabled.value = it.codEnabled
           _returnWindowDays.value = it.returnWindowDays
         }.onFailure { _errorMessage.value = it.message }
