@@ -1,6 +1,8 @@
 package com.example.data.supabase
 
 import android.content.Context
+import android.net.Uri
+import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +15,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * Service managing Supabase GoTrue authentication and user profile synchronization.
@@ -28,6 +32,10 @@ object SupabaseAuthService {
   private const val KEY_USER_EMAIL = "user_email"
   private const val KEY_USER_NAME = "user_name"
   private const val KEY_USER_PHONE = "user_phone"
+  private const val KEY_GOOGLE_CODE_VERIFIER = "google_code_verifier"
+
+  private val _googleOAuthStatus = MutableStateFlow<String?>(null)
+  val googleOAuthStatus: StateFlow<String?> = _googleOAuthStatus.asStateFlow()
 
   private val _userProfile = MutableStateFlow<SupabaseProfile?>(null)
   val userProfile: StateFlow<SupabaseProfile?> = _userProfile.asStateFlow()
@@ -90,6 +98,119 @@ object SupabaseAuthService {
     } catch (e: Exception) {
       Log.e(TAG, "Failed to persist session to preferences", e)
     }
+  }
+
+  /** Build a PKCE-protected Google OAuth URL that returns to the Android app. */
+  fun createGoogleOAuthUrl(context: Context): Result<String> {
+    return try {
+      val verifierBytes = ByteArray(64).also { SecureRandom().nextBytes(it) }
+      val verifier = Base64.encodeToString(
+        verifierBytes,
+        Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+      )
+      val challengeBytes = MessageDigest.getInstance("SHA-256")
+        .digest(verifier.toByteArray(Charsets.US_ASCII))
+      val challenge = Base64.encodeToString(
+        challengeBytes,
+        Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+      )
+      context.applicationContext
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(KEY_GOOGLE_CODE_VERIFIER, verifier)
+        .apply()
+
+      _googleOAuthStatus.value = null
+      val url = Uri.parse("${SupabaseConfig.authUrl}/authorize").buildUpon()
+        .appendQueryParameter("provider", "google")
+        .appendQueryParameter("redirect_to", "jtbazar://auth-callback")
+        .appendQueryParameter("flow_type", "pkce")
+        .appendQueryParameter("code_challenge", challenge)
+        .appendQueryParameter("code_challenge_method", "s256")
+        .build()
+        .toString()
+      Result.success(url)
+    } catch (e: Exception) {
+      Log.e(TAG, "Could not start Google OAuth", e)
+      Result.failure(e)
+    }
+  }
+
+  /** Exchange the one-time Supabase PKCE code and persist the authenticated app session. */
+  suspend fun handleGoogleOAuthCallback(uri: Uri, context: Context): Result<SupabaseSession> =
+    withContext(Dispatchers.IO) {
+      try {
+        val callbackError = uri.getQueryParameter("error_description")
+          ?: uri.getQueryParameter("error")
+        if (!callbackError.isNullOrBlank()) {
+          throw IOException(callbackError)
+        }
+        val authCode = uri.getQueryParameter("code")
+          ?: throw IOException("Google sign-in did not return an authorization code.")
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val verifier = prefs.getString(KEY_GOOGLE_CODE_VERIFIER, null)
+          ?: throw IOException("Google sign-in expired. Please try again.")
+        prefs.edit().remove(KEY_GOOGLE_CODE_VERIFIER).apply()
+
+        val body = JSONObject()
+          .put("auth_code", authCode)
+          .put("code_verifier", verifier)
+        val request = Request.Builder()
+          .url("${SupabaseConfig.authUrl}/token?grant_type=pkce")
+          .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+          .build()
+
+        SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
+          val responseBody = response.body?.string() ?: ""
+          if (!response.isSuccessful) {
+            throw IOException(parseErrorMessage(responseBody, "Google sign-in failed (${response.code})."))
+          }
+          val json = JSONObject(responseBody)
+          val accessToken = json.optString("access_token", "")
+          val refreshToken = json.optString("refresh_token", "")
+          val userObj = json.optJSONObject("user")
+            ?: throw IOException("Google sign-in response did not include a user.")
+          if (accessToken.isBlank()) throw IOException("Google sign-in did not create a session.")
+
+          val metadata = userObj.optJSONObject("user_metadata")
+          val fullName = metadata?.optString(
+            "full_name",
+            metadata.optString("name", "JTBazar Customer")
+          ) ?: "JTBazar Customer"
+          val email = userObj.optString("email", "")
+          val user = SupabaseUser(
+            id = userObj.optString("id"),
+            email = email,
+            phone = metadata?.optString("phone", "") ?: "",
+            fullName = fullName
+          )
+          val session = SupabaseSession(
+            accessToken = accessToken,
+            refreshToken = refreshToken,
+            user = user
+          )
+          SupabaseClient.setSession(session)
+          persistSession(context.applicationContext, session)
+
+          val profile = fetchProfile(user.id).getOrNull() ?: SupabaseProfile(
+            id = user.id,
+            fullName = fullName,
+            phone = user.phone ?: "",
+            email = email
+          )
+          _userProfile.value = profile
+          _googleOAuthStatus.value = "success"
+          Result.success(session)
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "Google OAuth callback failed", e)
+        _googleOAuthStatus.value = e.message ?: "Google sign-in failed. Please try again."
+        Result.failure(e)
+      }
+    }
+
+  fun clearGoogleOAuthStatus() {
+    _googleOAuthStatus.value = null
   }
 
   /**
