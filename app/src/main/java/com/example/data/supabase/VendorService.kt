@@ -22,7 +22,11 @@ data class VendorApplication(
   val cnicNumber: String = "",
   val shopLocationText: String = "",
   val shopLat: Double? = null,
-  val shopLng: Double? = null
+  val shopLng: Double? = null,
+  val shopImageUrl: String = "",
+  val showShopOnMap: Boolean = false,
+  val shopIsOpen: Boolean = true,
+  val minimumOrderValue: Int = 0
 )
 
 object VendorService {
@@ -31,14 +35,15 @@ object VendorService {
 
   suspend fun getOwnApplication(): VendorApplication? {
     val user = SupabaseClient.currentUser.value ?: return null
-    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,rejection_reason,vendor_locked,vendor_lock_reason&limit=1"))
+    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason&limit=1"))
     val rows = JSONArray(raw)
     if (rows.length() == 0) return null
     val o = rows.getJSONObject(0)
     return VendorApplication(text(o,"id"), text(o,"status"), text(o,"shop_name"), text(o,"rejection_reason").ifBlank { null }, o.optBoolean("vendor_locked", false), text(o,"vendor_lock_reason").ifBlank { null },
       text(o,"slug"), text(o,"description"), text(o,"phone"), text(o,"current_address"), text(o,"complete_address"), text(o,"contact_email"),
       text(o,"vendor_type","individual_seller"), text(o,"owner_full_name"), text(o,"cnic_number"), text(o,"shop_location_text"),
-      if (o.isNull("shop_lat")) null else o.optDouble("shop_lat"), if (o.isNull("shop_lng")) null else o.optDouble("shop_lng"))
+      if (o.isNull("shop_lat")) null else o.optDouble("shop_lat"), if (o.isNull("shop_lng")) null else o.optDouble("shop_lng"),
+      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), o.optInt("minimum_order_value", 0))
   }
 
   suspend fun isVendor(): Boolean {
@@ -63,7 +68,11 @@ object VendorService {
   }
 
   suspend fun listProducts(): JSONArray = JSONArray(fail(SupabaseClient.rpc("vendor_list_products")))
-  suspend fun listOrders(): JSONArray = JSONArray(fail(SupabaseClient.rpc("vendor_order_items_page", JSONObject().put("p_limit", 30).put("p_offset", 0).put("p_search", JSONObject.NULL).put("p_status", JSONObject.NULL).toString())))
+  suspend fun listOrders(page: Int = 0, search: String = "", status: String = "all"): JSONArray =
+    JSONArray(fail(SupabaseClient.rpc("vendor_order_items_page", JSONObject()
+      .put("p_limit", 12).put("p_offset", page.coerceAtLeast(0) * 12)
+      .put("p_search", search.trim().takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+      .put("p_status", status.takeIf { it in setOf("pending", "delivered", "not_delivered") } ?: JSONObject.NULL).toString())))
   suspend fun markOrderReady(orderId: String, note: String = "") {
     val raw = fail(SupabaseClient.rpc("vendor_mark_order_ready", JSONObject().put("p_order_id", orderId).put("p_vendor_note", note.ifBlank { JSONObject.NULL }).toString()))
     if (raw == "null" || raw == "false" || raw.isBlank()) throw IOException("Order could not be marked ready.")
@@ -73,6 +82,15 @@ object VendorService {
   }
   suspend fun setInventory(productId: String, quantity: Int, note: String = "Updated from Android app") {
     fail(SupabaseClient.rpc("vendor_set_product_inventory", JSONObject().put("p_product_id", productId).put("p_variant_id", JSONObject.NULL).put("p_new_quantity", quantity).put("p_note", note).toString()))
+  }
+
+  suspend fun uploadShopImage(bytes: ByteArray, mime: String): String {
+    val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
+    require(bytes.size <= 5 * 1024 * 1024) { "Shop images must be 5 MB or smaller." }
+    require(mime in listOf("image/jpeg", "image/png", "image/webp", "image/avif")) { "Choose JPG, PNG, WebP or AVIF." }
+    val ext = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
+    val path = "${user.id}/${System.currentTimeMillis()}.$ext"
+    return SupabaseClient.uploadPublicFile("shop-images", path, bytes, mime).getOrThrow()
   }
 
   suspend fun uploadProductImage(productId: String, bytes: ByteArray, mime: String, altText: String = ""): String {
@@ -111,6 +129,27 @@ object VendorService {
 
   suspend fun listVariants(productId: String): JSONArray =
     JSONArray(fail(SupabaseClient.get("product_variants?product_id=eq.$productId&select=id,option_label,option_value,sku,price_override,attributes,sort_order&order=sort_order.asc&limit=100")))
+
+  suspend fun setDailyAvailability(productId: String, isDailyItem: Boolean, quantity: Int, minimumQuantity: Int = 1, minimumOrderValue: Int? = null, shopIsOpen: Boolean? = null) {
+    require(quantity >= 0 && minimumQuantity >= 1) { "Enter valid daily quantities." }
+    require(minimumOrderValue == null || minimumOrderValue >= 0) { "Minimum order value cannot be negative." }
+    val params = JSONObject().put("p_product_id", productId).put("p_is_daily_item", isDailyItem)
+      .put("p_available_quantity", quantity).put("p_minimum_quantity", minimumQuantity)
+      .put("p_minimum_order_value", minimumOrderValue ?: JSONObject.NULL)
+      .put("p_shop_is_open", shopIsOpen ?: JSONObject.NULL)
+    fail(SupabaseClient.rpc("vendor_set_daily_availability", params.toString()))
+  }
+
+  suspend fun requestProductDeletion(productId: String, reason: String) {
+    require(reason.trim().length >= 3) { "Please provide a reason of at least 3 characters." }
+    fail(SupabaseClient.rpc("vendor_request_product_deletion", JSONObject().put("p_product_id", productId).put("p_reason", reason.trim()).toString()))
+  }
+
+  suspend fun listProductDeletionRequests(): JSONArray =
+    JSONArray(fail(SupabaseClient.get("product_deletion_requests?select=id,product_id,status,reason,created_at&order=created_at.desc&limit=100")))
+
+  suspend fun listInventoryMovements(): JSONArray =
+    JSONArray(fail(SupabaseClient.get("inventory_movements?select=id,product_id,variant_id,quantity_delta,movement_type,note,created_at,products!inner(name),product_variants(option_label,option_value)&order=created_at.desc&limit=100")))
 
   suspend fun listCases(): JSONArray =
     JSONArray(fail(SupabaseClient.get("marketplace_cases?select=id,order_id,order_item_id,case_type,status,reason,evidence_path,seller_response,admin_decision,created_at,updated_at&order=created_at.desc&limit=100")))
