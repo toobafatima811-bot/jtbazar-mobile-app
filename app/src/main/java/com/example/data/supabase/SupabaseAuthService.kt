@@ -173,10 +173,9 @@ object SupabaseAuthService {
           if (accessToken.isBlank()) throw IOException("Google sign-in did not create a session.")
 
           val metadata = userObj.optJSONObject("user_metadata")
-          val fullName = metadata?.optString(
-            "full_name",
-            metadata.optString("name", "JTBazar Customer")
-          ) ?: "JTBazar Customer"
+          val fullName = metadata?.optString("full_name")?.takeIf { it.isNotBlank() }
+            ?: metadata?.optString("name")?.takeIf { it.isNotBlank() }
+            ?: "JTBazar Customer"
           val email = userObj.optString("email", "")
           val user = SupabaseUser(
             id = userObj.optString("id"),
