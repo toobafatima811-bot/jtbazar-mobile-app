@@ -74,7 +74,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
     return parsed
   }
 
-  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Text("New listing", style = MaterialTheme.typography.titleLarge)
     Text("Product name", style = MaterialTheme.typography.labelLarge)
     OutlinedTextField(name, { name = it; if (slug.isBlank() || slug == nameToSlug(name.dropLast(1))) slug = nameToSlug(it) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
