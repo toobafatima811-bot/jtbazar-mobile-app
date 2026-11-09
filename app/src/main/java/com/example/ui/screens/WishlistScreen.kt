@@ -171,22 +171,27 @@ fun WishlistScreen(
                   )
                 }
 
-                Button(
-                  onClick = {
-                    MarketplaceRepository.addToCart(product)
-                  },
-                  shape = RoundedCornerShape(8.dp),
-                  colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
-                  contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                  modifier = Modifier.height(30.dp)
-                ) {
-                  Icon(
-                    imageVector = Icons.Outlined.ShoppingBag,
-                    contentDescription = null,
-                    modifier = Modifier.size(13.dp)
-                  )
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text("Add", fontSize = 11.sp)
+                val dailyState = product.dailyStatus?.trim()?.lowercase()
+                val isOutOfStock = (product.availabilityKnown && !product.isAvailable) ||
+                  dailyState in setOf("out_of_stock", "out-of-stock", "unavailable", "not_available", "not available", "sold_out", "sold out", "closed")
+                if (isOutOfStock) {
+                  Text("Out of Stock", color = JTRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                } else {
+                  Button(
+                    onClick = { MarketplaceRepository.addToCart(product) },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(30.dp)
+                  ) {
+                    Icon(
+                      imageVector = Icons.Outlined.ShoppingBag,
+                      contentDescription = null,
+                      modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add", fontSize = 11.sp)
+                  }
                 }
               }
             }
