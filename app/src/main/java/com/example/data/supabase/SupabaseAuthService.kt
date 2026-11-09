@@ -36,6 +36,7 @@ object SupabaseAuthService {
    * Initialize and restore persisted session if available.
    */
   fun init(context: Context) {
+    SupabaseClient.initialize(context)
     try {
       val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
       val accessToken = prefs.getString(KEY_ACCESS_TOKEN, null)
