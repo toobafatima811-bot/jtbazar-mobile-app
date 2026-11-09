@@ -41,6 +41,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
@@ -80,26 +82,40 @@ fun HomeScreen(
       (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso)
   }
   if (launchAd != null && dismissedLaunchAdId != launchAd.id) {
-    AlertDialog(
-      onDismissRequest = { dismissedLaunchAdId = launchAd.id },
-      title = { Text(launchAd.title) },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          (launchAd.bannerImageUrls.firstOrNull() ?: launchAd.bannerImageUrl)?.let { imageUrl ->
-            AsyncImage(model = imageUrl, contentDescription = launchAd.title, modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp), contentScale = ContentScale.Fit)
+    val launchImageUrl = launchAd.bannerImageUrls.firstOrNull() ?: launchAd.bannerImageUrl
+    if (!launchImageUrl.isNullOrBlank()) {
+      Dialog(
+        onDismissRequest = { dismissedLaunchAdId = launchAd.id },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+      ) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+          contentAlignment = Alignment.Center
+        ) {
+          AsyncImage(
+            model = launchImageUrl,
+            contentDescription = "JTBazar promotion",
+            modifier = Modifier
+              .fillMaxWidth()
+              .heightIn(max = 760.dp)
+              .clip(RoundedCornerShape(12.dp)),
+            contentScale = ContentScale.Fit
+          )
+          IconButton(
+            onClick = { dismissedLaunchAdId = launchAd.id },
+            modifier = Modifier
+              .align(Alignment.TopEnd)
+              .padding(8.dp)
+              .size(34.dp)
+              .background(Color.White, CircleShape)
+          ) {
+            Icon(Icons.Default.Close, contentDescription = "Close promotion", tint = Color.Black)
           }
-          launchAd.description?.let { Text(it) }
         }
-      },
-      confirmButton = {
-        TextButton(onClick = { dismissedLaunchAdId = launchAd.id }) {
-          Text(launchAd.ctaText ?: "Continue shopping")
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { dismissedLaunchAdId = launchAd.id }) { Text("Close") }
       }
-    )
+    }
   }
 
   var showAddressDialog by remember { mutableStateOf(false) }
