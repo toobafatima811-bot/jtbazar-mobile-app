@@ -297,7 +297,8 @@ fun MainApp() {
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
             onAccountClick = { currentScreen = AppScreen.ACCOUNT },
             onBudgetClick = { navigateTo(AppScreen.BUDGET_SHOPPING) },
-            onExploreShopsClick = { navigateTo(AppScreen.PUBLIC_SHOPS) }
+            onExploreShopsClick = { navigateTo(AppScreen.PUBLIC_SHOPS) },
+            onBecomeSellerClick = { navigateTo(AppScreen.VENDOR_CENTER) }
           )
         }
 
