@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONArray
 import org.json.JSONObject
@@ -225,6 +226,23 @@ object SupabaseClient {
       }
     } catch (e: Exception) {
       Log.e(TAG, "DELETE $pathWithQuery failed", e)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun uploadPublicFile(bucket: String, path: String, bytes: ByteArray, mimeType: String): Result<String> = withContext(Dispatchers.IO) {
+    try {
+      val encodedPath = path.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+      val url = "${SupabaseConfig.storageUrl}/object/$bucket/$encodedPath"
+      val body = bytes.toRequestBody(mimeType.toMediaType())
+      val request = Request.Builder().url(url).post(body).header("x-upsert", "true").build()
+      okHttpClient.newCall(request).execute().use { response ->
+        val responseBody = response.body?.string() ?: ""
+        if (response.isSuccessful) Result.success("${SupabaseConfig.storageUrl}/object/public/$bucket/$encodedPath")
+        else Result.failure(IOException("Storage upload error ${response.code}: $responseBody"))
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Storage upload failed for $bucket/$path", e)
       Result.failure(e)
     }
   }
