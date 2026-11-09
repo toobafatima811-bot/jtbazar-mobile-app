@@ -8,7 +8,9 @@ data class VendorApplication(
   val id: String,
   val status: String,
   val shopName: String,
-  val rejectionReason: String? = null
+  val rejectionReason: String? = null,
+  val vendorLocked: Boolean = false,
+  val lockReason: String? = null
 )
 
 object VendorService {
@@ -17,11 +19,11 @@ object VendorService {
 
   suspend fun getOwnApplication(): VendorApplication? {
     val user = SupabaseClient.currentUser.value ?: return null
-    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,rejection_reason&limit=1"))
+    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,rejection_reason,vendor_locked,vendor_lock_reason&limit=1"))
     val rows = JSONArray(raw)
     if (rows.length() == 0) return null
     val o = rows.getJSONObject(0)
-    return VendorApplication(text(o,"id"), text(o,"status"), text(o,"shop_name"), text(o,"rejection_reason").ifBlank { null })
+    return VendorApplication(text(o,"id"), text(o,"status"), text(o,"shop_name"), text(o,"rejection_reason").ifBlank { null }, o.optBoolean("vendor_locked", false), text(o,"vendor_lock_reason").ifBlank { null })
   }
 
   suspend fun isVendor(): Boolean {
