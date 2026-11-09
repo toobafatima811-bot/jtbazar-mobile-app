@@ -41,6 +41,10 @@ object MarketplaceRepository {
 
   private val _deliveryFee = MutableStateFlow(0)
   val deliveryFee: StateFlow<Int> = _deliveryFee.asStateFlow()
+  private val _freeDeliveryEnabled = MutableStateFlow(false)
+  val freeDeliveryEnabled: StateFlow<Boolean> = _freeDeliveryEnabled.asStateFlow()
+  private val _additionalDeliveryFee = MutableStateFlow(0)
+  val additionalDeliveryFee: StateFlow<Int> = _additionalDeliveryFee.asStateFlow()
   private val _codEnabled = MutableStateFlow(false)
   val codEnabled: StateFlow<Boolean> = _codEnabled.asStateFlow()
   private val _returnWindowDays = MutableStateFlow(7)
@@ -407,6 +411,8 @@ object MarketplaceRepository {
         val settings = SupabaseApiService.fetchStoreSettings()
         settings.onSuccess {
           _deliveryFee.value = it.deliveryFee
+          _freeDeliveryEnabled.value = it.freeDeliveryEnabled
+          _additionalDeliveryFee.value = it.additionalDeliveryFee
           _codEnabled.value = it.codEnabled
           _returnWindowDays.value = it.returnWindowDays
         }.onFailure { _errorMessage.value = it.message }
