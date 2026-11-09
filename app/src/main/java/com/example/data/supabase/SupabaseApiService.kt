@@ -29,6 +29,7 @@ object SupabaseApiService {
         "publication_status=eq.published",
         "moderation_status=eq.approved",
         "vendor_hidden=eq.false",
+        "stock_verification_status=neq.paused",
         "order=created_at.desc",
         "limit=${limit.coerceIn(1, 100)}"
       )
