@@ -177,7 +177,9 @@ data class SupabaseStoreSettingsDto(
   val codEnabled: Boolean,
   val returnWindowDays: Int,
   val freeDeliveryEnabled: Boolean = false,
-  val additionalDeliveryFee: Int = 0
+  val additionalDeliveryFee: Int = 0,
+  val supportEmail: String? = null,
+  val supportWhatsapp: String? = null
 )
 
 
