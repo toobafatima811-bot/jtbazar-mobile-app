@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import org.json.JSONArray
 
 /**
@@ -26,6 +27,7 @@ object MarketplaceRepository {
   // Repository state and completion callbacks are consumed by Compose UI.
   // Keep them on Main; SupabaseApiService moves network calls to Dispatchers.IO.
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private val catalogRefreshMutex = Mutex()
 
   // Loading and error states
   private val _isLoading = MutableStateFlow(false)
@@ -375,11 +377,11 @@ object MarketplaceRepository {
   // ----------------------------------------------------
   // LIVE SUPABASE CATALOG SYNC
   // ----------------------------------------------------
-  fun refreshLiveCatalog() {
+  fun refreshLiveCatalog(showLoading: Boolean = true) {
     scope.launch {
-      _isLoading.value = true
+      if (!catalogRefreshMutex.tryLock()) return@launch
+      if (showLoading) _isLoading.value = true
       _errorMessage.value = null
-
       try {
         val settings = SupabaseApiService.fetchStoreSettings()
         settings.onSuccess {
@@ -400,6 +402,7 @@ object MarketplaceRepository {
         val productResult = SupabaseApiService.fetchProducts(limit = 100)
         if (productResult.isSuccess) {
           val dtoList = productResult.getOrNull().orEmpty()
+          val previousWishlist = _products.value.associate { it.id to it.isWishlisted }
           val mappedProducts = dtoList.map { dto ->
             Product(
               id = dto.id,
@@ -431,7 +434,7 @@ object MarketplaceRepository {
               isArtisanCollection = dto.isArtisanCollection,
               isFeatured = dto.isFeatured,
               isNewArrival = dto.isNewArrival,
-              isWishlisted = false,
+              isWishlisted = previousWishlist[dto.id] ?: false,
               isAvailable = dto.inStock,
               availabilityKnown = dto.availabilityKnown,
               dailyStatus = dto.dailyStatus,
@@ -440,15 +443,14 @@ object MarketplaceRepository {
             )
           }
           _products.value = mappedProducts
+          _selectedProduct.value = _selectedProduct.value?.let { selected -> mappedProducts.firstOrNull { it.id == selected.id } } ?: mappedProducts.firstOrNull()
+          _cartItems.update { cart -> cart.mapNotNull { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } } }
+          updateCartCount()
           if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
-          if (_selectedProduct.value == null && mappedProducts.isNotEmpty()) {
-            _selectedProduct.value = mappedProducts.first()
-          }
           Log.d(TAG, "Loaded ${mappedProducts.size} live products from Supabase")
         } else {
-          _products.value = emptyList()
-          _selectedProduct.value = null
           _errorMessage.value = productResult.exceptionOrNull()?.message
+          Log.w(TAG, "Catalog refresh failed; retaining last successful product data")
         }
 
         // 2. Fetch live categories from Supabase
@@ -478,7 +480,8 @@ object MarketplaceRepository {
         Log.e(TAG, "Backend sync error: ${e.message}", e)
         _errorMessage.value = e.message
       } finally {
-        _isLoading.value = false
+        if (showLoading) _isLoading.value = false
+        catalogRefreshMutex.unlock()
       }
     }
   }
