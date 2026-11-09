@@ -161,7 +161,7 @@ object VendorService {
   }
 
   suspend fun listSupportTickets(): JSONArray =
-    JSONArray(fail(SupabaseClient.get("support_tickets?select=id,subject,message,status,admin_reply,created_at,updated_at&order=created_at.desc&limit=100")))
+    JSONArray(fail(SupabaseClient.get("support_tickets?select=id,subject,message,status,admin_response,created_at,updated_at&order=created_at.desc&limit=100")))
 
   suspend fun createSupportTicket(subject: String, message: String) {
     val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
