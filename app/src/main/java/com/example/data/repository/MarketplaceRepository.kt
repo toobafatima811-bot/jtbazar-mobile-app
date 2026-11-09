@@ -673,7 +673,10 @@ object MarketplaceRepository {
             val row = rows.optJSONObject(index) ?: return@mapNotNull null
             val productId = row.optString("product_id")
             val product = _products.value.firstOrNull { it.id == productId } ?: return@mapNotNull null
-            val variantId = row.optString("variant_id").takeIf { it.isNotBlank() }
+            // JSONObject.optString() turns JSON null into the literal string "null".
+            // Never pass that text as a UUID to place_order.
+            val variantId = row.optString("variant_id")
+              .takeIf { !row.isNull("variant_id") && it.isNotBlank() && it != "null" }
             val selectedOption = product.variantIds.entries.firstOrNull { it.value == variantId }?.key
             CartItem(
               id = row.optString("id"), product = product, quantity = row.optInt("quantity", 1),
