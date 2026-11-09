@@ -109,7 +109,7 @@ fun HomeScreen(
         .padding(paddingValues),
       contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-      // 1. Search Bar with Mic & QR code
+      // 1. Search Bar with voice search
       item {
         SearchInputBar(
           query = searchQuery,
@@ -132,7 +132,7 @@ fun HomeScreen(
       }
 
       // Published homepage hero banners from the same Supabase table as the website.
-      if (homepageHeroes.isNotEmpty()) {
+      if (searchQuery.isBlank() && homepageHeroes.isNotEmpty()) {
         item {
           LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -182,7 +182,7 @@ fun HomeScreen(
       }
 
       // Approved marketplace promotions; no invented offers are displayed.
-      if (homepagePromotions.isNotEmpty()) {
+      if (searchQuery.isBlank() && homepagePromotions.isNotEmpty()) {
         item {
           Column(
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -211,6 +211,7 @@ fun HomeScreen(
       }
 
       // 4. Shop by Category (Horizontal Row)
+      if (searchQuery.isBlank()) {
       item {
         Column(
           modifier = Modifier
@@ -306,6 +307,8 @@ fun HomeScreen(
         }
       }
 
+      }
+
       // 5. Popular Products Section Header
       item {
         Spacer(modifier = Modifier.height(18.dp))
@@ -334,7 +337,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Column {
               Text(
-                text = "Popular Products",
+                text = if (searchQuery.isBlank()) "Popular Products" else "Search Results",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = JTTextPrimary
