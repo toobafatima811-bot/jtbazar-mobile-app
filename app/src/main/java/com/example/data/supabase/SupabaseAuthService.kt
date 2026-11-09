@@ -446,18 +446,23 @@ object SupabaseAuthService {
    * Fetch customer profile from profiles table
    */
   suspend fun fetchProfile(userId: String): Result<SupabaseProfile> = withContext(Dispatchers.IO) {
-    val res = SupabaseClient.get("profiles?id=eq.$userId&select=*")
+    val res = SupabaseClient.get("profiles?id=eq.$userId&select=id,full_name,phone,avatar_url,email")
     res.mapCatching { jsonStr ->
       val arr = JSONArray(jsonStr)
       if (arr.length() == 0) throw IOException("Profile not found")
       val obj = arr.getJSONObject(0)
+      fun value(key: String, fallback: String = ""): String {
+        val raw = obj.opt(key)
+        return if (raw == null || raw == JSONObject.NULL) fallback else raw.toString().takeUnless { it.equals("null", true) } ?: fallback
+      }
+      val current = SupabaseClient.currentUser.value
       val profile = SupabaseProfile(
-        id = obj.getString("id"),
-        fullName = obj.optString("full_name", obj.optString("name", "Customer")),
-        phone = obj.optString("phone", ""),
-        email = obj.optString("email", ""),
-        avatarUrl = if (obj.has("avatar_url")) obj.optString("avatar_url") else null,
-        city = obj.optString("city", "")
+        id = value("id", userId),
+        fullName = value("full_name").ifBlank { value("name").ifBlank { current?.fullName?.takeIf { it.isNotBlank() } ?: "JTBazar Customer" } },
+        phone = value("phone", current?.phone ?: ""),
+        email = value("email", current?.email ?: ""),
+        avatarUrl = value("avatar_url").ifBlank { null },
+        city = value("city")
       )
       _userProfile.value = profile
       profile
@@ -465,39 +470,49 @@ object SupabaseAuthService {
   }
 
   /**
-   * Upsert customer profile
+   * Update the existing customer profile using the same columns and UPDATE flow as the website.
+   * The profiles table is provisioned by the auth signup trigger; inserting an extra row here
+   * can fail its RLS/required-column constraints.
    */
   suspend fun upsertProfile(profile: SupabaseProfile): Result<Unit> = withContext(Dispatchers.IO) {
     try {
-      val json = JSONObject().apply {
-        put("id", profile.id)
-        put("full_name", profile.fullName)
-        put("phone", profile.phone)
-        put("email", profile.email)
-        if (!profile.avatarUrl.isNullOrBlank()) put("avatar_url", profile.avatarUrl)
-        put("city", profile.city)
+      val name = profile.fullName.trim()
+      require(name.isNotBlank() && name.length <= 120) { "Enter a name of up to 120 characters." }
+      val rawPhone = profile.phone.trim()
+      val normalizedPhone = when {
+        rawPhone.isBlank() -> null
+        rawPhone.matches(Regex("^03[0-9]{9}$")) -> "+92" + rawPhone.substring(1)
+        rawPhone.matches(Regex("^\\+923[0-9]{9}$")) -> rawPhone
+        else -> throw IllegalArgumentException("Enter exactly 03001234567 or +923001234567.")
       }
-      val result = SupabaseClient.post(
-        "profiles?on_conflict=id",
-        json.toString(),
-        preferReturn = false,
-        preferHeader = "resolution=merge-duplicates,return=representation"
-      )
+      val json = JSONObject().apply {
+        put("full_name", name)
+        if (normalizedPhone == null) put("phone", JSONObject.NULL) else put("phone", normalizedPhone)
+        if (!profile.avatarUrl.isNullOrBlank()) put("avatar_url", profile.avatarUrl)
+      }
+      val result = SupabaseClient.patch("profiles?id=eq.${profile.id}", json.toString())
       result.fold(
         onSuccess = { responseBody ->
           val rows = JSONArray(responseBody)
           if (rows.length() == 0) {
-            Result.failure(IOException("Profile was not returned after saving. Check the profiles table permissions."))
+            Result.failure(IOException("No profile row was updated. Please sign out and sign in again, then retry."))
           } else {
-            _userProfile.value = profile
-            SupabaseClient.updateCurrentUserProfile(profile.fullName, profile.phone)
+            val row = rows.getJSONObject(0)
+            val avatar = row.optString("avatar_url").takeUnless { it.isBlank() || it == "null" }
+            val saved = profile.copy(
+              fullName = name,
+              phone = normalizedPhone ?: "",
+              avatarUrl = avatar ?: profile.avatarUrl
+            )
+            _userProfile.value = saved
+            SupabaseClient.updateCurrentUserProfile(name, normalizedPhone ?: "")
             Result.success(Unit)
           }
         },
         onFailure = { error -> Result.failure(error) }
       )
     } catch (e: Exception) {
-      Log.e(TAG, "upsertProfile error", e)
+      Log.e(TAG, "updateProfile error", e)
       Result.failure(e)
     }
   }
