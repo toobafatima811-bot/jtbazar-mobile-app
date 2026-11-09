@@ -72,7 +72,7 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                   Text(shop.name, fontWeight = FontWeight.Bold)
-                  Text("Verified seller • ${shop.productCount} products", style = MaterialTheme.typography.bodySmall)
+                  Text("Verified seller • ${shopProducts.size.coerceAtLeast(shop.productCount)} products", style = MaterialTheme.typography.bodySmall)
                   if (shop.city.isNotBlank()) Text(shop.city, style = MaterialTheme.typography.bodySmall)
                 }
                 Text(if (selectedShopId == shop.id) "Hide" else "View", color = MaterialTheme.colorScheme.primary)
@@ -103,7 +103,9 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
                 } else {
                   Text("Sign in and place a delivered order from this shop to leave a review.", style = MaterialTheme.typography.bodySmall)
                 }
-                val shopProducts = products.filter { it.vendor.equals(shop.name, ignoreCase = true) }
+                val shopProducts = products.filter { product ->
+                  product.sellerId == shop.id || (product.sellerId.isNullOrBlank() && product.vendor.equals(shop.name, ignoreCase = true))
+                }
                 if (shopProducts.isEmpty()) {
                   Text("No published products from this shop are currently loaded.", style = MaterialTheme.typography.bodySmall)
                 } else {
