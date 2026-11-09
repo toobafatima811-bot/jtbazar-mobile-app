@@ -159,7 +159,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
               .put("show_shop_on_map", showShopOnMap)
               .put("shop_lat", if (showShopOnMap) shopLat.toDoubleOrNull() ?: error("Enter a valid shop latitude.") else JSONObject.NULL)
               .put("shop_lng", if (showShopOnMap) shopLng.toDoubleOrNull() ?: error("Enter a valid shop longitude.") else JSONObject.NULL)
-              .put("shop_location_label", locationText.trim())
+              .put("shop_location_label", locationText.trim()))
             message = "Shop details updated."; shopOpen = false
           } catch (e: Exception) { errorMessage = e.message ?: "Shop details could not be saved." }
           finally { saving = false }
