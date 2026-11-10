@@ -167,9 +167,28 @@ data class SupabaseNotificationDto(
   val userId: String,
   val title: String,
   val message: String,
-  val type: String = "GENERAL",
+  val type: String = "store",
+  val audience: String? = null,
+  val relatedOrderId: String? = null,
+  val readAt: String? = null,
   val isRead: Boolean = false,
   val createdAt: String
+)
+
+/** Active product campaign retrieved via Supabase RPC `list_active_product_campaigns()`. */
+data class SupabaseProductCampaignDto(
+  val id: String,
+  val name: String,
+  val campaignType: String,
+  val displayTitle: String,
+  val description: String? = null,
+  val discountPercent: Double = 0.0,
+  val buyQuantity: Int = 1,
+  val getQuantity: Int = 1,
+  val bundlePrice: Double? = null,
+  val startsAt: String? = null,
+  val endsAt: String? = null,
+  val productIds: List<String> = emptyList()
 )
 
 data class SupabaseStoreSettingsDto(

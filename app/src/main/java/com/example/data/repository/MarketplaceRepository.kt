@@ -17,6 +17,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import org.json.JSONArray
 
+data class ActiveProductCampaign(
+  val campaign: SupabaseProductCampaignDto,
+  val products: List<Product>
+)
+
 /**
  * Central Data Repository for JTBazar.
  * Strictly connects to real Supabase backend with ZERO hardcoded dummy/sample products,
@@ -68,6 +73,9 @@ object MarketplaceRepository {
   val homepageHeroes: StateFlow<List<SupabaseHomepageHeroDto>> = _homepageHeroes.asStateFlow()
   private val _homepagePromotions = MutableStateFlow<List<SupabasePromotionDto>>(emptyList())
   val homepagePromotions: StateFlow<List<SupabasePromotionDto>> = _homepagePromotions.asStateFlow()
+
+  private val _activeProductCampaigns = MutableStateFlow<List<ActiveProductCampaign>>(emptyList())
+  val activeProductCampaigns: StateFlow<List<ActiveProductCampaign>> = _activeProductCampaigns.asStateFlow()
 
   private val _shops = MutableStateFlow<List<ShopRecord>>(emptyList())
   val shops: StateFlow<List<ShopRecord>> = _shops.asStateFlow()
@@ -480,7 +488,45 @@ object MarketplaceRepository {
           updateCartCount()
           if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
           Log.d(TAG, "Loaded ${mappedProducts.size} live products from Supabase")
+
+          // 1b. Fetch active product campaigns (Flash Sale, BOGO, Bundle, Seasonal, Custom)
+          val campaignResult = SupabaseApiService.fetchActiveProductCampaigns()
+          if (campaignResult.isSuccess) {
+            val activeCampaignList = campaignResult.getOrNull().orEmpty()
+            val nowTime = System.currentTimeMillis()
+            val validCampaigns = activeCampaignList.filter { camp ->
+              if (camp.endsAt.isNullOrBlank()) true
+              else {
+                runCatching {
+                  java.time.Instant.parse(camp.endsAt).toEpochMilli() > nowTime
+                }.getOrDefault(true)
+              }
+            }
+
+            val mappedCampaigns = validCampaigns.mapNotNull { camp ->
+              val campaignProductIds = camp.productIds.toSet()
+              val matchedProds = mappedProducts.filter { it.id in campaignProductIds }
+              if (matchedProds.isEmpty()) return@mapNotNull null
+
+              val enrichedProds = matchedProds.map { prod ->
+                val campaignPercent = camp.discountPercent.toInt().coerceIn(0, 100)
+                val bestDiscount = maxOf(prod.discountPercent, campaignPercent)
+                val discountedPrice = (prod.originalPrice * (100 - bestDiscount) / 100.0).toInt()
+                prod.copy(
+                  discountPercent = bestDiscount,
+                  price = discountedPrice,
+                  badge = if (camp.campaignType == "flash_sale" && campaignPercent > 0) "${campaignPercent}% OFF" else prod.badge
+                )
+              }
+              ActiveProductCampaign(campaign = camp, products = enrichedProds)
+            }
+            _activeProductCampaigns.value = mappedCampaigns
+            Log.d(TAG, "Loaded ${mappedCampaigns.size} active product campaigns from Supabase")
+          } else {
+            _activeProductCampaigns.value = emptyList()
+          }
         } else {
+          _activeProductCampaigns.value = emptyList()
           _errorMessage.value = productResult.exceptionOrNull()?.message
           Log.w(TAG, "Catalog refresh failed; retaining last successful product data")
         }
@@ -683,6 +729,15 @@ object MarketplaceRepository {
     }
     scope.launch {
       SupabaseApiService.markAllNotificationsRead(userId)
+    }
+  }
+
+  fun refreshNotifications(userId: String? = null) {
+    val targetUid = userId ?: SupabaseClient.currentUserId ?: return
+    scope.launch {
+      SupabaseApiService.fetchNotifications(targetUid).onSuccess { list ->
+        _notifications.value = list
+      }
     }
   }
 

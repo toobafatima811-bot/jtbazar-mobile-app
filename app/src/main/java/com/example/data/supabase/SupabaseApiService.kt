@@ -568,6 +568,56 @@ object SupabaseApiService {
     } catch (e: Exception) { Result.failure(e) }
   }
 
+  // PRODUCT CAMPAIGNS (FLASH SALE, BOGO, BUNDLE, SEASONAL, CUSTOM)
+  // ----------------------------------------------------
+
+  suspend fun fetchActiveProductCampaigns(): Result<List<SupabaseProductCampaignDto>> = withContext(Dispatchers.IO) {
+    try {
+      val res = SupabaseClient.rpc("list_active_product_campaigns")
+      res.fold(
+        onSuccess = { jsonStr ->
+          val arr = JSONArray(jsonStr)
+          val list = mutableListOf<SupabaseProductCampaignDto>()
+          for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val productIdsArray = obj.optJSONArray("product_ids")
+            val productIdsList = mutableListOf<String>()
+            if (productIdsArray != null) {
+              for (j in 0 until productIdsArray.length()) {
+                val pid = productIdsArray.optString(j)
+                if (pid.isNotBlank()) productIdsList.add(pid)
+              }
+            }
+            list.add(
+              SupabaseProductCampaignDto(
+                id = obj.optString("id", ""),
+                name = obj.optString("name", ""),
+                campaignType = obj.optString("campaign_type", "flash_sale"),
+                displayTitle = obj.optString("display_title", obj.optString("name", "Campaign")),
+                description = obj.optString("description").takeIf { it.isNotBlank() && it != "null" },
+                discountPercent = obj.optDouble("discount_percent", 0.0),
+                buyQuantity = obj.optInt("buy_quantity", 1),
+                getQuantity = obj.optInt("get_quantity", 1),
+                bundlePrice = if (!obj.isNull("bundle_price")) obj.optDouble("bundle_price") else null,
+                startsAt = obj.optString("starts_at").takeIf { it.isNotBlank() && it != "null" },
+                endsAt = obj.optString("ends_at").takeIf { it.isNotBlank() && it != "null" },
+                productIds = productIdsList
+              )
+            )
+          }
+          Result.success(list)
+        },
+        onFailure = {
+          Log.w(TAG, "list_active_product_campaigns RPC failed: ${it.message}")
+          Result.success(emptyList())
+        }
+      )
+    } catch (e: Exception) {
+      Log.e(TAG, "fetchActiveProductCampaigns error", e)
+      Result.success(emptyList())
+    }
+  }
+
   // NOTIFICATIONS
   // ----------------------------------------------------
 
@@ -579,6 +629,7 @@ object SupabaseApiService {
         val list = mutableListOf<SupabaseNotificationDto>()
         for (i in 0 until arr.length()) {
           val obj = arr.getJSONObject(i)
+          val readAtStr = obj.optString("read_at").takeIf { it.isNotBlank() && it != "null" }
           list.add(
             SupabaseNotificationDto(
               id = obj.optString("id", ""),
@@ -586,7 +637,10 @@ object SupabaseApiService {
               title = obj.optString("title", "Notification"),
               message = obj.optString("body", ""),
               type = obj.optString("kind", "store"),
-              isRead = !obj.isNull("read_at"),
+              audience = obj.optString("audience").takeIf { it.isNotBlank() && it != "null" },
+              relatedOrderId = obj.optString("related_order_id").takeIf { it.isNotBlank() && it != "null" },
+              readAt = readAtStr,
+              isRead = readAtStr != null,
               createdAt = obj.optString("created_at", "")
             )
           )
