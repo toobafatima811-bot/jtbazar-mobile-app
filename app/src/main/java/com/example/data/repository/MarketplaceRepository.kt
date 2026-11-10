@@ -192,11 +192,18 @@ object MarketplaceRepository {
 
   fun canAddProductToCart(product: Product, palette: String? = null, size: String? = null): Boolean {
     val latest = _products.value.firstOrNull { it.id == product.id } ?: product
-    if (latest.availabilityKnown && !latest.isAvailable) return false
+    // Fail closed when the live availability RPC did not verify this product.
+    // This prevents the detail screen from allowing a purchase when the card showed
+    // unavailable or when stock data could not be loaded.
+    if (!latest.availabilityKnown || !latest.isAvailable) return false
     if (latest.foodSellingUnit != null && isUnavailableStatus(latest.dailyStatus)) return false
+
     val variantKey = if (!size.isNullOrBlank()) "size:$size" else if (!palette.isNullOrBlank()) "color:$palette" else null
-    val variantId = variantKey?.let { latest.variantIds[it] }
-    if (variantId != null && latest.variantAvailability.isNotEmpty() && latest.variantAvailability[variantId] != true) return false
+    if (latest.variantIds.isNotEmpty() && variantKey == null) return false
+    if (variantKey != null) {
+      val variantId = latest.variantIds[variantKey] ?: return false
+      if (latest.variantAvailability[variantId] != true) return false
+    }
     return true
   }
 
@@ -605,11 +612,10 @@ object MarketplaceRepository {
         val latestProducts = SupabaseApiService.fetchProducts(limit = 100).getOrThrow().associateBy { it.id }
         val unavailable = items.firstOrNull { item ->
           val latest = latestProducts[item.product.id]
-          latest == null || (latest.availabilityKnown && !latest.inStock) ||
+          latest == null || !latest.availabilityKnown || !latest.inStock ||
             (latest.foodSellingUnit != null && latest.dailyStatus != null && latest.dailyStatus != "available") ||
-            (latest.variantAvailability.isNotEmpty() && item.variantId.isNullOrBlank()) ||
-            (!item.variantId.isNullOrBlank() && latest.variantAvailability.containsKey(item.variantId) && latest.variantAvailability[item.variantId] != true) ||
-            (!item.variantId.isNullOrBlank() && latest.variantAvailability.isNotEmpty() && !latest.variantAvailability.containsKey(item.variantId))
+            (latest.variantIds.isNotEmpty() && item.variantId.isNullOrBlank()) ||
+            (!item.variantId.isNullOrBlank() && latest.variantAvailability[item.variantId] != true)
         }
         if (unavailable != null) throw IllegalStateException(unavailable.product.title + " is out of stock or unavailable. Remove it from your cart before checkout.")
         if (items.any { latestProducts[it.product.id]?.foodSellingUnit != null } && (deliveryLat == null || deliveryLng == null)) {
@@ -640,7 +646,15 @@ object MarketplaceRepository {
         ).getOrThrow()
         val saved = SupabaseApiService.fetchOrders(userId).getOrThrow().firstOrNull { it.id == createdId } ?: throw IllegalStateException("Order created but could not be reloaded.")
         val savedItems = SupabaseApiService.fetchOrderItems(saved.id).getOrThrow().map { line ->
-          val product = items.firstOrNull { it.product.id == line.productId }?.product ?: Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0)
+          // Use the server-calculated order-item unit price (including campaign pricing),
+          // not the pre-checkout catalog price, in the confirmation/receipt.
+          val sourceProduct = items.firstOrNull { it.product.id == line.productId }?.product
+          val product = sourceProduct?.copy(
+            price = line.unitPrice,
+            discountPercent = if (sourceProduct.originalPrice > 0)
+              (((sourceProduct.originalPrice - line.unitPrice) * 100) / sourceProduct.originalPrice).coerceIn(0, 100)
+            else sourceProduct.discountPercent
+          ) ?: Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0)
           CartItem(id=line.id, product=product, quantity=line.quantity, selectedPalette=line.selectedPalette, selectedSize=line.selectedSize, variantId=line.variantId)
         }
         val record = OrderRecord(orderId=saved.id, orderNumber=saved.orderNumber, date=saved.createdAt, items=savedItems, subtotal=saved.subtotal, discount=saved.discount, deliveryFee=saved.deliveryFee, grandTotal=saved.grandTotal, address=DeliveryAddress(id="order-address", name=saved.addressName, phone=saved.addressPhone, addressLine=saved.addressLine, area=saved.addressArea, city=saved.addressCity, province=address.province, isDefault=false), deliveryNote=saved.deliveryNote ?: "", statusHeader=saved.orderStatus, orderStatus=saved.orderStatus)

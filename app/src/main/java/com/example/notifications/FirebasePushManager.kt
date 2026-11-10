@@ -218,49 +218,13 @@ object FirebasePushManager {
       Log.e(TAG, "[FCM] Edge Function call failed (${error.javaClass.simpleName}: ${error.message}). Attempting direct database fallback...")
     }
 
-    // Direct database fallback if Edge Function was unreachable or returned non-200
     if (!registeredSuccessfully) {
-      val fallbackSuccess = fallbackDirectDatabaseRegistration(session, token)
-      if (fallbackSuccess) {
-        registeredSuccessfully = true
-      }
+      // user_push_tokens is intentionally service-role-only. Never attempt a direct
+      // client write; the authenticated Edge Function is the sole registration path.
+      Log.w(TAG, "[FCM] Registration deferred; retry when the app returns to foreground.")
     }
 
     return@withContext registeredSuccessfully
-  }
-
-  private suspend fun fallbackDirectDatabaseRegistration(
-    session: com.example.data.supabase.SupabaseSession,
-    token: String
-  ): Boolean = withContext(Dispatchers.IO) {
-    try {
-      val dbBody = JSONObject()
-        .put("user_id", session.user.id)
-        .put("token", token)
-        .put("platform", "android")
-
-      val directRequest = Request.Builder()
-        .url("${SupabaseConfig.projectUrl}/rest/v1/user_push_tokens")
-        .header("apikey", SupabaseConfig.publishableKey)
-        .header("Authorization", "Bearer ${session.accessToken}")
-        .header("Content-Type", "application/json")
-        .header("Prefer", "resolution=merge-duplicates")
-        .post(dbBody.toString().toRequestBody(jsonType))
-        .build()
-
-      SupabaseClient.okHttpClient.newCall(directRequest).execute().use { directResp ->
-        if (directResp.isSuccessful || directResp.code == 201) {
-          Log.i(TAG, "[FCM] Direct database registration: SUCCESS")
-          true
-        } else {
-          Log.w(TAG, "[FCM] Direct database registration returned HTTP ${directResp.code}")
-          false
-        }
-      }
-    } catch (e: Exception) {
-      Log.w(TAG, "[FCM] Direct database registration error: ${e.message}")
-      false
-    }
   }
 
   suspend fun unregister(context: Context, accessToken: String?) = withContext(Dispatchers.IO) {

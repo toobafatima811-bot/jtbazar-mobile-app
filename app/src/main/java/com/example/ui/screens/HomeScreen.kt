@@ -487,7 +487,7 @@ fun HomeScreen(
             activeCampaign = activeCampaign,
             onProductClick = onProductClick,
             onAddToCart = { MarketplaceRepository.addToCart(it) },
-            onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id) }
+            onToggleWishlist = { productId -> MarketplaceRepository.toggleWishlist(productId) }
           )
         }
       }
