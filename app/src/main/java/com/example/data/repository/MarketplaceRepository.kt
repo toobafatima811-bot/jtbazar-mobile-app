@@ -192,11 +192,18 @@ object MarketplaceRepository {
 
   fun canAddProductToCart(product: Product, palette: String? = null, size: String? = null): Boolean {
     val latest = _products.value.firstOrNull { it.id == product.id } ?: product
-    if (latest.availabilityKnown && !latest.isAvailable) return false
+    // Fail closed when the live availability RPC did not verify this product.
+    // This prevents the detail screen from allowing a purchase when the card showed
+    // unavailable or when stock data could not be loaded.
+    if (!latest.availabilityKnown || !latest.isAvailable) return false
     if (latest.foodSellingUnit != null && isUnavailableStatus(latest.dailyStatus)) return false
+
     val variantKey = if (!size.isNullOrBlank()) "size:$size" else if (!palette.isNullOrBlank()) "color:$palette" else null
-    val variantId = variantKey?.let { latest.variantIds[it] }
-    if (variantId != null && latest.variantAvailability.isNotEmpty() && latest.variantAvailability[variantId] != true) return false
+    if (latest.variantIds.isNotEmpty() && variantKey == null) return false
+    if (variantKey != null) {
+      val variantId = latest.variantIds[variantKey] ?: return false
+      if (latest.variantAvailability[variantId] != true) return false
+    }
     return true
   }
 
