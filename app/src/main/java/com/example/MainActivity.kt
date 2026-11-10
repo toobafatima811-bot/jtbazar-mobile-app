@@ -8,6 +8,8 @@ import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,11 +22,16 @@ import com.example.data.supabase.SupabaseClient
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import com.example.ui.NotificationNavigation
 import com.example.ui.theme.JTBazarTheme
 
 class MainActivity : ComponentActivity() {
+  private val notificationTap = MutableStateFlow<NotificationNavigation?>(null)
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    captureNotificationTap(intent)
 
     // The Google Services plugin normally creates these options from google-services.json.
     // Keep an explicit fallback so FCM can initialize even in build environments where
@@ -65,12 +72,13 @@ class MainActivity : ComponentActivity() {
     window.decorView.setBackgroundColor(android.graphics.Color.WHITE)
 
     setContent {
+      val tap by notificationTap.collectAsState()
       JTBazarTheme(darkTheme = false) {
         Surface(
           modifier = Modifier.fillMaxSize(),
           color = Color.White
         ) {
-          MainApp()
+          MainApp(notificationTap = tap)
         }
       }
     }
@@ -104,7 +112,30 @@ class MainActivity : ComponentActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    captureNotificationTap(intent)
     handleGoogleOAuthIntent(intent)
+  }
+
+
+  private fun captureNotificationTap(source: Intent?) {
+    if (source == null) return
+    val id = source.getStringExtra("notification_id")
+    val kind = source.getStringExtra("notification_kind")
+    val orderId = source.getStringExtra("related_order_id")
+    val link = source.getStringExtra("notification_link")
+    if (id != null || kind != null || orderId != null || link != null) {
+      notificationTap.value = NotificationNavigation(
+        id = id,
+        kind = kind,
+        relatedOrderId = orderId,
+        link = link
+      )
+      // Clear extras after consuming so activity recreation does not replay the same tap.
+      source.removeExtra("notification_id")
+      source.removeExtra("notification_kind")
+      source.removeExtra("related_order_id")
+      source.removeExtra("notification_link")
+    }
   }
 
   private fun handleGoogleOAuthIntent(intent: Intent?) {
