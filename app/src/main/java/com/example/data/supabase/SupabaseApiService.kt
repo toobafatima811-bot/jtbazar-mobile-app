@@ -180,18 +180,20 @@ object SupabaseApiService {
 
   suspend fun fetchStoreSettings(): Result<SupabaseStoreSettingsDto> = withContext(Dispatchers.IO) {
     try {
-      SupabaseClient.get("store_settings?id=eq.default&select=delivery_fee,cod_enabled,return_window_days,free_delivery_enabled,additional_delivery_fee,support_email,support_whatsapp&limit=1").mapCatching { json ->
+      SupabaseClient.get("store_settings?id=eq.default&select=store_name,support_email,support_phone,support_whatsapp,delivery_fee,free_delivery_enabled,additional_delivery_fee,cod_enabled,return_window_days&limit=1").mapCatching { json ->
         val rows = JSONArray(json)
         if (rows.length() == 0) throw IOException("Store settings are not configured.")
         val row = rows.getJSONObject(0)
         SupabaseStoreSettingsDto(
-          deliveryFee = row.optDouble("delivery_fee", 0.0).toInt(),
-          codEnabled = row.optBoolean("cod_enabled", false),
-          returnWindowDays = row.optInt("return_window_days", 7),
+          storeName = row.optString("store_name", "JTBazar"),
+          supportEmail = row.optString("support_email", "jtbazar2423@gmail.com").takeIf { it.isNotBlank() && it != "null" },
+          supportPhone = row.optString("support_phone", "+923700822507").takeIf { it.isNotBlank() && it != "null" },
+          supportWhatsapp = row.optString("support_whatsapp", "+923700822507").takeIf { it.isNotBlank() && it != "null" },
+          deliveryFee = row.optDouble("delivery_fee", 450.0).toInt(),
           freeDeliveryEnabled = row.optBoolean("free_delivery_enabled", false),
           additionalDeliveryFee = row.optDouble("additional_delivery_fee", 0.0).toInt(),
-          supportEmail = row.optString("support_email").takeIf { it.isNotBlank() && it != "null" },
-          supportWhatsapp = row.optString("support_whatsapp").takeIf { it.isNotBlank() && it != "null" }
+          codEnabled = row.optBoolean("cod_enabled", true),
+          returnWindowDays = row.optInt("return_window_days", 7)
         )
       }
     } catch (e: Exception) { Result.failure(e) }
@@ -200,22 +202,30 @@ object SupabaseApiService {
   // LIVE HOMEPAGE CONTENT (same published rows as the website)
   suspend fun fetchHomepageHeroes(): Result<List<SupabaseHomepageHeroDto>> = withContext(Dispatchers.IO) {
     try {
-      SupabaseClient.get("homepage_heroes?select=id,title,subtitle,cta_text,cta_destination,image_url,mobile_image_url,image_alt_text,display_order&status=eq.published&order=display_order.asc")
+      SupabaseClient.get("homepage_heroes?select=id,title,subtitle,cta_text,cta_destination,image_url,mobile_image_url,image_alt_text,display_order,start_date,end_date&status=eq.published&order=display_order.asc")
         .mapCatching { json ->
           val rows = JSONArray(json)
+          val nowIso = java.time.Instant.now().toString()
           (0 until rows.length()).mapNotNull { index ->
             val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val startDate = row.optString("start_date").takeIf { it.isNotBlank() && it != "null" }
+            val endDate = row.optString("end_date").takeIf { it.isNotBlank() && it != "null" }
+            if (!startDate.isNullOrBlank() && startDate > nowIso) return@mapNotNull null
+            if (!endDate.isNullOrBlank() && endDate < nowIso) return@mapNotNull null
+
             val image = row.optString("image_url").takeIf { it.startsWith("https://") } ?: return@mapNotNull null
             SupabaseHomepageHeroDto(
               id = row.optString("id"),
               title = row.optString("title"),
-              subtitle = row.optString("subtitle").takeIf { it.isNotBlank() },
-              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() },
-              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() },
+              subtitle = row.optString("subtitle").takeIf { it.isNotBlank() && it != "null" },
+              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() && it != "null" },
+              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() && it != "null" },
               imageUrl = image,
               mobileImageUrl = row.optString("mobile_image_url").takeIf { it.startsWith("https://") },
-              imageAltText = row.optString("image_alt_text").takeIf { it.isNotBlank() },
-              displayOrder = row.optInt("display_order", index)
+              imageAltText = row.optString("image_alt_text").takeIf { it.isNotBlank() && it != "null" },
+              displayOrder = row.optInt("display_order", index),
+              startDate = startDate,
+              endDate = endDate
             )
           }
         }
@@ -228,7 +238,7 @@ object SupabaseApiService {
   suspend fun fetchActivePromotions(position: String? = null): Result<List<SupabasePromotionDto>> = withContext(Dispatchers.IO) {
     try {
       val positionFilter = position?.takeIf { it.isNotBlank() }?.let { "&display_position=eq.${URLEncoder.encode(it, "UTF-8")}" } ?: ""
-      SupabaseClient.get("promotions?select=id,title,description,banner_image_url,banner_image_urls,cta_text,cta_destination,display_position,priority,target_platform,campaign_type,show_on_launch,starts_at,ends_at&status=eq.approved&order=priority.desc$positionFilter")
+      SupabaseClient.get("promotions?select=id,title,description,banner_image_url,banner_image_urls,cta_text,cta_destination,display_position,priority,target_platform,campaign_type,show_on_launch,starts_at,ends_at,coupon_code,discount_percent&status=eq.approved&order=priority.desc$positionFilter")
         .mapCatching { json ->
           val rows = JSONArray(json)
           (0 until rows.length()).mapNotNull { index ->
@@ -238,18 +248,20 @@ object SupabaseApiService {
             SupabasePromotionDto(
               id = row.optString("id"),
               title = row.optString("title"),
-              description = row.optString("description").takeIf { it.isNotBlank() },
+              description = row.optString("description").takeIf { it.isNotBlank() && it != "null" },
               bannerImageUrl = row.optString("banner_image_url").takeIf { it.startsWith("https://") },
               bannerImageUrls = urls,
-              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() },
-              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() },
+              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() && it != "null" },
+              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() && it != "null" },
               displayPosition = row.optString("display_position"),
               priority = row.optInt("priority"),
               targetPlatform = row.optString("target_platform", "both"),
               campaignType = row.optString("campaign_type", "banner"),
               showOnLaunch = row.optBoolean("show_on_launch", false),
               startsAt = row.optString("starts_at").takeIf { it.isNotBlank() && it != "null" },
-              endsAt = row.optString("ends_at").takeIf { it.isNotBlank() && it != "null" }
+              endsAt = row.optString("ends_at").takeIf { it.isNotBlank() && it != "null" },
+              couponCode = row.optString("coupon_code").takeIf { it.isNotBlank() && it != "null" },
+              discountPercent = if (row.isNull("discount_percent")) null else row.optDouble("discount_percent")
             )
           }
         }

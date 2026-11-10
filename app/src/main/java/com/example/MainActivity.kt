@@ -29,17 +29,7 @@ class MainActivity : ComponentActivity() {
     // The Google Services plugin normally creates these options from google-services.json.
     // Keep an explicit fallback so FCM can initialize even in build environments where
     // generated Google Services resources are missing.
-    if (FirebaseApp.getApps(this).none { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
-      val options = FirebaseOptions.Builder()
-        .setApplicationId("1:763074877925:android:58381e5cfd5c3a839df70c")
-        .setApiKey("AIzaSyC48PiIR-Jnn4Kunx62-2MlSYSZYRrrzU")
-        .setProjectId("jtbazar-9fc3d")
-        .setGcmSenderId("763074877925")
-        .setStorageBucket("jtbazar-9fc3d.firebasestorage.app")
-        .build()
-      FirebaseApp.initializeApp(this, options)
-    }
-
+    FirebasePushManager.ensureInitialized(this)
     FirebasePushManager.ensureNotificationChannel(applicationContext)
 
     // Initialize Supabase session persistence before starting token registration.
@@ -95,10 +85,8 @@ class MainActivity : ComponentActivity() {
   // restored sessions and cases where the initial permission/session events raced.
   override fun onResume() {
     super.onResume()
-    if (SupabaseClient.session.value != null) {
-      lifecycleScope.launch {
-        FirebasePushManager.register(applicationContext)
-      }
+    lifecycleScope.launch {
+      FirebasePushManager.register(applicationContext)
     }
   }
 

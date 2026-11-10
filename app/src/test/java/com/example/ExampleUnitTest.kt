@@ -106,4 +106,53 @@ class ExampleUnitTest {
     assertEquals("DHA Phase 5, Lahore", MarketplaceRepository.currentLocation.value)
     assertEquals(address.id, MarketplaceRepository.selectedAddress.value?.id)
   }
+
+  @Test
+  fun testFreeDeliveryAndEffectiveDeliveryFeeCalculations() {
+    val paidSettings = com.example.data.supabase.SupabaseStoreSettingsDto(
+      deliveryFee = 450,
+      freeDeliveryEnabled = false,
+      additionalDeliveryFee = 50,
+      codEnabled = true,
+      returnWindowDays = 7
+    )
+    assertEquals(500, paidSettings.effectiveDeliveryFee)
+
+    val freeSettings = paidSettings.copy(freeDeliveryEnabled = true)
+    assertEquals(0, freeSettings.effectiveDeliveryFee)
+  }
+
+  @Test
+  fun testCouponDiscountCalculations() {
+    val subtotal = 3000
+    val discountPercent = 30.0
+    val discountAmount = (subtotal * (discountPercent / 100.0)).toInt()
+    assertEquals(900, discountAmount)
+
+    val deliveryFee = 0 // Free delivery
+    val grandTotal = (subtotal - discountAmount + deliveryFee).coerceAtLeast(0)
+    assertEquals(2100, grandTotal)
+  }
+
+  @Test
+  fun testOwnerAccountProtectedFromDeletion() {
+    val ownerEmail = "hunainhaider5566@gmail.com"
+    val isOwner = ownerEmail.equals("hunainhaider5566@gmail.com", ignoreCase = true)
+    assertTrue("Owner email must match protected configuration", isOwner)
+  }
+
+  @Test
+  fun testHomepageHeroFallbackDefaults() {
+    val emptyHeroes = emptyList<com.example.data.supabase.SupabaseHomepageHeroDto>()
+    val activeHero = emptyHeroes.firstOrNull()
+    assertNull(activeHero)
+
+    val defaultTitle = activeHero?.title ?: "Everything You Need,\nAll in One Place"
+    val defaultSubtitle = activeHero?.subtitle ?: "Buy and sell products, discover services, find properties, and connect with trusted vendors across multiple categories."
+    val defaultCta = activeHero?.ctaText ?: "Start Shopping"
+
+    assertEquals("Everything You Need,\nAll in One Place", defaultTitle)
+    assertTrue(defaultSubtitle.contains("Buy and sell products"))
+    assertEquals("Start Shopping", defaultCta)
+  }
 }

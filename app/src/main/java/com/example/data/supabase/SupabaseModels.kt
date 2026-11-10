@@ -173,14 +173,19 @@ data class SupabaseNotificationDto(
 )
 
 data class SupabaseStoreSettingsDto(
-  val deliveryFee: Int,
-  val codEnabled: Boolean,
-  val returnWindowDays: Int,
+  val deliveryFee: Int = 450,
   val freeDeliveryEnabled: Boolean = false,
   val additionalDeliveryFee: Int = 0,
-  val supportEmail: String? = null,
-  val supportWhatsapp: String? = null
-)
+  val codEnabled: Boolean = true,
+  val returnWindowDays: Int = 7,
+  val supportEmail: String? = "jtbazar2423@gmail.com",
+  val supportPhone: String? = "+923700822507",
+  val supportWhatsapp: String? = "+923700822507",
+  val storeName: String = "JTBazar"
+) {
+  val effectiveDeliveryFee: Int
+    get() = if (freeDeliveryEnabled) 0 else (deliveryFee + additionalDeliveryFee)
+}
 
 
 /** Published homepage hero content configured by the JTBazar website/admin tools. */
@@ -193,7 +198,9 @@ data class SupabaseHomepageHeroDto(
   val imageUrl: String,
   val mobileImageUrl: String? = null,
   val imageAltText: String? = null,
-  val displayOrder: Int = 0
+  val displayOrder: Int = 0,
+  val startDate: String? = null,
+  val endDate: String? = null
 )
 
 /** Approved seller promotion content configured in the marketplace. */
@@ -211,5 +218,8 @@ data class SupabasePromotionDto(
   val campaignType: String = "banner",
   val showOnLaunch: Boolean = false,
   val startsAt: String? = null,
-  val endsAt: String? = null
+  val endsAt: String? = null,
+  val couponCode: String? = null,
+  val discountPercent: Double? = null
 )
+

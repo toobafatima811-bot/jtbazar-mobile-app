@@ -4,10 +4,12 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -40,6 +42,17 @@ object SupabaseAuthService {
 
   private val _userProfile = MutableStateFlow<SupabaseProfile?>(null)
   val userProfile: StateFlow<SupabaseProfile?> = _userProfile.asStateFlow()
+
+  fun triggerPushRegistration(context: Context?) {
+    val ctx = context?.applicationContext ?: SupabaseClient.context ?: return
+    CoroutineScope(Dispatchers.IO).launch {
+      try {
+        FirebasePushManager.register(ctx)
+      } catch (e: Exception) {
+        Log.w(TAG, "Push registration trigger skipped: ${e.message}")
+      }
+    }
+  }
 
   /**
    * Initialize and restore persisted session if available.
@@ -74,6 +87,7 @@ object SupabaseAuthService {
           email = userEmail ?: ""
         )
         Log.d(TAG, "Restored active session for user: $userId")
+        triggerPushRegistration(context)
       }
     } catch (e: Exception) {
       Log.e(TAG, "Failed to restore persisted session", e)
@@ -200,6 +214,7 @@ object SupabaseAuthService {
           )
           _userProfile.value = profile
           _googleOAuthStatus.value = "success"
+          triggerPushRegistration(context)
           Result.success(session)
         }
       } catch (e: Exception) {
@@ -285,6 +300,7 @@ object SupabaseAuthService {
           )
           _userProfile.value = profile
           upsertProfile(profile)
+          triggerPushRegistration(context)
         } else {
           // Account is pending email verification. Do not mark it as signed in,
           // persist an empty token, or create a customer profile before OTP.
@@ -345,6 +361,7 @@ object SupabaseAuthService {
         )
         _userProfile.value = profile
         upsertProfile(profile)
+        triggerPushRegistration(context)
         Result.success(session)
       }
     } catch (e: Exception) {
@@ -437,6 +454,7 @@ object SupabaseAuthService {
           email = userEmail
         )
         _userProfile.value = profile
+        triggerPushRegistration(context)
 
         Result.success(session)
       }
@@ -501,6 +519,7 @@ object SupabaseAuthService {
           email = user.email ?: ""
         )
         _userProfile.value = profile
+        triggerPushRegistration(context)
         Result.success(session)
       }
     } catch (e: Exception) {
@@ -520,7 +539,8 @@ object SupabaseAuthService {
         .build()
 
       // Remove this device's push token before clearing the authenticated session.
-      if (context != null) FirebasePushManager.unregister(context.applicationContext, SupabaseClient.session.value?.accessToken)
+      val ctx = context?.applicationContext ?: SupabaseClient.context
+      if (ctx != null) FirebasePushManager.unregister(ctx, SupabaseClient.session.value?.accessToken)
 
       // We attempt the backend call, but always clear local session
       try {

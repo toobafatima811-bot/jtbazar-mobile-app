@@ -27,6 +27,7 @@ object SupabaseClient {
   @Volatile private var appContext: Context? = null
 
   fun initialize(context: Context) { appContext = context.applicationContext }
+  val context: Context? get() = appContext
   fun preferences(name: String) = appContext?.getSharedPreferences(name, Context.MODE_PRIVATE)
 
   private val _session = MutableStateFlow<SupabaseSession?>(null)

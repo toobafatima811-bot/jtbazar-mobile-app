@@ -78,10 +78,17 @@ fun CartCheckoutScreen(
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
   val configuredDeliveryFee by MarketplaceRepository.deliveryFee.collectAsState()
   val freeDeliveryEnabled by MarketplaceRepository.freeDeliveryEnabled.collectAsState()
+  val homepagePromotions by MarketplaceRepository.homepagePromotions.collectAsState()
   val codEnabled by MarketplaceRepository.codEnabled.collectAsState()
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
   val currentUser by SupabaseClient.currentUser.collectAsState()
   val userProfile by SupabaseAuthService.userProfile.collectAsState()
+
+  var couponCodeInput by remember { mutableStateOf("") }
+  var appliedCouponCode by remember { mutableStateOf<String?>(null) }
+  var appliedDiscountPercent by remember { mutableStateOf(0.0) }
+  var couponMessage by remember { mutableStateOf<String?>(null) }
+  var couponIsError by remember { mutableStateOf(false) }
 
   var stage by remember { mutableStateOf(CartCheckoutStage.CART) }
   var confirmedOrder by remember { mutableStateOf<OrderRecord?>(null) }
@@ -138,10 +145,32 @@ fun CartCheckoutScreen(
     }
   }
 
-  // Server-aligned Calculations
+  // Server-aligned Calculations with Free Delivery and Coupon Discounts
   val subtotal = cartItems.sumOf { it.totalPrice }
   val deliveryCharges = if (subtotal == 0 || freeDeliveryEnabled) 0 else configuredDeliveryFee
-  val grandTotal = (subtotal + deliveryCharges).coerceAtLeast(0)
+  val discountAmount = if (appliedDiscountPercent > 0) (subtotal * (appliedDiscountPercent / 100.0)).toInt() else 0
+  val grandTotal = (subtotal - discountAmount + deliveryCharges).coerceAtLeast(0)
+
+  fun applyCoupon() {
+    val clean = couponCodeInput.trim()
+    if (clean.isBlank()) {
+      couponMessage = "Please enter a coupon code."
+      couponIsError = true
+      return
+    }
+    val promo = homepagePromotions.firstOrNull {
+      !it.couponCode.isNullOrBlank() && it.couponCode.equals(clean, ignoreCase = true)
+    }
+    if (promo != null && (promo.discountPercent ?: 0.0) > 0.0) {
+      appliedCouponCode = promo.couponCode
+      appliedDiscountPercent = promo.discountPercent ?: 0.0
+      couponMessage = "Coupon applied! ${(promo.discountPercent ?: 0.0).toInt()}% off discount."
+      couponIsError = false
+    } else {
+      couponMessage = "Invalid or expired coupon code."
+      couponIsError = true
+    }
+  }
 
   Scaffold(
     containerColor = Color.White,
@@ -216,8 +245,14 @@ fun CartCheckoutScreen(
           CartView(
             items = cartItems,
             subtotal = subtotal,
+            discountAmount = discountAmount,
             deliveryFee = deliveryCharges,
             grandTotal = grandTotal,
+            couponCodeInput = couponCodeInput,
+            onCouponCodeChange = { couponCodeInput = it },
+            onApplyCoupon = { applyCoupon() },
+            couponMessage = couponMessage,
+            couponIsError = couponIsError,
             onClearCart = { MarketplaceRepository.clearCart() },
             onContinueShopping = onBackClick,
             onProceedToCheckout = { stage = CartCheckoutStage.CHECKOUT }
@@ -228,8 +263,14 @@ fun CartCheckoutScreen(
           CheckoutView(
             items = cartItems,
             subtotal = subtotal,
+            discountAmount = discountAmount,
             deliveryFee = deliveryCharges,
             grandTotal = grandTotal,
+            couponCodeInput = couponCodeInput,
+            onCouponCodeChange = { couponCodeInput = it },
+            onApplyCoupon = { applyCoupon() },
+            couponMessage = couponMessage,
+            couponIsError = couponIsError,
             recipientName = recipientName,
             onRecipientNameChange = { recipientName = it },
             recipientPhone = recipientPhone,
@@ -358,8 +399,14 @@ fun CartCheckoutScreen(
 private fun CartView(
   items: List<CartItem>,
   subtotal: Int,
+  discountAmount: Int = 0,
   deliveryFee: Int,
   grandTotal: Int,
+  couponCodeInput: String = "",
+  onCouponCodeChange: (String) -> Unit = {},
+  onApplyCoupon: () -> Unit = {},
+  couponMessage: String? = null,
+  couponIsError: Boolean = false,
   onClearCart: () -> Unit,
   onContinueShopping: () -> Unit,
   onProceedToCheckout: () -> Unit
@@ -501,6 +548,49 @@ private fun CartView(
         }
       }
 
+      // Coupon Input Card
+      item {
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = JTCardBg,
+          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+          modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Have a Promo / Coupon Code?", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              OutlinedTextField(
+                value = couponCodeInput,
+                onValueChange = onCouponCodeChange,
+                placeholder = { Text("e.g. JTSALE", fontSize = 12.sp) },
+                singleLine = true,
+                modifier = Modifier.weight(1f).height(48.dp)
+              )
+              Button(
+                onClick = onApplyCoupon,
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+                modifier = Modifier.height(48.dp)
+              ) {
+                Text("Apply", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+              }
+            }
+            if (!couponMessage.isNullOrBlank()) {
+              Text(
+                text = couponMessage,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (couponIsError) Color(0xFFC53030) else Color(0xFF03543F)
+              )
+            }
+          }
+        }
+      }
+
       // Order Summary Card
       item {
         Surface(
@@ -514,13 +604,19 @@ private fun CartView(
               Text("Subtotal", fontSize = 13.sp, color = JTTextSecondary)
               Text("PKR ${String.format("%,d", subtotal)}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
             }
+            if (discountAmount > 0) {
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Coupon Discount", fontSize = 13.sp, color = Color(0xFF03543F), fontWeight = FontWeight.SemiBold)
+                Text("-PKR ${String.format("%,d", discountAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03543F))
+              }
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
               Text("Delivery Charges", fontSize = 13.sp, color = JTTextSecondary)
               Text(
                 if (deliveryFee == 0) "Free" else "PKR ${String.format("%,d", deliveryFee)}",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = JTTextPrimary
+                color = if (deliveryFee == 0) Color(0xFF03543F) else JTTextPrimary
               )
             }
             HorizontalDivider(color = Color.LightGray)
@@ -546,8 +642,14 @@ private fun CartView(
 private fun CheckoutView(
   items: List<CartItem>,
   subtotal: Int,
+  discountAmount: Int = 0,
   deliveryFee: Int,
   grandTotal: Int,
+  couponCodeInput: String = "",
+  onCouponCodeChange: (String) -> Unit = {},
+  onApplyCoupon: () -> Unit = {},
+  couponMessage: String? = null,
+  couponIsError: Boolean = false,
   recipientName: String,
   onRecipientNameChange: (String) -> Unit,
   recipientPhone: String,
@@ -774,6 +876,47 @@ private fun CheckoutView(
       }
     }
 
+    // Coupon Card in Checkout
+    Surface(
+      shape = RoundedCornerShape(12.dp),
+      color = JTCardBg,
+      border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Have a Coupon Code?", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          OutlinedTextField(
+            value = couponCodeInput,
+            onValueChange = onCouponCodeChange,
+            placeholder = { Text("e.g. JTSALE", fontSize = 12.sp) },
+            singleLine = true,
+            modifier = Modifier.weight(1f).height(48.dp)
+          )
+          Button(
+            onClick = onApplyCoupon,
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+            modifier = Modifier.height(48.dp)
+          ) {
+            Text("Apply", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+          }
+        }
+        if (!couponMessage.isNullOrBlank()) {
+          Text(
+            text = couponMessage,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (couponIsError) Color(0xFFC53030) else Color(0xFF03543F)
+          )
+        }
+      }
+    }
+
     // Order Totals Summary
     Surface(
       shape = RoundedCornerShape(12.dp),
@@ -785,9 +928,20 @@ private fun CheckoutView(
           Text("Items Subtotal (${items.size})", fontSize = 12.sp, color = JTTextSecondary)
           Text("PKR ${String.format("%,d", subtotal)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
+        if (discountAmount > 0) {
+          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Coupon Discount", fontSize = 12.sp, color = Color(0xFF03543F), fontWeight = FontWeight.SemiBold)
+            Text("-PKR ${String.format("%,d", discountAmount)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03543F))
+          }
+        }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
           Text("Delivery Charges", fontSize = 12.sp, color = JTTextSecondary)
-          Text(if (deliveryFee == 0) "Free" else "PKR ${String.format("%,d", deliveryFee)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+          Text(
+            if (deliveryFee == 0) "Free" else "PKR ${String.format("%,d", deliveryFee)}",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (deliveryFee == 0) Color(0xFF03543F) else JTTextPrimary
+          )
         }
         HorizontalDivider(color = Color.LightGray)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

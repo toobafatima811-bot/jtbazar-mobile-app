@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">جے ٹی بازار</string>
+    <string name="home">صفحۂ اول</string>
+    <string name="shop">خریداری</string>
+    <string name="categories">اقسام</string>
+    <string name="wishlist">پسندیدہ اشیا</string>
+    <string name="cart">کارٹ</string>
+    <string name="account">اکاؤنٹ</string>
+    <string name="login">لاگ اِن</string>
+    <string name="notifications">اطلاعات</string>
+    <string name="support">مدد</string>
+    <string name="discover">دریافت کریں</string>
+    <string name="hero_title">آپ کی ہر ضرورت،\nسب ایک ہی جگہ</string>
+    <string name="hero_eyebrow">ایک مارکیٹ پلیس، مزید امکانات</string>
+    <string name="hero_subtitle">مصنوعات خریدیں اور فروخت کریں، خدمات دریافت کریں، جائیداد تلاش کریں، اور مختلف زمروں میں قابلِ اعتماد فروخت کنندگان سے رابطہ کریں۔</string>
+    <string name="start_shopping">خریداری شروع کریں</string>
+    <string name="become_seller">فروخت کنندہ بنیں</string>
+    <string name="open_seller_dashboard">فروخت کنندہ ڈیش بورڈ کھولیں</string>
+    <string name="trusted_by_buyers">خریداروں اور فروخت کنندگان کا اعتماد</string>
+    <string name="free_delivery">مفت ترسیل</string>
+    <string name="delivery_charges">ترسیل کے اخراجات</string>
+    <string name="cash_on_delivery">کیش آن ڈیلیوری</string>
+    <string name="request_account_deletion">اکاؤنٹ ختم کرنے کی درخواست</string>
+</resources>
