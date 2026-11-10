@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
 
     lifecycleScope.launch {
       SupabaseClient.session.collect { session ->
-        if (session != null && FirebasePushManager.hasNotificationPermission(this@MainActivity)) {
+        if (session != null) {
           FirebasePushManager.register(applicationContext)
         }
       }
@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
   // restored sessions and cases where the initial permission/session events raced.
   override fun onResume() {
     super.onResume()
-    if (SupabaseClient.session.value != null && FirebasePushManager.hasNotificationPermission(this)) {
+    if (SupabaseClient.session.value != null) {
       lifecycleScope.launch {
         FirebasePushManager.register(applicationContext)
       }
@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    if (requestCode == 7301 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+    if (requestCode == 7301) {
       lifecycleScope.launch { FirebasePushManager.register(applicationContext) }
     }
   }

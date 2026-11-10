@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 class JTBazarFirebaseMessagingService : FirebaseMessagingService() {
   override fun onNewToken(token: String) {
     super.onNewToken(token)
+    android.util.Log.i("JTBazarFCM", "Firebase issued a new Android token (length=" + token.length + ")")
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
       FirebasePushManager.register(applicationContext, token)
     }
