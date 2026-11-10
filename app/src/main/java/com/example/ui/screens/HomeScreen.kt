@@ -47,6 +47,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.repository.ActiveProductCampaign
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.MarketplaceHero
@@ -68,6 +69,7 @@ fun HomeScreen(
   val categories by MarketplaceRepository.categories.collectAsState()
   val homepageHeroes by MarketplaceRepository.homepageHeroes.collectAsState()
   val homepagePromotions by MarketplaceRepository.homepagePromotions.collectAsState()
+  val activeProductCampaigns by MarketplaceRepository.activeProductCampaigns.collectAsState()
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
@@ -477,6 +479,18 @@ fun HomeScreen(
         }
       }
 
+
+      // Active product deals synced from the same Supabase campaign RPC as the website.
+      if (searchQuery.isBlank() && activeProductCampaigns.isNotEmpty()) {
+        items(activeProductCampaigns, key = { "deal_${it.campaign.id}" }) { activeCampaign ->
+          ProductCampaignSection(
+            activeCampaign = activeCampaign,
+            onProductClick = onProductClick,
+            onAddToCart = { MarketplaceRepository.addToCart(it) },
+            onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id) }
+          )
+        }
+      }
 
       // 5. Popular Products Section Header
       item {
@@ -1349,4 +1363,135 @@ fun SocialMediaSection(modifier: Modifier = Modifier) {
       color = JTTextSecondary.copy(alpha = 0.7f)
     )
   }
+}
+
+
+
+@Composable
+private fun ProductCampaignSection(
+  activeCampaign: ActiveProductCampaign,
+  onProductClick: (Product) -> Unit,
+  onAddToCart: (Product) -> Unit,
+  onToggleWishlist: (String) -> Unit
+) {
+  val campaign = activeCampaign.campaign
+  val title = campaign.displayTitle.ifBlank { campaign.name }
+  val dealLabel = when (campaign.campaignType.lowercase()) {
+    "bogo" -> "Buy ${campaign.buyQuantity}, Get ${campaign.getQuantity}"
+    "bundle" -> "Bundle deal"
+    else -> "${campaign.discountPercent.toInt()}% OFF"
+  }
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp)
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = campaign.campaignType.replace('_', ' ').uppercase(),
+          color = Color(0xFFC2410C),
+          fontSize = 9.sp,
+          fontWeight = FontWeight.ExtraBold
+        )
+        Text(title, color = Color(0xFF7C2D12), fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (!campaign.description.isNullOrBlank()) {
+          Text(campaign.description, color = Color(0xFF9A3412), fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+      }
+      Column(horizontalAlignment = Alignment.End) {
+        Text(dealLabel, color = Color(0xFF9A3412), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+        CampaignDealCountdown(campaign.endsAt)
+      }
+    }
+    Spacer(Modifier.height(9.dp))
+    activeCampaign.products.chunked(2).forEach { rowProducts ->
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        rowProducts.forEach { product ->
+          Card(
+            modifier = Modifier.weight(1f).clickable { onProductClick(product) },
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0DF)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF97316))
+          ) {
+            Column {
+              Box(
+                modifier = Modifier.fillMaxWidth().height(104.dp).background(Color(0xFFFFE2C2))
+              ) {
+                AsyncImage(
+                  model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
+                  contentDescription = product.title,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
+                )
+                Surface(
+                  modifier = Modifier.align(Alignment.TopStart),
+                  color = Color(0xFFEA580C),
+                  shape = RoundedCornerShape(bottomEnd = 8.dp, topStart = 12.dp)
+                ) {
+                  Text(dealLabel, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+                }
+                IconButton(
+                  onClick = { onToggleWishlist(product.id) },
+                  modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(27.dp).background(Color.White.copy(alpha = 0.92f), CircleShape)
+                ) {
+                  Icon(if (product.isWishlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, contentDescription = "Wishlist", tint = Color(0xFFEA580C), modifier = Modifier.size(15.dp))
+                }
+              }
+              Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(product.title, color = Color(0xFF7C2D12), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, minLines = 2)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                  Text("PKR ${product.price}", color = Color(0xFF9A3412), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                  if (product.originalPrice > product.price) {
+                    Text("PKR ${product.originalPrice}", color = Color(0xFF9A7A68), fontSize = 9.sp, textDecoration = TextDecoration.LineThrough, maxLines = 1)
+                  }
+                }
+                Button(
+                  onClick = { onAddToCart(product) },
+                  modifier = Modifier.fillMaxWidth().height(31.dp),
+                  contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                  colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C)),
+                  shape = RoundedCornerShape(8.dp)
+                ) {
+                  Icon(Icons.Filled.ShoppingBag, contentDescription = null, modifier = Modifier.size(13.dp))
+                  Spacer(Modifier.width(4.dp))
+                  Text("Add to cart", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+              }
+            }
+          }
+        }
+        if (rowProducts.size == 1) Spacer(Modifier.weight(1f))
+      }
+      Spacer(Modifier.height(9.dp))
+    }
+  }
+}
+
+@Composable
+private fun CampaignDealCountdown(endsAt: String?) {
+  var remaining by remember(endsAt) { mutableStateOf("") }
+  LaunchedEffect(endsAt) {
+    if (endsAt.isNullOrBlank()) {
+      remaining = "Limited time"
+    } else {
+      while (true) {
+        val seconds = runCatching {
+          ((java.time.Instant.parse(endsAt).toEpochMilli() - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+        }.getOrDefault(0L)
+        remaining = if (seconds <= 0) "Offer ended" else {
+          val days = seconds / 86400
+          val hours = (seconds % 86400) / 3600
+          val minutes = (seconds % 3600) / 60
+          val secs = seconds % 60
+          "${days}d ${hours}h ${minutes}m ${secs}s"
+        }
+        if (seconds <= 0) break
+        kotlinx.coroutines.delay(1000)
+      }
+    }
+  }
+  Text(remaining, color = Color(0xFF9A3412), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
 }
