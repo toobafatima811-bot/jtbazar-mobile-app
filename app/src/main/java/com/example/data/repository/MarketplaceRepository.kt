@@ -509,14 +509,21 @@ object MarketplaceRepository {
               if (matchedProds.isEmpty()) return@mapNotNull null
 
               val enrichedProds = matchedProds.map { prod ->
-                val campaignPercent = camp.discountPercent.toInt().coerceIn(0, 100)
-                val bestDiscount = maxOf(prod.discountPercent, campaignPercent)
-                val discountedPrice = (prod.originalPrice * (100 - bestDiscount) / 100.0).toInt()
-                prod.copy(
-                  discountPercent = bestDiscount,
-                  price = discountedPrice,
-                  badge = if (camp.campaignType == "flash_sale" && campaignPercent > 0) "${campaignPercent}% OFF" else prod.badge
-                )
+                // Only percentage-based campaigns may affect the displayed unit price.
+                // BOGO and bundle offers are informational here; server checkout remains authoritative.
+                val supportsPercentPrice = camp.campaignType in setOf("flash_sale", "seasonal", "custom")
+                if (!supportsPercentPrice || camp.discountPercent <= 0.0) {
+                  prod
+                } else {
+                  val campaignPercent = camp.discountPercent.toInt().coerceIn(0, 100)
+                  val bestDiscount = maxOf(prod.discountPercent, campaignPercent)
+                  val discountedPrice = (prod.originalPrice * (100 - bestDiscount) / 100.0).toInt()
+                  prod.copy(
+                    discountPercent = bestDiscount,
+                    price = discountedPrice,
+                    badge = "${bestDiscount}% OFF"
+                  )
+                }
               }
               ActiveProductCampaign(campaign = camp, products = enrichedProds)
             }
