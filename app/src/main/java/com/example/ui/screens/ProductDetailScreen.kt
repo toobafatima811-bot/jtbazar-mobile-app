@@ -210,8 +210,14 @@ fun ProductDetailScreen(
           }
 
           if (!canPurchase) {
+            val purchaseBlockedReason = when {
+              !liveProduct.availabilityKnown -> "Availability not verified"
+              !liveProduct.isAvailable -> "Out of Stock"
+              liveProduct.variantIds.isNotEmpty() && selectedSize.isNullOrBlank() && selectedPaletteName.isNullOrBlank() -> "Select an option"
+              else -> "Selected option unavailable"
+            }
             Surface(color = Color(0xFFFFE4E6), shape = RoundedCornerShape(10.dp)) {
-              Text("Out of Stock", color = Color(0xFFBE123C), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+              Text(purchaseBlockedReason, color = Color(0xFFBE123C), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
           } else {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
