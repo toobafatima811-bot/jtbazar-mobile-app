@@ -38,14 +38,21 @@ class JTBazarFirebaseMessagingService : FirebaseMessagingService() {
     val intent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       message.data["link"]?.let { putExtra("notification_link", it) }
+      message.data["notification_id"]?.let { putExtra("notification_id", it) }
+      message.data["kind"]?.let { putExtra("notification_kind", it) }
+      message.data["related_order_id"]?.let { putExtra("related_order_id", it) }
+      message.data["audience"]?.let { putExtra("notification_audience", it) }
     }
-    val pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val stableKey = message.data["notification_id"] ?: message.messageId ?: message.data["related_order_id"] ?: title
+    val requestCode = stableKey.hashCode()
+    val pending = PendingIntent.getActivity(this, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val notification = NotificationCompat.Builder(this, channelId)
       .setSmallIcon(R.mipmap.ic_launcher)
       .setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
       .setAutoCancel(true).setContentIntent(pending).build()
     if (FirebasePushManager.hasNotificationPermission(this)) {
-      NotificationManagerCompat.from(this).notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+      // A stable ID updates an already displayed copy instead of creating duplicates.
+      NotificationManagerCompat.from(this).notify(requestCode, notification)
     }
   }
 }
