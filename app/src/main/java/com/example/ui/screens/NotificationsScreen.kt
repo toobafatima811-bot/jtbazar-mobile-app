@@ -12,6 +12,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +35,8 @@ fun NotificationsScreen(
   modifier: Modifier = Modifier
 ) {
   val notifications by MarketplaceRepository.notifications.collectAsState()
+
+  LaunchedEffect(Unit) { MarketplaceRepository.refreshNotifications() }
 
   Scaffold(
     containerColor = Color.White,
@@ -143,7 +148,12 @@ fun NotificationsScreen(
                 contentAlignment = Alignment.Center
               ) {
                 Icon(
-                  imageVector = Icons.Filled.Notifications,
+                  imageVector = when (notif.type.lowercase()) {
+                    "order" -> Icons.Filled.LocalShipping
+                    "account" -> Icons.Filled.Person
+                    "store" -> Icons.Filled.Storefront
+                    else -> Icons.Filled.Notifications
+                  },
                   contentDescription = null,
                   tint = if (!notif.isRead) Color.White else JTTextSecondary,
                   modifier = Modifier.size(18.dp)
