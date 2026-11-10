@@ -484,7 +484,17 @@ fun MainApp() {
         }
 
         AppScreen.NOTIFICATIONS -> {
-          NotificationsScreen(onBack = { navigateBack() })
+          NotificationsScreen(
+            onBack = { navigateBack() },
+            onNotificationClick = { notification ->
+              when (notification.type.lowercase()) {
+                "order" -> navigateTo(AppScreen.MY_ORDERS)
+                "account" -> currentScreen = AppScreen.ACCOUNT
+                "store" -> currentScreen = AppScreen.HOME
+                else -> currentScreen = AppScreen.HOME
+              }
+            }
+          )
         }
 
         AppScreen.RETURNS_REFUNDS -> {
