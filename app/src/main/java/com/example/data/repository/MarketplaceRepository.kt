@@ -612,11 +612,10 @@ object MarketplaceRepository {
         val latestProducts = SupabaseApiService.fetchProducts(limit = 100).getOrThrow().associateBy { it.id }
         val unavailable = items.firstOrNull { item ->
           val latest = latestProducts[item.product.id]
-          latest == null || (latest.availabilityKnown && !latest.inStock) ||
+          latest == null || !latest.availabilityKnown || !latest.inStock ||
             (latest.foodSellingUnit != null && latest.dailyStatus != null && latest.dailyStatus != "available") ||
-            (latest.variantAvailability.isNotEmpty() && item.variantId.isNullOrBlank()) ||
-            (!item.variantId.isNullOrBlank() && latest.variantAvailability.containsKey(item.variantId) && latest.variantAvailability[item.variantId] != true) ||
-            (!item.variantId.isNullOrBlank() && latest.variantAvailability.isNotEmpty() && !latest.variantAvailability.containsKey(item.variantId))
+            (latest.variantIds.isNotEmpty() && item.variantId.isNullOrBlank()) ||
+            (!item.variantId.isNullOrBlank() && latest.variantAvailability[item.variantId] != true)
         }
         if (unavailable != null) throw IllegalStateException(unavailable.product.title + " is out of stock or unavailable. Remove it from your cart before checkout.")
         if (items.any { latestProducts[it.product.id]?.foodSellingUnit != null } && (deliveryLat == null || deliveryLng == null)) {
