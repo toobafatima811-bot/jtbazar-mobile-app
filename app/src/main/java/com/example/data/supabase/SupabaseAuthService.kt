@@ -614,12 +614,14 @@ object SupabaseAuthService {
   }
 
   /**
-   * Update the existing customer profile using the same columns and UPDATE flow as the website.
-   * The profiles table is provisioned by the auth signup trigger; inserting an extra row here
-   * can fail its RLS/required-column constraints.
+   * Upsert the signed-in customer's own profile. This also repairs legacy accounts
+   * whose auth user exists but whose profiles row was never created.
    */
   suspend fun upsertProfile(profile: SupabaseProfile): Result<Unit> = withContext(Dispatchers.IO) {
     try {
+      val user = SupabaseClient.currentUser.value
+        ?: throw IOException("Please sign in again before updating your profile.")
+      require(profile.id == user.id) { "You can only update your own profile." }
       val name = profile.fullName.trim()
       require(name.isNotBlank() && name.length <= 120) { "Enter a name of up to 120 characters." }
       val rawPhone = profile.phone.trim()
@@ -630,16 +632,21 @@ object SupabaseAuthService {
         else -> throw IllegalArgumentException("Enter exactly 03001234567 or +923001234567.")
       }
       val json = JSONObject().apply {
+        put("id", user.id)
         put("full_name", name)
         if (normalizedPhone == null) put("phone", JSONObject.NULL) else put("phone", normalizedPhone)
         if (!profile.avatarUrl.isNullOrBlank()) put("avatar_url", profile.avatarUrl)
       }
-      val result = SupabaseClient.patch("profiles?id=eq.${profile.id}", json.toString())
+      val result = SupabaseClient.post(
+        "profiles?on_conflict=id",
+        json.toString(),
+        preferHeader = "resolution=merge-duplicates,return=representation"
+      )
       result.fold(
         onSuccess = { responseBody ->
           val rows = JSONArray(responseBody)
           if (rows.length() == 0) {
-            Result.failure(IOException("No profile row was updated. Please sign out and sign in again, then retry."))
+            Result.failure(IOException("The profile was not saved. Please retry."))
           } else {
             val row = rows.getJSONObject(0)
             val avatar = row.optString("avatar_url").takeUnless { it.isBlank() || it == "null" }
@@ -656,7 +663,7 @@ object SupabaseAuthService {
         onFailure = { error -> Result.failure(error) }
       )
     } catch (e: Exception) {
-      Log.e(TAG, "updateProfile error", e)
+      Log.e(TAG, "upsertProfile error", e)
       Result.failure(e)
     }
   }
