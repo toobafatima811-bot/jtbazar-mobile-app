@@ -25,6 +25,13 @@ import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 
+data class NotificationNavigation(
+  val id: String? = null,
+  val kind: String? = null,
+  val relatedOrderId: String? = null,
+  val link: String? = null
+)
+
 enum class AppScreen {
   SPLASH,
   HOME,
@@ -56,7 +63,7 @@ enum class AppScreen {
 }
 
 @Composable
-fun MainApp() {
+fun MainApp(notificationTap: NotificationNavigation? = null) {
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -71,6 +78,16 @@ fun MainApp() {
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
   var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
+
+  LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link) {
+    val tap = notificationTap ?: return@LaunchedEffect
+    if (!tap.id.isNullOrBlank()) MarketplaceRepository.markNotificationRead(tap.id)
+    when {
+      tap.kind.equals("order", ignoreCase = true) || !tap.relatedOrderId.isNullOrBlank() -> currentScreen = AppScreen.MY_ORDERS
+      tap.kind.equals("account", ignoreCase = true) || tap.link?.contains("account", true) == true -> currentScreen = AppScreen.ACCOUNT
+      else -> currentScreen = AppScreen.HOME
+    }
+  }
 
   // Auth navigation state
   var pendingAuthEmail by remember { mutableStateOf("") }
