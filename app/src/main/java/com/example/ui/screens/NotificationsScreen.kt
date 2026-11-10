@@ -32,7 +32,8 @@ import com.example.ui.theme.*
 @Composable
 fun NotificationsScreen(
   onBack: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onNotificationClick: (SupabaseNotificationDto) -> Unit = {}
 ) {
   val notifications by MarketplaceRepository.notifications.collectAsState()
 
@@ -133,6 +134,7 @@ fun NotificationsScreen(
               .fillMaxWidth()
               .clickable {
                 if (!notif.isRead) MarketplaceRepository.markNotificationRead(notif.id)
+                onNotificationClick(notif)
               }
               .testTag("notif_item_${notif.id}")
           ) {
