@@ -39,13 +39,42 @@ object FirebasePushManager {
   fun hasNotificationPermission(context: Context): Boolean = Build.VERSION.SDK_INT < 33 ||
     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-  // Token registration is independent of notification-display permission.
-  // Android can issue/store an FCM token even if notification display is denied.
+  /**
+   * Ask Firebase to create/return this installation's FCM token as soon as the app starts.
+   * This deliberately does not depend on notification-display permission or a signed-in user.
+   * The token is only uploaded to Supabase later, once an authenticated session is available.
+   */
+  suspend fun prepareToken(context: Context): String? = withContext(Dispatchers.IO) {
+    try {
+      if (FirebaseApp.getApps(context).none { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
+        Log.e(TAG, "Cannot create FCM token: default Firebase app is not initialized")
+        return@withContext null
+      }
+      FirebaseMessaging.getInstance().isAutoInitEnabled = true
+      val token = Tasks.await(FirebaseMessaging.getInstance().token, 30, TimeUnit.SECONDS)
+      if (token.isBlank()) {
+        Log.w(TAG, "Firebase returned an empty FCM token")
+        null
+      } else {
+        Log.i(TAG, "FCM installation token ready (length=" + token.length + ")")
+        token
+      }
+    } catch (error: Exception) {
+      Log.e(TAG, "FCM token creation failed: " + error.javaClass.simpleName + ": " + error.message, error)
+      null
+    }
+  }
+
+  // Create/refresh the FCM token first, then register it when an authenticated session exists.
   suspend fun register(context: Context, tokenOverride: String? = null) = withContext(Dispatchers.IO) {
     Log.d(TAG, "Starting Android push-token registration")
+    val token = tokenOverride ?: prepareToken(context) ?: run {
+      Log.w(TAG, "Registration deferred: FCM token is not available yet")
+      return@withContext
+    }
 
     val session = SupabaseClient.session.value ?: run {
-      Log.d(TAG, "Registration deferred: no signed-in Supabase session")
+      Log.d(TAG, "FCM token is ready; Supabase registration deferred until sign-in")
       return@withContext
     }
     if (session.accessToken.isBlank()) {
@@ -54,16 +83,8 @@ object FirebasePushManager {
     }
 
     try {
-      val firebaseApp = FirebaseApp.getInstance()
-      Log.d(TAG, "Firebase initialized for project " + (firebaseApp.options.projectId ?: "unknown"))
-
-      val token = tokenOverride ?: Tasks.await(FirebaseMessaging.getInstance().token, 30, TimeUnit.SECONDS)
-      if (token.isBlank()) {
-        Log.w(TAG, "Firebase returned an empty FCM token")
-        return@withContext
-      }
-
-      Log.d(TAG, "FCM token retrieved (length=" + token.length + "); sending authenticated registration request")
+      Log.d(TAG, "Firebase initialized for project " + (FirebaseApp.getInstance().options.projectId ?: "unknown"))
+      Log.d(TAG, "Sending authenticated Android FCM registration request (token length=" + token.length + ")")
       val body = JSONObject()
         .put("action", "register")
         .put("platform", "android")

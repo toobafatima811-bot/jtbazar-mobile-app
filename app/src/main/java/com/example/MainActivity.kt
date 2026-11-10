@@ -42,8 +42,17 @@ class MainActivity : ComponentActivity() {
 
     FirebasePushManager.ensureNotificationChannel(applicationContext)
 
-    // Initialize Supabase session persistence
+    // Initialize Supabase session persistence before starting token registration.
     com.example.data.supabase.SupabaseAuthService.init(applicationContext)
+
+    // Generate the FCM installation token immediately on app launch, even before sign-in
+    // or the Android 13+ notification permission decision.
+    lifecycleScope.launch {
+      FirebasePushManager.prepareToken(applicationContext)
+      if (SupabaseClient.session.value != null) {
+        FirebasePushManager.register(applicationContext)
+      }
+    }
 
     lifecycleScope.launch {
       SupabaseClient.session.collect { session ->
@@ -96,7 +105,11 @@ class MainActivity : ComponentActivity() {
   override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     if (requestCode == 7301) {
-      lifecycleScope.launch { FirebasePushManager.register(applicationContext) }
+      lifecycleScope.launch {
+        // Permission affects display, not token generation; retry upload after user's choice.
+        FirebasePushManager.prepareToken(applicationContext)
+        FirebasePushManager.register(applicationContext)
+      }
     }
   }
 
