@@ -72,6 +72,7 @@ fun AccountScreen(
     val userId = currentUser?.id
     if (!userId.isNullOrBlank()) {
       SupabaseAuthService.fetchProfile(userId)
+      MarketplaceRepository.refreshNotifications(userId)
     }
   }
 
