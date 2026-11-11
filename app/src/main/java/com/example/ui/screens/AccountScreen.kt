@@ -381,8 +381,8 @@ fun AccountScreen(
           HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
           AccountMenuItem(
             icon = Icons.Filled.Storefront,
-            title = "Become a Vendor / Vendor Center",
-            subtitle = "Apply to sell or manage your approved shop",
+            title = "Vendor Center",
+            subtitle = "Apply to sell or manage your shop",
             onClick = { if (isLoggedIn) onNavigateToVendorCenter() else onNavigateToLogin() },
             tag = "menu_vendor_center"
           )
@@ -390,8 +390,8 @@ fun AccountScreen(
           if (driverSystemEnabled) {
             AccountMenuItem(
               icon = Icons.Filled.LocalShipping,
-              title = "Become a Driver / Driver Center",
-              subtitle = "Apply to deliver and manage assigned orders",
+              title = "Driver Center",
+              subtitle = "Apply to deliver or manage assigned deliveries",
               onClick = { if (isLoggedIn) onNavigateToDriver() else onNavigateToLogin() },
               tag = "menu_driver_center"
             )
