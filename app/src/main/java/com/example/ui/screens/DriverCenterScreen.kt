@@ -38,9 +38,8 @@ fun DriverCenterScreen(onBack: () -> Unit) {
   suspend fun load() {
     loading = true; error = null
     try {
-      val settings = SupabaseClient.get("store_settings?select=driver_system_enabled&limit=1").getOrThrow()
-      val settingRows = JSONArray(settings)
-      enabled = settingRows.length() > 0 && settingRows.getJSONObject(0).optBoolean("driver_system_enabled", false)
+      val access = SupabaseClient.rpc("get_my_driver_access").getOrThrow()
+      enabled = access.trim().equals("true", ignoreCase = true)
       val uid = user?.id ?: throw IllegalStateException("Please sign in first.")
       val appRows = JSONArray(SupabaseClient.get("driver_applications?select=id,full_name,phone,vehicle_type,status,admin_note&user_id=eq.$uid&limit=1").getOrThrow())
       application = if (appRows.length() > 0) appRows.getJSONObject(0) else null
@@ -67,8 +66,8 @@ fun DriverCenterScreen(onBack: () -> Unit) {
         item { Button(enabled = !busy && fullName.isNotBlank() && phone.isNotBlank(), onClick = {
           scope.launch {
             busy = true; message = null
-            val body = JSONObject().put("user_id", user?.id).put("full_name", fullName.trim()).put("phone", phone.trim()).put("vehicle_type", vehicle).put("status", "pending")
-            val result = SupabaseClient.post("driver_applications", body.toString(), preferHeader = "return=representation")
+            val body = JSONObject().put("p_full_name", fullName.trim()).put("p_phone", phone.trim()).put("p_vehicle_type", vehicle)
+            val result = SupabaseClient.rpc("submit_driver_application", body.toString())
             if (result.isSuccess) { message = "Application submitted. Admin approval is required."; load() } else error = result.exceptionOrNull()?.message
             busy = false
           }
