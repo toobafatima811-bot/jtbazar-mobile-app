@@ -65,11 +65,12 @@ fun AccountScreen(
   val notifications by MarketplaceRepository.notifications.collectAsState()
   var driverSystemEnabled by remember { mutableStateOf(false) }
 
-  LaunchedEffect(Unit) {
-    val result = SupabaseClient.get("store_settings?select=driver_system_enabled&limit=1")
-    result.onSuccess { raw ->
-      val rows = JSONArray(raw)
-      driverSystemEnabled = rows.length() > 0 && rows.getJSONObject(0).optBoolean("driver_system_enabled", false)
+  LaunchedEffect(currentUser?.id) {
+    driverSystemEnabled = false
+    if (currentUser?.id != null) {
+      SupabaseClient.rpc("get_my_driver_access").onSuccess { raw ->
+        driverSystemEnabled = raw.trim().equals("true", ignoreCase = true)
+      }
     }
   }
 
