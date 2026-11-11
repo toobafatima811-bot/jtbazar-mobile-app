@@ -397,7 +397,8 @@ fun AccountScreen(
             )
             HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
   
-          }          AccountMenuItem(
+          }
+          AccountMenuItem(
             icon = Icons.Filled.HeadsetMic,
             title = "Customer Support & Complaints",
             subtitle = "File an inquiry or message live support",
