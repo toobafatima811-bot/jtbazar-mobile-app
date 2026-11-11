@@ -63,12 +63,7 @@ fun DriverCenterScreen(onBack: () -> Unit) {
         item { Text("Become a JTBazar Driver", style = MaterialTheme.typography.headlineSmall) }
         item { OutlinedTextField(fullName, { fullName = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth()) }
         item { OutlinedTextField(phone, { phone = it }, label = { Text("Mobile number") }, modifier = Modifier.fillMaxWidth()) }
-        item { Text("Vehicle type") }
-        item { SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-          listOf("Motorcycle", "Car", "Bicycle").forEachIndexed { index, value ->
-            SegmentedButton(selected = vehicle == value, onClick = { vehicle = value }, shape = SegmentedButtonDefaults.itemShape(index, 3)) { Text(value) }
-          }
-        } }
+        item { OutlinedTextField(vehicle, { vehicle = it }, label = { Text("Vehicle type (e.g. Motorcycle)") }, modifier = Modifier.fillMaxWidth()) }
         item { Button(enabled = !busy && fullName.isNotBlank() && phone.isNotBlank(), onClick = {
           scope.launch {
             busy = true; message = null
@@ -93,8 +88,10 @@ fun DriverCenterScreen(onBack: () -> Unit) {
                 Text("Order ${delivery.optString("order_number")}", style = MaterialTheme.typography.titleMedium)
                 Text(delivery.optString("customer_name"))
                 Text(delivery.optString("customer_phone"))
-                Text(delivery.optString("shipping_address"))
+                Text(delivery.optJSONObject("delivery_address")?.toString() ?: delivery.optString("delivery_location_name").ifBlank { "Saved delivery address" })
                 Text("Status: ${delivery.optString("assignment_status")}")
+                val itemRows = delivery.optJSONArray("items")
+                if (itemRows != null) for (index in 0 until itemRows.length()) { val item = itemRows.optJSONObject(index) ?: continue; Text("• ${item.optString("name")} × ${item.optInt("quantity", 1)}") }
                 if (lat.isFinite() && lng.isFinite()) {
                   OutlinedButton(onClick = {
                     val uri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving&dir_action=navigate")
