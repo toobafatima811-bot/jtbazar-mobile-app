@@ -33,6 +33,7 @@ import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.UserAvatarView
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 
 @Composable
 fun AccountScreen(
@@ -62,6 +63,15 @@ fun AccountScreen(
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val notifications by MarketplaceRepository.notifications.collectAsState()
+  var driverSystemEnabled by remember { mutableStateOf(false) }
+
+  LaunchedEffect(Unit) {
+    val result = SupabaseClient.get("store_settings?select=driver_system_enabled&limit=1")
+    result.onSuccess { raw ->
+      val rows = JSONArray(raw)
+      driverSystemEnabled = rows.length() > 0 && rows.getJSONObject(0).optBoolean("driver_system_enabled", false)
+    }
+  }
 
   val isLoggedIn = currentSession != null
   var showLogoutConfirmDialog by remember { mutableStateOf(false) }
@@ -376,15 +386,17 @@ fun AccountScreen(
             tag = "menu_vendor_center"
           )
           HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
-          AccountMenuItem(
-            icon = Icons.Filled.LocalShipping,
-            title = "Become a Driver / Driver Center",
-            subtitle = "Apply to deliver and manage assigned orders",
-            onClick = { if (isLoggedIn) onNavigateToDriver() else onNavigateToLogin() },
-            tag = "menu_driver_center"
-          )
-          HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
-          AccountMenuItem(
+          if (driverSystemEnabled) {
+            AccountMenuItem(
+              icon = Icons.Filled.LocalShipping,
+              title = "Become a Driver / Driver Center",
+              subtitle = "Apply to deliver and manage assigned orders",
+              onClick = { if (isLoggedIn) onNavigateToDriver() else onNavigateToLogin() },
+              tag = "menu_driver_center"
+            )
+            HorizontalDivider(color = JTBorder, modifier = Modifier.padding(horizontal = 16.dp))
+  
+          }          AccountMenuItem(
             icon = Icons.Filled.HeadsetMic,
             title = "Customer Support & Complaints",
             subtitle = "File an inquiry or message live support",
