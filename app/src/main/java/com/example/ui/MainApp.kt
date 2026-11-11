@@ -59,6 +59,7 @@ enum class AppScreen {
   SECURITY_PASSWORD,
   BUDGET_SHOPPING,
   VENDOR_CENTER,
+  DRIVER_CENTER,
   PUBLIC_SHOPS
 }
 
@@ -119,7 +120,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
       AppScreen.NOTIFICATIONS, AppScreen.RETURNS_REFUNDS, AppScreen.CUSTOMER_SUPPORT,
       AppScreen.ACCOUNT_SETTINGS, AppScreen.SECURITY_PASSWORD -> currentScreen = AppScreen.ACCOUNT
       AppScreen.BUDGET_SHOPPING -> currentScreen = previousScreen
-      AppScreen.VENDOR_CENTER -> currentScreen = AppScreen.ACCOUNT
+      AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER -> currentScreen = AppScreen.ACCOUNT
       AppScreen.PUBLIC_SHOPS -> currentScreen = AppScreen.HOME
       else -> {
         if (currentScreen != AppScreen.HOME) {
@@ -386,6 +387,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onNavigateToSecurity = { navigateTo(AppScreen.SECURITY_PASSWORD) },
             onNavigateToBudget = { navigateTo(AppScreen.BUDGET_SHOPPING) },
             onNavigateToVendorCenter = { navigateTo(AppScreen.VENDOR_CENTER) },
+            onNavigateToDriver = { navigateTo(AppScreen.DRIVER_CENTER) },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) }
           )
         }
@@ -546,6 +548,10 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 
         AppScreen.VENDOR_CENTER -> {
           VendorCenterScreen(onBack = { navigateBack() })
+        }
+
+        AppScreen.DRIVER_CENTER -> {
+          DriverCenterScreen(onBack = { navigateBack() })
         }
 
         AppScreen.BUDGET_SHOPPING -> {
