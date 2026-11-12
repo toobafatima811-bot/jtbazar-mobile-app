@@ -60,6 +60,7 @@ fun JTBazarTopBar(
   onLocationClick: () -> Unit = {},
   cartCount: Int = 2,
   currentLocation: String = "Select delivery address",
+  showLocationText: Boolean = true,
   modifier: Modifier = Modifier
 ) {
   Surface(
@@ -115,39 +116,22 @@ fun JTBazarTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        // Location dropdown chip if no title
+        // Compact location action on the home screen; other screens may show the address label.
         if (title == null) {
           Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = CircleShape,
             color = JTPurpleContainer.copy(alpha = 0.5f),
             modifier = Modifier
+              .size(38.dp)
               .clickable { onLocationClick() }
               .testTag("location_picker")
           ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-            ) {
+            Box(contentAlignment = Alignment.Center) {
               Icon(
                 imageVector = Icons.Filled.LocationOn,
-                contentDescription = null,
+                contentDescription = if (showLocationText) currentLocation else "Select delivery location",
                 tint = JTPurplePrimary,
-                modifier = Modifier.size(13.dp)
-              )
-              Spacer(modifier = Modifier.width(4.dp))
-              Text(
-                text = currentLocation,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = JTTextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-              )
-              Icon(
-                imageVector = Icons.Filled.KeyboardArrowDown,
-                contentDescription = null,
-                tint = JTTextSecondary,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(19.dp)
               )
             }
           }
