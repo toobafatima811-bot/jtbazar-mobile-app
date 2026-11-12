@@ -652,15 +652,15 @@ object SupabaseAuthService {
         else -> throw IllegalArgumentException("Enter exactly 03001234567 or +923001234567.")
       }
       val json = JSONObject().apply {
-        put("id", user.id)
         put("full_name", name)
         if (normalizedPhone == null) put("phone", JSONObject.NULL) else put("phone", normalizedPhone)
         if (!profile.avatarUrl.isNullOrBlank()) put("avatar_url", profile.avatarUrl)
       }
-      val result = SupabaseClient.post(
-        "profiles?on_conflict=id",
-        json.toString(),
-        preferHeader = "resolution=merge-duplicates,return=representation"
+      // Update only the authenticated customer's existing row. Avoid an upsert
+      // that can be rejected by projects whose RLS policy intentionally forbids INSERT.
+      val result = SupabaseClient.patch(
+        "profiles?id=eq.${user.id}",
+        json.toString()
       )
       result.fold(
         onSuccess = { responseBody ->
