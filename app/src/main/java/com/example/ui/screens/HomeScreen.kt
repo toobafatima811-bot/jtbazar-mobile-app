@@ -982,13 +982,17 @@ fun ProductCard(
   onToggleWishlist: () -> Unit,
   modifier: Modifier = Modifier
 ) {
+  val cartItems by MarketplaceRepository.cartItems.collectAsState()
+  val hasVariants = product.palettes.isNotEmpty() || product.sizes.isNotEmpty()
+  val isInCart = cartItems.any { it.product.id == product.id }
+
   Card(
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = JTCardBg),
     border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
     modifier = modifier
       .fillMaxWidth()
-      .height(292.dp)
+      .height(306.dp)
       .clickable(onClick = onProductClick)
       .testTag("product_card_${product.id}")
   ) {
@@ -1091,10 +1095,10 @@ fun ProductCard(
             fontWeight = FontWeight.Bold,
             fontSize = 12.5.sp,
             color = JTTextPrimary,
-            maxLines = 2,
+            maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            lineHeight = 16.sp,
-            modifier = Modifier.height(34.dp)
+            lineHeight = 15.sp,
+            modifier = Modifier.height(46.dp)
           )
 
           Spacer(modifier = Modifier.height(3.dp))
@@ -1174,19 +1178,28 @@ fun ProductCard(
           } else {
             Surface(
               shape = RoundedCornerShape(8.dp),
-              color = JTOrange,
+              color = if (isInCart) Color(0xFF16A34A) else JTOrange,
               modifier = Modifier
-                .size(28.dp)
-                .clickable(onClick = onAddToCart)
+                .height(30.dp)
+                .width(if (hasVariants) 68.dp else 30.dp)
+                .clickable(onClick = { if (hasVariants) onProductClick() else onAddToCart() })
                 .testTag("add_to_cart_${product.id}")
             ) {
-              Box(contentAlignment = Alignment.Center) {
+              Row(
+                modifier = Modifier.padding(horizontal = if (hasVariants) 7.dp else 0.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
                 Icon(
-                  imageVector = Icons.Filled.Add,
-                  contentDescription = "Add",
+                  imageVector = if (isInCart) Icons.Filled.Check else if (hasVariants) Icons.Filled.Tune else Icons.Filled.Add,
+                  contentDescription = if (isInCart) "Added to cart" else if (hasVariants) "Choose options" else "Add to cart",
                   tint = Color.White,
-                  modifier = Modifier.size(18.dp)
+                  modifier = Modifier.size(17.dp)
                 )
+                if (hasVariants) {
+                  Spacer(Modifier.width(3.dp))
+                  Text("Choose", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
               }
             }
           }
