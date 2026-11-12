@@ -1497,6 +1497,142 @@ fun DriverCenterScreen(
   }
 }
 
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DriverApplicationLocationPicker(
+  onDismiss: () -> Unit,
+  onLocationSelected: (Double, Double, String) -> Unit
+) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var mapView by remember { mutableStateOf<MapView?>(null) }
+  var selectedPoint by remember { mutableStateOf(GeoPoint(24.8607, 67.0011)) }
+  var isLocating by remember { mutableStateOf(false) }
+  var locationError by remember { mutableStateOf<String?>(null) }
+  var hasLocationPermission by remember {
+    mutableStateOf(
+      ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    )
+  }
+
+  fun centerOnCurrentLocation() {
+    if (!hasLocationPermission) return
+    isLocating = true
+    LocationServices.getFusedLocationProviderClient(context)
+      .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+      .addOnSuccessListener { location ->
+        isLocating = false
+        if (location != null) {
+          selectedPoint = GeoPoint(location.latitude, location.longitude)
+          mapView?.controller?.animateTo(selectedPoint)
+          locationError = null
+        } else {
+          locationError = "Current location is unavailable. Move the map pin manually."
+        }
+      }
+      .addOnFailureListener {
+        isLocating = false
+        locationError = "Could not get current location. Move the map pin manually."
+      }
+  }
+
+  val permissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+      permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    if (hasLocationPermission) centerOnCurrentLocation()
+    else locationError = "Location permission denied. You can still select a point on the map."
+  }
+
+  Dialog(onDismissRequest = onDismiss) {
+    Surface(
+      modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp),
+      shape = RoundedCornerShape(22.dp),
+      color = Color.White
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(16.dp)) {
+        Text("Select Your Current Location", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+        Text("Move the map until the pin is exactly on your location.", fontSize = 12.sp, color = Color(0xFF64748B))
+        Box(
+          modifier = Modifier.fillMaxWidth().weight(1f, fill = false).height(340.dp).clip(RoundedCornerShape(16.dp))
+        ) {
+          AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+              Configuration.getInstance().userAgentValue = ctx.packageName
+              Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+              MapView(ctx).apply {
+                setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                setMultiTouchControls(true)
+                isTilesScaledToDpi = true
+                controller.setZoom(15.5)
+                controller.setCenter(selectedPoint)
+                mapView = this
+              }
+            },
+            update = { map ->
+              mapView = map
+              map.controller.setCenter(selectedPoint)
+            }
+          )
+          Icon(
+            Icons.Filled.LocationOn,
+            contentDescription = "Selected map point",
+            tint = Color(0xFFEA580C),
+            modifier = Modifier.align(Alignment.Center).size(42.dp)
+          )
+          Surface(
+            color = Color.White.copy(alpha = 0.94f),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
+          ) {
+            Text("Pin location", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEA580C), modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+          }
+        }
+        OutlinedButton(
+          onClick = {
+            if (hasLocationPermission) centerOnCurrentLocation()
+            else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+          },
+          modifier = Modifier.fillMaxWidth(),
+          enabled = !isLocating,
+          colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEA580C))
+        ) {
+          if (isLocating) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+          else Icon(Icons.Filled.MyLocation, contentDescription = null)
+          Spacer(Modifier.width(8.dp))
+          Text(if (isLocating) "Finding location…" else "Use My Current Location")
+        }
+        locationError?.let { Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+          OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+          Button(
+            onClick = {
+              val point = mapView?.mapCenter ?: selectedPoint
+              val lat = point.latitude
+              val lng = point.longitude
+              scope.launch {
+                val address = withContext(Dispatchers.IO) {
+                  try {
+                    @Suppress("DEPRECATION")
+                    Geocoder(context, Locale.getDefault()).getFromLocation(lat, lng, 1)?.firstOrNull()?.getAddressLine(0).orEmpty()
+                  } catch (_: Exception) { "" }
+                }
+                onLocationSelected(lat, lng, address)
+              }
+            },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
+          ) { Text("Confirm Location") }
+        }
+      }
+    }
+  }
+}
+
 @Composable
 private fun DocumentUploadCard(
   title: String,
