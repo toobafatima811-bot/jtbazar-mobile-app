@@ -87,29 +87,25 @@ fun CategoryProductsScreen(
             Text("Coming soon", color = JTOrangeDark, fontWeight = FontWeight.Bold)
           }
         }
-        items(categoryProducts, key = { it.id }) { product ->
-          Card(
-            modifier = Modifier.fillMaxWidth().clickable { onProductClick(product) },
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = JTCardBg)
-          ) {
+        val chunked = categoryProducts.chunked(2)
+        chunked.forEach { rowItems ->
+          item {
             Row(
-              modifier = Modifier.fillMaxWidth().padding(10.dp),
-              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-              AsyncImage(
-                model = product.imageUrl?.takeIf { it.isNotBlank() }
-                  ?: com.example.R.drawable.ic_launcher_background,
-                contentDescription = product.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(92.dp)
-              )
-              Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(product.title, fontWeight = FontWeight.SemiBold, color = JTTextPrimary, maxLines = 2)
-                Text(product.vendor, color = JTTextSecondary, fontSize = 11.sp)
-                Text("PKR ${product.price}", color = JTOrangeDark, fontWeight = FontWeight.Bold)
-                Text(product.inStockText, color = JTTextSecondary, fontSize = 10.sp)
+              rowItems.forEach { product ->
+                Box(modifier = Modifier.weight(1f)) {
+                  ProductCard(
+                    product = product,
+                    onProductClick = { onProductClick(product) },
+                    onAddToCart = { MarketplaceRepository.addToCart(product) },
+                    onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) }
+                  )
+                }
+              }
+              if (rowItems.size == 1) {
+                Spacer(modifier = Modifier.weight(1f))
               }
             }
           }

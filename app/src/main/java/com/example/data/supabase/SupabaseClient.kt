@@ -19,25 +19,30 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object GlobalLoadingState {
   private val activeRequests = AtomicInteger(0)
-  private val suppressedRequests = AtomicInteger(0)
   private val _active = MutableStateFlow(false)
   val active: StateFlow<Boolean> = _active.asStateFlow()
 
-  fun shouldTrackRequest(): Boolean = suppressedRequests.get() == 0
-
-  fun requestStarted() {
+  fun show() {
     activeRequests.incrementAndGet()
     _active.value = true
   }
 
-  fun requestFinished() {
+  fun hide() {
     val remaining = activeRequests.decrementAndGet().coerceAtLeast(0)
     if (remaining == 0) _active.value = false
   }
 
+  suspend fun <T> withLoading(block: suspend () -> T): T {
+    show()
+    return try {
+      block()
+    } finally {
+      hide()
+    }
+  }
+
   suspend fun <T> withoutLoading(block: suspend () -> T): T {
-    suppressedRequests.incrementAndGet()
-    return try { block() } finally { suppressedRequests.decrementAndGet() }
+    return block()
   }
 }
 
@@ -82,9 +87,6 @@ object SupabaseClient {
       .readTimeout(30, TimeUnit.SECONDS)
       .writeTimeout(30, TimeUnit.SECONDS)
       .addInterceptor { chain ->
-        val trackLoading = GlobalLoadingState.shouldTrackRequest()
-        if (trackLoading) GlobalLoadingState.requestStarted()
-        try {
         val original = chain.request()
         val requestBuilder = original.newBuilder()
 
@@ -116,9 +118,6 @@ object SupabaseClient {
         }
 
         chain.proceed(requestBuilder.build())
-        } finally {
-          if (trackLoading) GlobalLoadingState.requestFinished()
-        }
       }
       .addInterceptor(logging)
       .build()

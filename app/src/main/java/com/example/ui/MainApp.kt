@@ -33,9 +33,11 @@ import kotlinx.coroutines.delay
 import com.example.R
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
+import com.example.data.repository.CampaignPopupManager
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.GlobalLoadingState
+import com.example.ui.components.CampaignLaunchPopupDialog
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import org.json.JSONObject
@@ -90,10 +92,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
       while (true) {
-        GlobalLoadingState.withoutLoading {
-          MarketplaceRepository.refreshLiveCatalog(showLoading = false, refreshUserData = false)
-        }
-        delay(10_000)
+        delay(60_000)
+        MarketplaceRepository.refreshLiveCatalog(showLoading = false, refreshUserData = false)
       }
     }
   }
@@ -629,6 +629,14 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onBack = { navigateBack() }
           )
         }
+      }
+
+      val activeCampaignPopup by CampaignPopupManager.activePopupCampaign.collectAsState()
+      if (activeCampaignPopup != null && currentScreen != AppScreen.SPLASH) {
+        CampaignLaunchPopupDialog(
+          campaign = activeCampaignPopup!!,
+          onDismiss = { CampaignPopupManager.dismiss() }
+        )
       }
 
       if (showGlobalLoader && currentScreen != AppScreen.SPLASH) {

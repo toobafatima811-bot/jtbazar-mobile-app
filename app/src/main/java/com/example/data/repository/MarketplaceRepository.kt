@@ -419,29 +419,52 @@ object MarketplaceRepository {
   // ----------------------------------------------------
   // LIVE SUPABASE CATALOG SYNC
   // ----------------------------------------------------
+  suspend fun refreshLiveCatalogSuspending(showLoading: Boolean = false, refreshUserData: Boolean = true): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    if (!catalogRefreshMutex.tryLock()) return@withContext false
+    if (showLoading) _isLoading.value = true
+    _errorMessage.value = null
+    try {
+      performLiveCatalogSync(refreshUserData)
+      true
+    } catch (e: Exception) {
+      Log.e(TAG, "Backend sync error: ${e.message}", e)
+      _errorMessage.value = e.message
+      false
+    } finally {
+      if (showLoading) _isLoading.value = false
+      catalogRefreshMutex.unlock()
+    }
+  }
+
   fun refreshLiveCatalog(showLoading: Boolean = true, refreshUserData: Boolean = true) {
     scope.launch {
-      if (!catalogRefreshMutex.tryLock()) return@launch
-      if (showLoading) _isLoading.value = true
-      _errorMessage.value = null
-      try {
-        val settings = SupabaseApiService.fetchStoreSettings()
-        settings.onSuccess {
-          _storeSettings.value = it
-          _freeDeliveryEnabled.value = it.freeDeliveryEnabled
-          _additionalDeliveryFee.value = it.additionalDeliveryFee
-          _deliveryFee.value = it.effectiveDeliveryFee
-          _codEnabled.value = it.codEnabled
-          _returnWindowDays.value = it.returnWindowDays
-        }.onFailure { _errorMessage.value = it.message }
+      refreshLiveCatalogSuspending(showLoading = showLoading, refreshUserData = refreshUserData)
+    }
+  }
 
-        // Fetch the same published homepage content used by the website.
-        SupabaseApiService.fetchHomepageHeroes()
-          .onSuccess { _homepageHeroes.value = it }
-          .onFailure { _homepageHeroes.value = emptyList(); Log.w(TAG, "Homepage heroes unavailable: ${it.message}") }
-        SupabaseApiService.fetchActivePromotions()
-          .onSuccess { _homepagePromotions.value = it }
-          .onFailure { _homepagePromotions.value = emptyList(); Log.w(TAG, "Homepage promotions unavailable: ${it.message}") }
+  private suspend fun performLiveCatalogSync(refreshUserData: Boolean) {
+    val settings = SupabaseApiService.fetchStoreSettings()
+    settings.onSuccess {
+      if (_storeSettings.value != it) {
+        _storeSettings.value = it
+        _freeDeliveryEnabled.value = it.freeDeliveryEnabled
+        _additionalDeliveryFee.value = it.additionalDeliveryFee
+        _deliveryFee.value = it.effectiveDeliveryFee
+        _codEnabled.value = it.codEnabled
+        _returnWindowDays.value = it.returnWindowDays
+      }
+    }.onFailure { _errorMessage.value = it.message }
+
+    // Fetch the same published homepage content used by the website.
+    SupabaseApiService.fetchHomepageHeroes()
+      .onSuccess { if (_homepageHeroes.value != it) _homepageHeroes.value = it }
+      .onFailure { _homepageHeroes.value = emptyList(); Log.w(TAG, "Homepage heroes unavailable: ${it.message}") }
+    SupabaseApiService.fetchActivePromotions()
+      .onSuccess {
+        if (_homepagePromotions.value != it) _homepagePromotions.value = it
+        CampaignPopupManager.evaluateLaunchCampaign(it)
+      }
+      .onFailure { _homepagePromotions.value = emptyList(); Log.w(TAG, "Homepage promotions unavailable: ${it.message}") }
 
         // 1. Fetch live products from Supabase
         val productResult = SupabaseApiService.fetchProducts(limit = 100)
@@ -488,11 +511,13 @@ object MarketplaceRepository {
               variantAvailability = dto.variantAvailability
             )
           }
-          _products.value = mappedProducts
-          val selectedProductId = _selectedProduct.value?.id
-          _selectedProduct.value = if (selectedProductId == null) mappedProducts.firstOrNull() else mappedProducts.firstOrNull { it.id == selectedProductId }
-          _cartItems.update { cart -> cart.map { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } ?: item } }
-          updateCartCount()
+          if (_products.value != mappedProducts) {
+            _products.value = mappedProducts
+            val selectedProductId = _selectedProduct.value?.id
+            _selectedProduct.value = if (selectedProductId == null) mappedProducts.firstOrNull() else mappedProducts.firstOrNull { it.id == selectedProductId }
+            _cartItems.update { cart -> cart.map { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } ?: item } }
+            updateCartCount()
+          }
           if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
           Log.d(TAG, "Loaded ${mappedProducts.size} live products from Supabase")
 
@@ -568,14 +593,6 @@ object MarketplaceRepository {
         }
         refreshShops()
         if (refreshUserData) SupabaseClient.currentUserId?.let { loadUserData(it) }
-      } catch (e: Exception) {
-        Log.e(TAG, "Backend sync error: ${e.message}", e)
-        _errorMessage.value = e.message
-      } finally {
-        if (showLoading) _isLoading.value = false
-        catalogRefreshMutex.unlock()
-      }
-    }
   }
 
   // ----------------------------------------------------

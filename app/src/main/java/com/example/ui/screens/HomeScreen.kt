@@ -50,9 +50,11 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ActiveProductCampaign
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
+import com.example.ui.components.JTBazarPullRefresh
 import com.example.ui.components.MarketplaceHero
 import com.example.ui.components.TrustBadgesRow
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -76,51 +78,16 @@ fun HomeScreen(
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
 
-  var dismissedLaunchAdId by remember { mutableStateOf<String?>(null) }
   val nowIso = remember { java.time.Instant.now().toString() }
-  val visibleBannerCampaigns = homepagePromotions.filter { campaign -> campaign.campaignType == "banner" && !campaign.showOnLaunch && (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") && (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) && (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso) }
-  val launchAd = homepagePromotions.firstOrNull { campaign ->
-    campaign.showOnLaunch &&
+  val visibleBannerCampaigns = homepagePromotions.filter { campaign ->
+    campaign.campaignType == "banner" && !campaign.showOnLaunch &&
       (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") &&
       (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) &&
       (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso)
   }
-  if (launchAd != null && dismissedLaunchAdId != launchAd.id) {
-    val launchImageUrl = launchAd.bannerImageUrls.firstOrNull() ?: launchAd.bannerImageUrl
-    if (!launchImageUrl.isNullOrBlank()) {
-      Dialog(
-        onDismissRequest = { dismissedLaunchAdId = launchAd.id },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-      ) {
-        Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-          contentAlignment = Alignment.Center
-        ) {
-          AsyncImage(
-            model = launchImageUrl,
-            contentDescription = "JTBazar promotion",
-            modifier = Modifier
-              .fillMaxWidth()
-              .heightIn(max = 760.dp)
-              .clip(RoundedCornerShape(12.dp)),
-            contentScale = ContentScale.Fit
-          )
-          IconButton(
-            onClick = { dismissedLaunchAdId = launchAd.id },
-            modifier = Modifier
-              .align(Alignment.TopEnd)
-              .padding(8.dp)
-              .size(34.dp)
-              .background(Color.White, CircleShape)
-          ) {
-            Icon(Icons.Default.Close, contentDescription = "Close promotion", tint = Color.Black)
-          }
-        }
-      }
-    }
-  }
+
+  var isPullRefreshing by remember { mutableStateOf(false) }
+  val refreshScope = rememberCoroutineScope()
 
   var showAddressDialog by remember { mutableStateOf(false) }
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
@@ -1090,20 +1057,20 @@ fun ProductCard(
     border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
     modifier = modifier
       .fillMaxWidth()
+      .height(292.dp)
       .clickable(onClick = onProductClick)
       .testTag("product_card_${product.id}")
   ) {
-    Column {
-      // Image Box with Badge & Heart
+    Column(
+      modifier = Modifier.fillMaxSize()
+    ) {
+      // Image Box with Badge & Heart (Exact 140dp height)
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .height(145.dp)
+          .height(140.dp)
           .background(JTSurfaceVariant)
       ) {
-        // Use Coil for both remote and bundled product images. Calling
-        // painterResource() here can crash composition when a fallback resource
-        // is not a supported Android drawable (for example an unsupported asset).
         AsyncImage(
           model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
           contentDescription = product.title,
@@ -1131,7 +1098,7 @@ fun ProductCard(
         // Heart favorite toggle top right
         Surface(
           shape = CircleShape,
-          color = Color.White.copy(alpha = 0.85f),
+          color = Color.White.copy(alpha = 0.90f),
           modifier = Modifier
             .align(Alignment.TopEnd)
             .padding(6.dp)
@@ -1150,90 +1117,115 @@ fun ProductCard(
         }
       }
 
-      // Card Content
+      // Card Content with uniform height slots
       Column(
-        modifier = Modifier.padding(10.dp)
+        modifier = Modifier
+          .fillMaxWidth()
+          .weight(1f)
+          .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.SpaceBetween
       ) {
-        // Tag badge (e.g. In Stock, Vendor: Karigar Leather, Verified Food Seller)
-        val tagText = product.inStockText.ifBlank { product.category }
-        val tagBg = JTPurpleContainer
-        val tagColor = JTPurplePrimary
+        Column {
+          // Tag badge slot with fixed 20dp height
+          val tagText = product.inStockText.ifBlank { product.category }
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(20.dp),
+            contentAlignment = Alignment.CenterStart
+          ) {
+            if (tagText.isNotBlank()) {
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = JTPurpleContainer
+              ) {
+                Text(
+                  text = tagText,
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = JTPurplePrimary,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+              }
+            }
+          }
 
-        Surface(
-          shape = RoundedCornerShape(6.dp),
-          color = tagBg,
-          modifier = Modifier.padding(bottom = 4.dp)
-        ) {
+          Spacer(modifier = Modifier.height(3.dp))
+
+          // Product title with fixed 34dp height and 2 lines max
           Text(
-            text = tagText,
-            fontSize = 9.sp,
+            text = product.title,
             fontWeight = FontWeight.Bold,
-            color = tagColor,
-            maxLines = 1,
+            fontSize = 12.5.sp,
+            color = JTTextPrimary,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            lineHeight = 16.sp,
+            modifier = Modifier.height(34.dp)
           )
+
+          Spacer(modifier = Modifier.height(3.dp))
+
+          // Rating row with fixed 16dp height
+          Row(
+            modifier = Modifier.height(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              imageVector = Icons.Filled.Star,
+              contentDescription = null,
+              tint = JTAmber,
+              modifier = Modifier.size(12.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+              text = "${product.rating} (${if (product.reviewCount > 999) "${product.reviewCount / 1000}k" else "${product.reviewCount}"})",
+              fontSize = 11.sp,
+              color = JTTextSecondary,
+              fontWeight = FontWeight.Medium
+            )
+          }
         }
 
-        Text(
-          text = product.title,
-          fontWeight = FontWeight.Bold,
-          fontSize = 13.sp,
-          color = JTTextPrimary,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-          lineHeight = 16.sp,
-          modifier = Modifier.height(34.dp)
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Rating
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            imageVector = Icons.Filled.Star,
-            contentDescription = null,
-            tint = JTAmber,
-            modifier = Modifier.size(12.dp)
-          )
-          Spacer(modifier = Modifier.width(3.dp))
-          Text(
-            text = "${product.rating} (${if (product.reviewCount > 999) "${product.reviewCount / 1000}k" else "${product.reviewCount}"})",
-            fontSize = 11.sp,
-            color = JTTextSecondary,
-            fontWeight = FontWeight.Medium
-          )
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Price Row with (+) Add Button
+        // Price Row with Add to Cart / Out of Stock
         Row(
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(38.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.Bottom
+          verticalAlignment = Alignment.CenterVertically
         ) {
-          Column {
+          Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+          ) {
             Text(
               text = "Rs. ${String.format("%,d", product.price)}",
               fontWeight = FontWeight.ExtraBold,
-              fontSize = 14.sp,
-              color = JTPurplePrimary
+              fontSize = 13.5.sp,
+              color = JTPurplePrimary,
+              maxLines = 1
             )
             if (product.originalPrice > product.price) {
               Text(
                 text = "Rs. ${String.format("%,d", product.originalPrice)}",
-                fontSize = 11.sp,
+                fontSize = 10.5.sp,
                 color = JTTextTertiary,
-                textDecoration = TextDecoration.LineThrough
+                textDecoration = TextDecoration.LineThrough,
+                maxLines = 1
               )
+            } else {
+              Spacer(Modifier.height(14.dp))
             }
           }
 
-          // Never offer add-to-cart for confirmed out-of-stock products or unavailable daily food.
+          // Button
           val dailyState = product.dailyStatus?.trim()?.lowercase()
           val isOutOfStock = (product.availabilityKnown && !product.isAvailable) ||
             dailyState in setOf("out_of_stock", "out-of-stock", "unavailable", "not_available", "not available", "sold_out", "sold out", "closed")
+
           if (isOutOfStock) {
             Surface(
               shape = RoundedCornerShape(8.dp),
@@ -1243,9 +1235,9 @@ fun ProductCard(
               Text(
                 text = "Out of Stock",
                 color = Color(0xFFBE123C),
-                fontSize = 10.sp,
+                fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
               )
             }
           } else {
@@ -1408,64 +1400,20 @@ private fun ProductCampaignSection(
     }
     Spacer(Modifier.height(9.dp))
     activeCampaign.products.chunked(2).forEach { rowProducts ->
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         rowProducts.forEach { product ->
-          Card(
-            modifier = Modifier.weight(1f).clickable { onProductClick(product) },
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0DF)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF97316))
-          ) {
-            Column {
-              Box(
-                modifier = Modifier.fillMaxWidth().height(104.dp).background(Color(0xFFFFE2C2))
-              ) {
-                AsyncImage(
-                  model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
-                  contentDescription = product.title,
-                  contentScale = ContentScale.Crop,
-                  modifier = Modifier.fillMaxSize()
-                )
-                Surface(
-                  modifier = Modifier.align(Alignment.TopStart),
-                  color = Color(0xFFEA580C),
-                  shape = RoundedCornerShape(bottomEnd = 8.dp, topStart = 12.dp)
-                ) {
-                  Text(dealLabel, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
-                }
-                IconButton(
-                  onClick = { onToggleWishlist(product.id) },
-                  modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(27.dp).background(Color.White.copy(alpha = 0.92f), CircleShape)
-                ) {
-                  Icon(if (product.isWishlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, contentDescription = "Wishlist", tint = Color(0xFFEA580C), modifier = Modifier.size(15.dp))
-                }
-              }
-              Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(product.title, color = Color(0xFF7C2D12), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, minLines = 2)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                  Text("PKR ${product.price}", color = Color(0xFF9A3412), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-                  if (product.originalPrice > product.price) {
-                    Text("PKR ${product.originalPrice}", color = Color(0xFF9A7A68), fontSize = 9.sp, textDecoration = TextDecoration.LineThrough, maxLines = 1)
-                  }
-                }
-                Button(
-                  onClick = { onAddToCart(product) },
-                  modifier = Modifier.fillMaxWidth().height(31.dp),
-                  contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
-                  colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C)),
-                  shape = RoundedCornerShape(8.dp)
-                ) {
-                  Icon(Icons.Filled.ShoppingBag, contentDescription = null, modifier = Modifier.size(13.dp))
-                  Spacer(Modifier.width(4.dp))
-                  Text("Add to cart", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
-              }
-            }
+          Box(Modifier.weight(1f)) {
+            ProductCard(
+              product = if (product.badge == null) product.copy(badge = dealLabel) else product,
+              onProductClick = { onProductClick(product) },
+              onAddToCart = { onAddToCart(product) },
+              onToggleWishlist = { onToggleWishlist(product.id) }
+            )
           }
         }
         if (rowProducts.size == 1) Spacer(Modifier.weight(1f))
       }
-      Spacer(Modifier.height(9.dp))
+      Spacer(Modifier.height(12.dp))
     }
   }
 }
