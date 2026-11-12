@@ -112,6 +112,7 @@ fun DriverNavigationScreen(
   var distanceText by remember { mutableStateOf<String?>(null) }
   var durationText by remember { mutableStateOf<String?>(null) }
   var isFetchingRoute by remember { mutableStateOf(false) }
+  var osmdroidMap by remember { mutableStateOf<MapView?>(null) }
 
   // Action status state
   var currentStatus by remember { mutableStateOf(assignmentStatus) }
@@ -180,24 +181,7 @@ fun DriverNavigationScreen(
     }
   }
 
-  fun launchExternalNavigation() {
-    if (!hasValidCustomerCoords) return
-    try {
-      val gmmIntentUri = Uri.parse("google.navigation:q=$customerLat,$customerLng&mode=d")
-      val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply {
-        setPackage("com.google.android.apps.maps")
-      }
-      if (mapIntent.resolveActivity(context.packageManager) != null) {
-        context.startActivity(mapIntent)
-      } else {
-        val webUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$customerLat,$customerLng&travelmode=driving&dir_action=navigate")
-        context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
-      }
-    } catch (_: Exception) {
-      val webUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$customerLat,$customerLng&travelmode=driving&dir_action=navigate")
-      context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
-    }
-  }
+
 
   Scaffold(
     topBar = {
@@ -215,7 +199,7 @@ fun DriverNavigationScreen(
         },
         actions = {
           if (hasValidCustomerCoords) {
-            IconButton(onClick = { launchExternalNavigation() }) {
+            IconButton(onClick = { osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng)); osmdroidMap?.controller?.setZoom(16.5) }) {
               Icon(Icons.Filled.Directions, contentDescription = "Google Maps", tint = Color(0xFFEA580C))
             }
           }
@@ -286,8 +270,6 @@ fun DriverNavigationScreen(
         }
       } else {
         // Interactive road map with osmdroid
-        var osmdroidMap by remember { mutableStateOf<MapView?>(null) }
-
         AndroidView(
           modifier = Modifier.fillMaxSize(),
           factory = { ctx ->
@@ -567,7 +549,7 @@ fun DriverNavigationScreen(
             ) {
               Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
               Spacer(Modifier.width(8.dp))
-              Text("Start Google Maps Navigation", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+              Text("Continue In-App Navigation", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
 
             // Secondary: Delivery Status Buttons (Picked Up / Delivered)
