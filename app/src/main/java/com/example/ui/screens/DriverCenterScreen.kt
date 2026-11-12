@@ -92,7 +92,9 @@ data class DocUploadItem(
 
 enum class DriverDeliveryFilter(val label: String) {
   ALL("All"),
+  PENDING("Pending"),
   ACTIVE("Active"),
+  SHIPPED("Shipped"),
   PICKED_UP("Picked Up"),
   DELIVERED("Delivered")
 }
@@ -107,6 +109,8 @@ enum class DriverBottomNavTab {
 @Composable
 fun DriverCenterScreen(
   onBack: () -> Unit,
+  onOpenProfile: () -> Unit = {},
+  onOpenNotifications: () -> Unit = {},
   onViewCustomerLocation: (JSONObject) -> Unit = {}
 ) {
   val context = LocalContext.current
@@ -297,7 +301,9 @@ fun DriverCenterScreen(
     } else {
       when (selectedFilter) {
         DriverDeliveryFilter.ALL -> deliveries
+        DriverDeliveryFilter.PENDING -> deliveries.filter { it.optString("order_status").equals("pending", true) }
         DriverDeliveryFilter.ACTIVE -> deliveries.filter { it.optString("assignment_status", "assigned") in setOf("assigned", "pending") }
+        DriverDeliveryFilter.SHIPPED -> deliveries.filter { it.optString("order_status").equals("shipped", true) }
         DriverDeliveryFilter.PICKED_UP -> deliveries.filter { it.optString("assignment_status") in setOf("picked_up", "in_transit") }
         DriverDeliveryFilter.DELIVERED -> deliveries.filter { it.optString("assignment_status") == "delivered" }
       }
@@ -394,9 +400,7 @@ fun DriverCenterScreen(
             Column(
               horizontalAlignment = Alignment.CenterHorizontally,
               modifier = Modifier
-                .clickable {
-                  selectedTab = DriverBottomNavTab.PROFILE
-                }
+                .clickable { onOpenProfile() }
                 .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
               Icon(
@@ -498,7 +502,8 @@ fun DriverCenterScreen(
               modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.22f)),
+                .background(Color.White.copy(alpha = 0.22f))
+                .clickable { onOpenNotifications() },
               contentAlignment = Alignment.Center
             ) {
               Icon(
@@ -966,7 +971,9 @@ fun DriverCenterScreen(
           ) {
             val filtersWithCounts = listOf(
               DriverDeliveryFilter.ALL to allCount,
+              DriverDeliveryFilter.PENDING to deliveries.count { it.optString("order_status").equals("pending", true) },
               DriverDeliveryFilter.ACTIVE to activeCount,
+              DriverDeliveryFilter.SHIPPED to deliveries.count { it.optString("order_status").equals("shipped", true) },
               DriverDeliveryFilter.PICKED_UP to pickedUpCount,
               DriverDeliveryFilter.DELIVERED to deliveredCount
             )
@@ -1031,6 +1038,7 @@ fun DriverCenterScreen(
           val customerName = delivery.optString("customer_name").ifBlank { "Customer" }
           val customerPhone = delivery.optString("customer_phone")
           val addressText = driverAddressText(delivery)
+          val isDelivered = assignmentStatus == "delivered"
 
           // Format items summary (e.g. "BOLT B155 20000mAh Power Bank × 1")
           val itemsArr = delivery.optJSONArray("items")
@@ -1081,7 +1089,13 @@ fun DriverCenterScreen(
                         .background(if (assignmentStatus == "delivered") Color(0xFF16A34A) else if (assignmentStatus == "picked_up") Color(0xFF2563EB) else Color(0xFF16A34A))
                     )
                     Text(
-                      text = if (assignmentStatus == "delivered") "Delivered" else if (assignmentStatus == "picked_up") "In Transit" else "Active",
+                      text = when {
+                    assignmentStatus == "delivered" -> "Delivered"
+                    assignmentStatus == "picked_up" -> "Picked Up"
+                    delivery.optString("order_status").equals("shipped", true) -> "Shipped"
+                    delivery.optString("order_status").equals("pending", true) -> "Pending"
+                    else -> "Active"
+                  },
                       fontSize = 11.5.sp,
                       fontWeight = FontWeight.Bold,
                       color = if (assignmentStatus == "delivered") Color(0xFF16A34A) else if (assignmentStatus == "picked_up") Color(0xFF2563EB) else Color(0xFF16A34A)
@@ -1116,7 +1130,7 @@ fun DriverCenterScreen(
                 }
               }
 
-              // Row 2: Customer Details & Mini Map Thumbnail
+              // Row 2: Customer Details & Map (active deliveries only)
               Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1153,8 +1167,8 @@ fun DriverCenterScreen(
                     Text(customerPhone, fontSize = 12.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Medium)
                   }
 
-                  // Address
-                  Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  // Customer address is intentionally hidden after delivery completion.
+                  if (!isDelivered) Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(15.dp).padding(top = 2.dp))
                     Text(
                       addressText,
@@ -1166,8 +1180,8 @@ fun DriverCenterScreen(
                   }
                 }
 
-                // Right Column: Mini Map Thumbnail with Red Pin & "View Location" Overlay
-                Box(
+                // Location preview is only available for active deliveries.
+                if (!isDelivered) Box(
                   modifier = Modifier
                     .size(width = 110.dp, height = 80.dp)
                     .clip(RoundedCornerShape(14.dp))
@@ -1261,8 +1275,8 @@ fun DriverCenterScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
               ) {
-                // Left: "View Customer Location" Button (Blue pill)
-                Button(
+                // Completed orders never expose customer location.
+                if (!isDelivered) Button(
                   onClick = {
                     if (isApprovedDriver) {
                       onViewCustomerLocation(delivery)
@@ -1273,8 +1287,8 @@ fun DriverCenterScreen(
                     .height(42.dp),
                   shape = RoundedCornerShape(12.dp),
                   colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFEFF6FF),
-                    contentColor = Color(0xFF2563EB)
+                    containerColor = Color(0xFFFFEDD5),
+                    contentColor = Color(0xFFEA580C)
                   ),
                   contentPadding = PaddingValues(horizontal = 6.dp)
                 ) {
