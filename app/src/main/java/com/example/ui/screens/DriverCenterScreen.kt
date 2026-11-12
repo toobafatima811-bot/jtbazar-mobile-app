@@ -171,6 +171,7 @@ fun DriverCenterScreen(
       DriverDocType.VEHICLE_PLATE -> "vehicle_plate"
     }
 
+    GlobalLoadingState.active.value = true
     val uploadingItem = DocUploadItem(localUri = uri, localBitmap = bitmap, isUploading = true)
     when (docType) {
       DriverDocType.CNIC_FRONT -> cnicFrontDoc = uploadingItem
@@ -199,6 +200,7 @@ fun DriverCenterScreen(
         }
       }
     )
+    GlobalLoadingState.active.value = false
   }
 
   // Camera photo capture launcher
@@ -600,8 +602,8 @@ fun DriverCenterScreen(
       // 2. DRIVER APPLICATION CARD (MATCHING REFERENCE IMAGE)
       if (application != null) {
         val appObj = application!!
-        val applicantName = appObj.optString("full_name").ifBlank { user?.fullName ?: "Driver" }
-        val vehType = appObj.optString("vehicle_type").ifBlank { "Motorcycle" }
+        val applicantName = appObj.optString("full_name").takeIf { it.isNotBlank() && !it.equals("null", true) } ?: user?.fullName?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: "Driver"
+        val vehType = appObj.optString("vehicle_type").takeIf { it.isNotBlank() && !it.equals("null", true) } ?: "Vehicle not set"
         val rawAddr = appObj.optString("current_address")
         val addrDisplay = if (rawAddr.isNotBlank() && rawAddr != "null") rawAddr else "Location not set"
         val status = appObj.optString("status", "pending")
@@ -900,6 +902,7 @@ fun DriverCenterScreen(
                 onClick = {
                   scope.launch {
                     busy = true
+                    GlobalLoadingState.active.value = true
                     message = null
                     error = null
                     try {
@@ -932,6 +935,7 @@ fun DriverCenterScreen(
                       error = e.message
                     } finally {
                       busy = false
+                      GlobalLoadingState.active.value = false
                     }
                   }
                 },
@@ -1348,12 +1352,14 @@ fun DriverCenterScreen(
                     onClick = {
                       scope.launch {
                         busy = true
+                        GlobalLoadingState.active.value = true
                         val r = SupabaseClient.rpc(
                           "driver_update_delivery_status",
                           JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "picked_up").toString()
                         )
                         if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
                         busy = false
+                        GlobalLoadingState.active.value = false
                       }
                     },
                     modifier = Modifier
