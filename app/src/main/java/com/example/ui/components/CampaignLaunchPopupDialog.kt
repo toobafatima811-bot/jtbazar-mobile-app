@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
-import com.example.data.model.HomepagePromotionCampaign
+import com.example.data.supabase.SupabasePromotionDto
 
 /**
  * Global launch campaign modal dialog.
@@ -29,7 +29,7 @@ import com.example.data.model.HomepagePromotionCampaign
  */
 @Composable
 fun CampaignLaunchPopupDialog(
-  campaign: HomepagePromotionCampaign,
+  campaign: SupabasePromotionDto,
   onDismiss: () -> Unit
 ) {
   val imageUrl = campaign.bannerImageUrls.firstOrNull() ?: campaign.bannerImageUrl
