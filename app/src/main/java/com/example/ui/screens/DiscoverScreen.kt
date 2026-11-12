@@ -597,7 +597,7 @@ private fun ProductsFeedReelsView(
         Column(
           modifier = Modifier
             .align(Alignment.BottomStart)
-            .fillMaxWidth(0.78f)
+            .fillMaxWidth(0.88f)
             .padding(start = 20.dp, bottom = 24.dp)
         ) {
           // Vendor Name Chip
