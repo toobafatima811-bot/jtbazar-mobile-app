@@ -172,32 +172,6 @@ fun MarketplaceHero(
             )
           }
 
-          Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFFFFECE0),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFCA99)),
-            modifier = Modifier.offset(y = floatBadgeY.dp)
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-              Icon(
-                imageVector = Icons.Default.ElectricBolt,
-                contentDescription = null,
-                tint = JTOrange,
-                modifier = Modifier.size(12.dp)
-              )
-              Text(
-                text = "⚡ Express Delivery",
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTOrange
-              )
-            }
-          }
-        }
 
         // 2. Title & Subtitle with smooth slide crossfade
         AnimatedContent(
