@@ -26,19 +26,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import com.example.R
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseAuthService
+import com.example.data.supabase.GlobalLoadingState
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import org.json.JSONObject
-
-object GlobalLoadingState {
-  val active = MutableStateFlow(false)
-}
 
 data class NotificationNavigation(
   val id: String? = null,
@@ -90,7 +86,9 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
       while (true) {
-        MarketplaceRepository.refreshLiveCatalog(showLoading = false, refreshUserData = false)
+        GlobalLoadingState.withoutLoading {
+          MarketplaceRepository.refreshLiveCatalog(showLoading = false, refreshUserData = false)
+        }
         delay(10_000)
       }
     }
