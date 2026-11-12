@@ -107,7 +107,7 @@ enum class DriverDeliveryFilter(val label: String) {
   PROCESSING("Processing"),
   ACTIVE("Active"),
   SHIPPED("Shipped"),
-  PICKED_UP("Picked Up"),
+  PICKED_UP("In Transit"),
   DELIVERED("Delivered"),
   CANCELLED("Cancelled")
 }
@@ -1135,7 +1135,7 @@ fun DriverCenterScreen(
                       text = when {
                     assignmentStatus == "delivered" -> "Delivered"
                     assignmentStatus == "cancelled" -> "Cancelled"
-                    assignmentStatus == "picked_up" -> "Picked Up"
+                    assignmentStatus == "picked_up" -> "In Transit"
                     delivery.optString("order_status").equals("shipped", true) -> "Shipped"
                     delivery.optString("order_status").equals("processing", true) -> "Processing"
                     delivery.optString("order_status").equals("confirmed", true) -> "Confirmed"
