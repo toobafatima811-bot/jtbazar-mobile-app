@@ -540,7 +540,7 @@ fun DriverNavigationScreen(
 
             // Primary: Start Navigation Button
             Button(
-              onClick = { launchExternalNavigation() },
+              onClick = { osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng)); osmdroidMap?.controller?.setZoom(16.5) },
               modifier = Modifier
                 .fillMaxWidth()
                 .height(44.dp),
