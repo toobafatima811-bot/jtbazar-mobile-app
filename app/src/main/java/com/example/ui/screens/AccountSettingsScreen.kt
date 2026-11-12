@@ -46,7 +46,6 @@ fun AccountSettingsScreen(
   val storeSettings by MarketplaceRepository.storeSettings.collectAsState()
 
   var notificationsEnabled by remember { mutableStateOf(true) }
-  var smsUpdatesEnabled by remember { mutableStateOf(true) }
   var selectedLanguage by remember { mutableStateOf("English") }
   var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -136,107 +135,6 @@ fun AccountSettingsScreen(
           }
 
           HorizontalDivider(color = JTBorder)
-
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column {
-              Text(
-                text = if (selectedLanguage == "اردو") "آرڈر پش اطلاعات" else "Order Push Notifications",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp
-              )
-              Text(
-                text = if (selectedLanguage == "اردو") "آرڈر کی تصدیق اور ترسیل کی اطلاعات حاصل کریں" else "Get alerts on order confirmation & dispatch",
-                fontSize = 11.sp,
-                color = JTTextSecondary
-              )
-            }
-            Switch(
-              checked = notificationsEnabled,
-              onCheckedChange = { isChecked ->
-                notificationsEnabled = isChecked
-                if (isChecked) {
-                  coroutineScope.launch {
-                    val success = com.example.notifications.FirebasePushManager.register(context)
-                    if (success) {
-                      Toast.makeText(context, "Push notifications registered!", Toast.LENGTH_SHORT).show()
-                    } else {
-                      Toast.makeText(context, "Push sync attempted. Check network & sign-in.", Toast.LENGTH_SHORT).show()
-                    }
-                  }
-                }
-              },
-              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = JTOrange)
-            )
-          }
-
-          if (notificationsEnabled) {
-            OutlinedButton(
-              onClick = {
-                coroutineScope.launch {
-                  Toast.makeText(
-                    context,
-                    if (selectedLanguage == "اردو") "اطلاعات اپ ڈیٹ ہو رہی ہیں..." else "Refreshing notifications...",
-                    Toast.LENGTH_SHORT
-                  ).show()
-                  val ok = com.example.notifications.FirebasePushManager.register(context)
-                  if (ok) {
-                    Toast.makeText(
-                      context,
-                      if (selectedLanguage == "اردو") "اطلاعات کامیابی سے فعال ہو گئیں!" else "Notifications successfully synced!",
-                      Toast.LENGTH_LONG
-                    ).show()
-                  } else {
-                    Toast.makeText(
-                      context,
-                      if (selectedLanguage == "اردو") "براہ کرم پہلے لاگ ان کریں" else "Please make sure you are logged in.",
-                      Toast.LENGTH_LONG
-                    ).show()
-                  }
-                }
-              },
-              modifier = Modifier.fillMaxWidth().testTag("sync_push_token_button"),
-              shape = RoundedCornerShape(8.dp),
-              colors = ButtonDefaults.outlinedButtonColors(contentColor = JTOrange)
-            ) {
-              Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = if (selectedLanguage == "اردو") "اطلاعات ریفریش کریں" else "Sync Notifications",
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.SemiBold
-              )
-            }
-          }
-
-          HorizontalDivider(color = JTBorder)
-
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column {
-              Text(
-                text = if (selectedLanguage == "اردو") "ایس ایم ایس آرڈر اپ ڈیٹس" else "SMS Order Updates",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp
-              )
-              Text(
-                text = if (selectedLanguage == "اردو") "ایس ایم ایس کے ذریعے ڈیلیوری او ٹی پی وصول کریں" else "Receive delivery OTP codes via SMS",
-                fontSize = 11.sp,
-                color = JTTextSecondary
-              )
-            }
-            Switch(
-              checked = smsUpdatesEnabled,
-              onCheckedChange = { smsUpdatesEnabled = it },
-              colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = JTOrange)
-            )
-          }
         }
       }
 
