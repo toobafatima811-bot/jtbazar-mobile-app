@@ -1567,7 +1567,7 @@ private fun DriverApplicationLocationPicker(
         Text("Select Your Current Location", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
         Text("Move the map until the pin is exactly on your location.", fontSize = 12.sp, color = Color(0xFF64748B))
         Box(
-          modifier = Modifier.fillMaxWidth().weight(1f, fill = false).height(340.dp).clip(RoundedCornerShape(16.dp))
+          modifier = Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 220.dp, max = 420.dp).fillMaxHeight(0.48f).clip(RoundedCornerShape(16.dp))
         ) {
           AndroidView(
             modifier = Modifier.fillMaxSize(),
