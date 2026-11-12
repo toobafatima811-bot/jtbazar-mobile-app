@@ -370,84 +370,101 @@ private fun NearbyShopsMapView(
   }
 
   Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
-    Surface(color = JTSurfaceVariant, modifier = Modifier.fillMaxWidth()) {
-      Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-          Icon(Icons.Filled.MyLocation, contentDescription = null, tint = JTOrange, modifier = Modifier.size(18.dp))
-          Spacer(Modifier.width(7.dp))
-          Column {
-            Text(
-              if (hasPermission && userLat != null) "Your current location" else cityName,
-              fontWeight = FontWeight.Bold, fontSize = 12.sp, color = JTTextPrimary
-            )
-            Text(
-              if (userLat != null && userLng != null) "Showing shops nearest to you"
-              else "Choose a city or enable location",
-              fontSize = 10.sp, color = JTTextSecondary
-            )
+    // Keep map actions in a Compose overlay, independent from native map gestures.
+    // Panning/zooming the map must never hide or consume these controls.
+    Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+      AndroidView(
+        modifier = Modifier.fillMaxSize().testTag("nearby_shops_real_map"),
+        factory = { ctx ->
+          MapView(ctx).apply {
+            setTileSource(TileSourceFactory.MAPNIK)
+            setMultiTouchControls(true)
+            controller.setZoom(if (userLat == null && userLng == null) 5.5 else 12.0)
+            controller.setCenter(mapCenter)
+            tag = mapCenter
           }
+        },
+        update = { map ->
+          // Only recenter when the actual selected location changes; preserve user panning.
+          if (map.tag != mapCenter) {
+            map.controller.setCenter(mapCenter)
+            map.tag = mapCenter
+          }
+          map.overlays.clear()
+          if (userLat != null && userLng != null) {
+            Marker(map).apply {
+              position = GeoPoint(userLat, userLng)
+              title = "You are here"
+              setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+              map.overlays.add(this)
+            }
+          }
+          nearbyShops.forEach { (shop, distance) ->
+            Marker(map).apply {
+              position = GeoPoint(shop.latitude, shop.longitude)
+              title = shop.name
+              snippet = distance?.let { String.format(Locale.US, "%.1f km away", it) } ?: shop.city
+              setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+              setOnMarkerClickListener { _, _ ->
+                onSelectShop(shop)
+                true
+              }
+              map.overlays.add(this)
+            }
+          }
+          map.invalidate()
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-          if (!hasPermission) {
-            Button(
-              onClick = onRequestPermission,
-              shape = RoundedCornerShape(8.dp),
-              colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
-              contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-              modifier = Modifier.height(32.dp).testTag("nearby_gps_button")
-            ) { Text("Use my location", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+      )
+
+      Surface(
+        color = JTSurfaceVariant.copy(alpha = 0.97f),
+        shape = RoundedCornerShape(16.dp),
+        shadowElevation = 8.dp,
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = 12.dp)
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Filled.MyLocation, contentDescription = null, tint = JTOrange, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(7.dp))
+            Column {
+              Text(
+                if (hasPermission && userLat != null) "Your current location" else cityName,
+                fontWeight = FontWeight.Bold, fontSize = 12.sp, color = JTTextPrimary
+              )
+              Text(
+                if (userLat != null && userLng != null) "Showing shops nearest to you"
+                else "Choose a city or enable location",
+                fontSize = 10.sp, color = JTTextSecondary
+              )
+            }
           }
-          OutlinedButton(
-            onClick = onPickCity,
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            modifier = Modifier.height(32.dp).testTag("nearby_city_picker")
-          ) { Text("City", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!hasPermission) {
+              Button(
+                onClick = onRequestPermission,
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.height(34.dp).testTag("nearby_gps_button")
+              ) { Text("Use my location", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+            }
+            OutlinedButton(
+              onClick = onPickCity,
+              shape = RoundedCornerShape(8.dp),
+              contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+              modifier = Modifier.height(34.dp).testTag("nearby_city_picker")
+            ) { Text("City", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+          }
         }
       }
     }
-
-    AndroidView(
-      modifier = Modifier.fillMaxWidth().weight(1f).testTag("nearby_shops_real_map"),
-      factory = { ctx ->
-        MapView(ctx).apply {
-          setTileSource(TileSourceFactory.MAPNIK)
-          setMultiTouchControls(true)
-          controller.setZoom(if (userLat == null && userLng == null) 5.5 else 12.0)
-          controller.setCenter(mapCenter)
-        }
-      },
-      update = { map ->
-        map.overlays.clear()
-        map.controller.setCenter(mapCenter)
-        if (userLat != null && userLng != null) {
-          Marker(map).apply {
-            position = GeoPoint(userLat, userLng)
-            title = "You are here"
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            map.overlays.add(this)
-          }
-        }
-        nearbyShops.forEach { (shop, distance) ->
-          Marker(map).apply {
-            position = GeoPoint(shop.latitude, shop.longitude)
-            title = shop.name
-            snippet = distance?.let { String.format(Locale.US, "%.1f km away", it) } ?: shop.city
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            setOnMarkerClickListener { _, _ ->
-              onSelectShop(shop)
-              true
-            }
-            map.overlays.add(this)
-          }
-        }
-        map.invalidate()
-      }
-    )
 
     if (nearbyShops.isEmpty()) {
       Column(
