@@ -964,13 +964,13 @@ fun DriverCenterScreen(
           ) {
             Column {
               Text(
-                "My Assigned Deliveries",
+                if (selectedTab == DriverBottomNavTab.HISTORY) "Delivery History" else "My Assigned Deliveries",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F172A)
               )
               Text(
-                "$activeCount active delivery assignments",
+                if (selectedTab == DriverBottomNavTab.HISTORY) "${deliveredCount + deliveries.count { it.optString("assignment_status") == "cancelled" }} completed / cancelled orders" else "$activeCount active delivery assignments",
                 fontSize = 12.sp,
                 color = Color(0xFF64748B)
               )
@@ -1005,7 +1005,7 @@ fun DriverCenterScreen(
         }
 
         // 4. DELIVERY STATUS FILTER PILLS (ALL, ACTIVE, PICKED UP, DELIVERED)
-        item {
+        if (selectedTab == DriverBottomNavTab.DELIVERIES) item {
           LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -1382,12 +1382,14 @@ fun DriverCenterScreen(
                     onClick = {
                       scope.launch {
                         busy = true
+                        GlobalLoadingState.active.value = true
                         val r = SupabaseClient.rpc(
                           "driver_update_delivery_status",
                           JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "delivered").toString()
                         )
                         if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
                         busy = false
+                        GlobalLoadingState.active.value = false
                       }
                     },
                     modifier = Modifier
