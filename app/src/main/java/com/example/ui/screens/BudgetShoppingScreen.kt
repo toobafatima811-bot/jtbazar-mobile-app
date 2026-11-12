@@ -36,6 +36,7 @@ import com.example.R
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.theme.*
+import com.example.ui.components.rememberAdaptiveColumnCount
 
 @Composable
 fun BudgetShoppingScreen(
@@ -45,6 +46,7 @@ fun BudgetShoppingScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val productGridColumns = rememberAdaptiveColumnCount(minCellWidth = 138.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
   val products by MarketplaceRepository.products.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
 
@@ -233,7 +235,7 @@ fun BudgetShoppingScreen(
         }
       } else {
         LazyVerticalGrid(
-          columns = GridCells.Fixed(2),
+          columns = GridCells.Adaptive(minSize = 138.dp),
           modifier = Modifier.fillMaxSize(),
           contentPadding = PaddingValues(16.dp),
           horizontalArrangement = Arrangement.spacedBy(12.dp),
