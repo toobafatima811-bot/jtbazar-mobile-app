@@ -103,6 +103,8 @@ data class DocUploadItem(
 enum class DriverDeliveryFilter(val label: String) {
   ALL("All"),
   PENDING("Pending"),
+  CONFIRMED("Confirmed"),
+  PROCESSING("Processing"),
   ACTIVE("Active"),
   SHIPPED("Shipped"),
   PICKED_UP("Picked Up"),
@@ -316,6 +318,8 @@ fun DriverCenterScreen(
       when (selectedFilter) {
         DriverDeliveryFilter.ALL -> deliveries
         DriverDeliveryFilter.PENDING -> deliveries.filter { it.optString("order_status").equals("pending", true) }
+        DriverDeliveryFilter.CONFIRMED -> deliveries.filter { it.optString("order_status").equals("confirmed", true) }
+        DriverDeliveryFilter.PROCESSING -> deliveries.filter { it.optString("order_status").equals("processing", true) }
         DriverDeliveryFilter.ACTIVE -> deliveries.filter { it.optString("assignment_status", "assigned") in setOf("assigned", "pending") }
         DriverDeliveryFilter.SHIPPED -> deliveries.filter { it.optString("order_status").equals("shipped", true) }
         DriverDeliveryFilter.PICKED_UP -> deliveries.filter { it.optString("assignment_status") in setOf("picked_up", "in_transit") }
@@ -1008,6 +1012,8 @@ fun DriverCenterScreen(
             val filtersWithCounts = listOf(
               DriverDeliveryFilter.ALL to allCount,
               DriverDeliveryFilter.PENDING to deliveries.count { it.optString("order_status").equals("pending", true) },
+              DriverDeliveryFilter.CONFIRMED to deliveries.count { it.optString("order_status").equals("confirmed", true) },
+              DriverDeliveryFilter.PROCESSING to deliveries.count { it.optString("order_status").equals("processing", true) },
               DriverDeliveryFilter.ACTIVE to activeCount,
               DriverDeliveryFilter.SHIPPED to deliveries.count { it.optString("order_status").equals("shipped", true) },
               DriverDeliveryFilter.PICKED_UP to pickedUpCount,
@@ -1131,6 +1137,8 @@ fun DriverCenterScreen(
                     assignmentStatus == "cancelled" -> "Cancelled"
                     assignmentStatus == "picked_up" -> "Picked Up"
                     delivery.optString("order_status").equals("shipped", true) -> "Shipped"
+                    delivery.optString("order_status").equals("processing", true) -> "Processing"
+                    delivery.optString("order_status").equals("confirmed", true) -> "Confirmed"
                     delivery.optString("order_status").equals("pending", true) -> "Pending"
                     else -> "Active"
                   },
