@@ -106,7 +106,8 @@ enum class DriverDeliveryFilter(val label: String) {
   ACTIVE("Active"),
   SHIPPED("Shipped"),
   PICKED_UP("Picked Up"),
-  DELIVERED("Delivered")
+  DELIVERED("Delivered"),
+  CANCELLED("Cancelled")
 }
 
 enum class DriverBottomNavTab {
@@ -312,7 +313,7 @@ fun DriverCenterScreen(
 
   val filteredDeliveries = remember(deliveries, selectedFilter, selectedTab) {
     if (selectedTab == DriverBottomNavTab.HISTORY) {
-      deliveries.filter { it.optString("assignment_status") == "delivered" }
+      deliveries.filter { it.optString("assignment_status") in setOf("delivered", "cancelled") }
     } else {
       when (selectedFilter) {
         DriverDeliveryFilter.ALL -> deliveries
@@ -321,6 +322,7 @@ fun DriverCenterScreen(
         DriverDeliveryFilter.SHIPPED -> deliveries.filter { it.optString("order_status").equals("shipped", true) }
         DriverDeliveryFilter.PICKED_UP -> deliveries.filter { it.optString("assignment_status") in setOf("picked_up", "in_transit") }
         DriverDeliveryFilter.DELIVERED -> deliveries.filter { it.optString("assignment_status") == "delivered" }
+        DriverDeliveryFilter.CANCELLED -> deliveries.filter { it.optString("assignment_status") == "cancelled" }
       }
     }
   }
@@ -1011,7 +1013,8 @@ fun DriverCenterScreen(
               DriverDeliveryFilter.ACTIVE to activeCount,
               DriverDeliveryFilter.SHIPPED to deliveries.count { it.optString("order_status").equals("shipped", true) },
               DriverDeliveryFilter.PICKED_UP to pickedUpCount,
-              DriverDeliveryFilter.DELIVERED to deliveredCount
+              DriverDeliveryFilter.DELIVERED to deliveredCount,
+              DriverDeliveryFilter.CANCELLED to deliveries.count { it.optString("assignment_status") == "cancelled" }
             )
 
             items(filtersWithCounts) { (filter, count) ->
@@ -1070,11 +1073,11 @@ fun DriverCenterScreen(
           val lat = delivery.optDouble("delivery_lat", Double.NaN)
           val lng = delivery.optDouble("delivery_lng", Double.NaN)
           val assignmentStatus = delivery.optString("assignment_status", "assigned")
-          val orderNumber = delivery.optString("order_number").ifBlank { "ORD-8942" }
+          val orderNumber = delivery.optString("order_number").ifBlank { "Order number unavailable" }
           val customerName = delivery.optString("customer_name").ifBlank { "Customer" }
           val customerPhone = delivery.optString("customer_phone")
           val addressText = driverAddressText(delivery)
-          val isDelivered = assignmentStatus == "delivered"
+          val isDelivered = assignmentStatus == "delivered" || assignmentStatus == "cancelled"
 
           // Format items summary (e.g. "BOLT B155 20000mAh Power Bank × 1")
           val itemsArr = delivery.optJSONArray("items")
@@ -1086,7 +1089,7 @@ fun DriverCenterScreen(
             }
             list.joinToString(", ")
           } else {
-            "Standard Package × 1"
+            "No item details available"
           }
 
           Card(
@@ -1110,7 +1113,7 @@ fun DriverCenterScreen(
               ) {
                 // Status Pill (e.g., • Active, • Picked Up, • Delivered)
                 Surface(
-                  color = if (assignmentStatus == "delivered") Color(0xFFDCFCE7) else if (assignmentStatus == "picked_up") Color(0xFFEFF6FF) else Color(0xFFDCFCE7),
+                  color = when (assignmentStatus) { "delivered" -> Color(0xFFDCFCE7); "cancelled" -> Color(0xFFFEE2E2); "picked_up" -> Color(0xFFEFF6FF); else -> Color(0xFFFFF7ED) },
                   shape = RoundedCornerShape(20.dp)
                 ) {
                   Row(
@@ -1122,11 +1125,12 @@ fun DriverCenterScreen(
                       modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(if (assignmentStatus == "delivered") Color(0xFF16A34A) else if (assignmentStatus == "picked_up") Color(0xFF2563EB) else Color(0xFF16A34A))
+                        .background(when (assignmentStatus) { "delivered" -> Color(0xFF16A34A); "cancelled" -> Color(0xFFDC2626); "picked_up" -> Color(0xFF2563EB); else -> Color(0xFFEA580C) })
                     )
                     Text(
                       text = when {
                     assignmentStatus == "delivered" -> "Delivered"
+                    assignmentStatus == "cancelled" -> "Cancelled"
                     assignmentStatus == "picked_up" -> "Picked Up"
                     delivery.optString("order_status").equals("shipped", true) -> "Shipped"
                     delivery.optString("order_status").equals("pending", true) -> "Pending"
@@ -1134,7 +1138,7 @@ fun DriverCenterScreen(
                   },
                       fontSize = 11.5.sp,
                       fontWeight = FontWeight.Bold,
-                      color = if (assignmentStatus == "delivered") Color(0xFF16A34A) else if (assignmentStatus == "picked_up") Color(0xFF2563EB) else Color(0xFF16A34A)
+                      color = when (assignmentStatus) { "delivered" -> Color(0xFF16A34A); "cancelled" -> Color(0xFFDC2626); "picked_up" -> Color(0xFF2563EB); else -> Color(0xFFEA580C) }
                     )
                   }
                 }
@@ -1396,7 +1400,7 @@ fun DriverCenterScreen(
                   }
                 } else {
                   Surface(
-                    color = Color(0xFFDCFCE7),
+                    color = if (assignmentStatus == "cancelled") Color(0xFFFEE2E2) else Color(0xFFDCFCE7),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                       .weight(1f)
@@ -1407,9 +1411,9 @@ fun DriverCenterScreen(
                       verticalAlignment = Alignment.CenterVertically,
                       horizontalArrangement = Arrangement.Center
                     ) {
-                      Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(15.dp))
+                      Icon(if (assignmentStatus == "cancelled") Icons.Filled.Cancel else Icons.Filled.CheckCircle, contentDescription = null, tint = if (assignmentStatus == "cancelled") Color(0xFFDC2626) else Color(0xFF16A34A), modifier = Modifier.size(15.dp))
                       Spacer(Modifier.width(6.dp))
-                      Text("Delivered", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                      Text(if (assignmentStatus == "cancelled") "Cancelled" else "Delivered", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (assignmentStatus == "cancelled") Color(0xFFDC2626) else Color(0xFF16A34A))
                     }
                   }
                 }
