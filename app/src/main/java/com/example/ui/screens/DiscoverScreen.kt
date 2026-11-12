@@ -584,7 +584,7 @@ private fun ProductsFeedReelsView(
         Box(
           modifier = Modifier
             .fillMaxWidth()
-            .height(280.dp)
+            .fillMaxHeight(0.42f)
             .align(Alignment.BottomCenter)
             .background(
               Brush.verticalGradient(
