@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -9,11 +10,13 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,10 +28,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.supabase.SupabaseClient
 import com.example.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +51,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.File
 
 fun driverAddressText(delivery: JSONObject): String {
@@ -83,6 +90,19 @@ data class DocUploadItem(
   val errorMessage: String? = null
 )
 
+enum class DriverDeliveryFilter(val label: String) {
+  ALL("All"),
+  ACTIVE("Active"),
+  PICKED_UP("Picked Up"),
+  DELIVERED("Delivered")
+}
+
+enum class DriverBottomNavTab {
+  DELIVERIES,
+  HISTORY,
+  PROFILE
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverCenterScreen(
@@ -96,6 +116,10 @@ fun DriverCenterScreen(
   var enabled by remember { mutableStateOf(false) }
   var application by remember { mutableStateOf<JSONObject?>(null) }
   var deliveries by remember { mutableStateOf(listOf<JSONObject>()) }
+
+  // Filter and Nav state
+  var selectedFilter by remember { mutableStateOf(DriverDeliveryFilter.ALL) }
+  var selectedTab by remember { mutableStateOf(DriverBottomNavTab.DELIVERIES) }
 
   // Form input fields
   var fullName by remember { mutableStateOf(user?.fullName.orEmpty()) }
@@ -119,6 +143,8 @@ fun DriverCenterScreen(
   var error by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf<String?>(null) }
 
+  val isApprovedDriver = application?.optString("status") == "approved"
+
   suspend fun uploadDocBytes(docType: DriverDocType, bytes: ByteArray, uri: Uri?, bitmap: Bitmap?) {
     val uid = user?.id ?: return
     val prefix = when (docType) {
@@ -127,7 +153,6 @@ fun DriverCenterScreen(
       DriverDocType.VEHICLE_PLATE -> "vehicle_plate"
     }
 
-    // Set uploading state
     val uploadingItem = DocUploadItem(localUri = uri, localBitmap = bitmap, isUploading = true)
     when (docType) {
       DriverDocType.CNIC_FRONT -> cnicFrontDoc = uploadingItem
@@ -244,6 +269,8 @@ fun DriverCenterScreen(
         SupabaseClient.get("driver_applications?select=id,full_name,phone,vehicle_type,current_address,status,admin_note&user_id=eq.$uid&limit=1").getOrThrow()
       )
       application = if (appRows.length() > 0) appRows.getJSONObject(0) else null
+
+      // Security check: Customer locations & deliveries are only accessible to approved drivers
       deliveries = if (application?.optString("status") == "approved") {
         JSONArray(SupabaseClient.rpc("driver_list_assigned_orders").getOrThrow()).let { rows ->
           (0 until rows.length()).map { rows.getJSONObject(it) }
@@ -258,33 +285,261 @@ fun DriverCenterScreen(
 
   LaunchedEffect(user?.id) { load() }
 
+  // Delivery filter counts
+  val allCount = deliveries.size
+  val activeCount = deliveries.count { it.optString("assignment_status", "assigned") in setOf("assigned", "pending") }
+  val pickedUpCount = deliveries.count { it.optString("assignment_status") in setOf("picked_up", "in_transit") }
+  val deliveredCount = deliveries.count { it.optString("assignment_status") == "delivered" }
+
+  val filteredDeliveries = remember(deliveries, selectedFilter, selectedTab) {
+    if (selectedTab == DriverBottomNavTab.HISTORY) {
+      deliveries.filter { it.optString("assignment_status") == "delivered" }
+    } else {
+      when (selectedFilter) {
+        DriverDeliveryFilter.ALL -> deliveries
+        DriverDeliveryFilter.ACTIVE -> deliveries.filter { it.optString("assignment_status", "assigned") in setOf("assigned", "pending") }
+        DriverDeliveryFilter.PICKED_UP -> deliveries.filter { it.optString("assignment_status") in setOf("picked_up", "in_transit") }
+        DriverDeliveryFilter.DELIVERED -> deliveries.filter { it.optString("assignment_status") == "delivered" }
+      }
+    }
+  }
+
   Scaffold(
-    topBar = {
-      TopAppBar(
-        title = { Text("JTBazar Driver", fontWeight = FontWeight.SemiBold) },
-        navigationIcon = {
-          IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+    containerColor = Color(0xFFF8FAFC),
+    bottomBar = {
+      if (isApprovedDriver) {
+        Surface(
+          color = Color.White,
+          shadowElevation = 10.dp,
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .navigationBarsPadding()
+              .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            // Tab 1: Deliveries
+            Column(
+              horizontalAlignment = Alignment.CenterHorizontally,
+              modifier = Modifier
+                .clickable {
+                  selectedTab = DriverBottomNavTab.DELIVERIES
+                  selectedFilter = DriverDeliveryFilter.ALL
+                }
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+              Icon(
+                Icons.Filled.LocalShipping,
+                contentDescription = "Deliveries",
+                tint = if (selectedTab == DriverBottomNavTab.DELIVERIES) Color(0xFFEA580C) else Color(0xFF94A3B8),
+                modifier = Modifier.size(24.dp)
+              )
+              Spacer(Modifier.height(3.dp))
+              Text(
+                "Deliveries",
+                fontSize = 11.sp,
+                fontWeight = if (selectedTab == DriverBottomNavTab.DELIVERIES) FontWeight.Bold else FontWeight.Normal,
+                color = if (selectedTab == DriverBottomNavTab.DELIVERIES) Color(0xFFEA580C) else Color(0xFF94A3B8)
+              )
+              if (selectedTab == DriverBottomNavTab.DELIVERIES) {
+                Box(
+                  modifier = Modifier
+                    .padding(top = 4.dp)
+                    .width(28.dp)
+                    .height(2.5.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFFEA580C))
+                )
+              }
+            }
+
+            // Tab 2: History
+            Column(
+              horizontalAlignment = Alignment.CenterHorizontally,
+              modifier = Modifier
+                .clickable {
+                  selectedTab = DriverBottomNavTab.HISTORY
+                }
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+              Icon(
+                Icons.Filled.ReceiptLong,
+                contentDescription = "History",
+                tint = if (selectedTab == DriverBottomNavTab.HISTORY) Color(0xFFEA580C) else Color(0xFF94A3B8),
+                modifier = Modifier.size(24.dp)
+              )
+              Spacer(Modifier.height(3.dp))
+              Text(
+                "History",
+                fontSize = 11.sp,
+                fontWeight = if (selectedTab == DriverBottomNavTab.HISTORY) FontWeight.Bold else FontWeight.Normal,
+                color = if (selectedTab == DriverBottomNavTab.HISTORY) Color(0xFFEA580C) else Color(0xFF94A3B8)
+              )
+              if (selectedTab == DriverBottomNavTab.HISTORY) {
+                Box(
+                  modifier = Modifier
+                    .padding(top = 4.dp)
+                    .width(28.dp)
+                    .height(2.5.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFFEA580C))
+                )
+              }
+            }
+
+            // Tab 3: Profile
+            Column(
+              horizontalAlignment = Alignment.CenterHorizontally,
+              modifier = Modifier
+                .clickable {
+                  selectedTab = DriverBottomNavTab.PROFILE
+                }
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+              Icon(
+                Icons.Filled.Person,
+                contentDescription = "Profile",
+                tint = if (selectedTab == DriverBottomNavTab.PROFILE) Color(0xFFEA580C) else Color(0xFF94A3B8),
+                modifier = Modifier.size(24.dp)
+              )
+              Spacer(Modifier.height(3.dp))
+              Text(
+                "Profile",
+                fontSize = 11.sp,
+                fontWeight = if (selectedTab == DriverBottomNavTab.PROFILE) FontWeight.Bold else FontWeight.Normal,
+                color = if (selectedTab == DriverBottomNavTab.PROFILE) Color(0xFFEA580C) else Color(0xFF94A3B8)
+              )
+              if (selectedTab == DriverBottomNavTab.PROFILE) {
+                Box(
+                  modifier = Modifier
+                    .padding(top = 4.dp)
+                    .width(28.dp)
+                    .height(2.5.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFFEA580C))
+                )
+              }
+            }
           }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-      )
+        }
+      }
     }
   ) { padding ->
     LazyColumn(
       modifier = Modifier
         .fillMaxSize()
         .padding(padding),
-      contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
+      contentPadding = PaddingValues(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-      if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = Color(0xFFEA580C)) }
+      // 1. TOP HEADER BANNER WITH WARM ORANGE GRADIENT
+      item {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .background(
+              brush = Brush.verticalGradient(
+                colors = listOf(
+                  Color(0xFFF97316),
+                  Color(0xFFEA580C),
+                  Color(0xFFD94606)
+                )
+              )
+            )
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 18.dp)
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            // Circular Back Button
+            Box(
+              modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.22f))
+                .clickable { onBack() },
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+              )
+            }
+
+            // Title and Subtitle
+            Column(
+              horizontalAlignment = Alignment.CenterHorizontally,
+              modifier = Modifier.weight(1f)
+            ) {
+              Text(
+                "JTBazar Driver",
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+              )
+              Text(
+                "Driver Dashboard",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFFFED7AA)
+              )
+            }
+
+            // Circular Notification Button with red dot
+            Box(
+              modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.22f)),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                Icons.Filled.Notifications,
+                contentDescription = "Notifications",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+              )
+              Box(
+                modifier = Modifier
+                  .align(Alignment.TopEnd)
+                  .padding(top = 8.dp, end = 8.dp)
+                  .size(8.dp)
+                  .clip(CircleShape)
+                  .background(Color(0xFFEF4444))
+              )
+            }
+          }
+        }
+      }
+
+      // LOADING / ERROR ALERTS
+      if (loading) {
+        item {
+          LinearProgressIndicator(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp),
+            color = Color(0xFFEA580C)
+          )
+        }
+      }
 
       error?.let { err ->
         item {
           Surface(
             color = MaterialTheme.colorScheme.errorContainer,
-            shape = RoundedCornerShape(10.dp)
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp)
           ) {
             Row(
               modifier = Modifier.padding(12.dp),
@@ -302,8 +557,11 @@ fun DriverCenterScreen(
         item {
           Surface(
             color = Color(0xFFF0FDF4),
-            shape = RoundedCornerShape(10.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC))
+            shape = RoundedCornerShape(12.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp)
           ) {
             Row(
               modifier = Modifier.padding(12.dp),
@@ -317,492 +575,791 @@ fun DriverCenterScreen(
         }
       }
 
-      if (!enabled) {
+      // 2. DRIVER APPLICATION CARD (MATCHING REFERENCE IMAGE)
+      if (application != null) {
+        val appObj = application!!
+        val applicantName = appObj.optString("full_name").ifBlank { user?.fullName ?: "Driver" }
+        val vehType = appObj.optString("vehicle_type").ifBlank { "Motorcycle" }
+        val rawAddr = appObj.optString("current_address")
+        val addrDisplay = if (rawAddr.isNotBlank() && rawAddr != "null") rawAddr else "Karachi, Pakistan"
+        val status = appObj.optString("status", "pending")
+
         item {
           Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder)
-          ) {
-            Column(
-              modifier = Modifier.padding(24.dp),
-              horizontalAlignment = Alignment.CenterHorizontally,
-              verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-              Icon(Icons.Filled.LocalShipping, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(44.dp))
-              Text("Driver Applications Closed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-              Text(
-                "Driver registration is currently disabled by Admin. Please check back later.",
-                fontSize = 12.5.sp,
-                color = JTTextSecondary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-              )
-            }
-          }
-        }
-      } else if (application == null) {
-        // DRIVER APPLICATION FORM
-        item {
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Become a JTBazar Driver", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = JTTextPrimary)
-            Text("Fill out the details below and upload clear photos of required documents.", fontSize = 12.5.sp, color = JTTextSecondary)
-          }
-        }
-
-        // 1. Full Name
-        item {
-          OutlinedTextField(
-            value = fullName,
-            onValueChange = { fullName = it },
-            label = { Text("Full Name *") },
-            placeholder = { Text("As printed on CNIC") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(10.dp)
-          )
-        }
-
-        // 2. Phone Number
-        item {
-          OutlinedTextField(
-            value = phone,
-            onValueChange = { phone = it },
-            label = { Text("Mobile Phone Number *") },
-            placeholder = { Text("03001234567") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(10.dp)
-          )
-        }
-
-        // 3. Current Address
-        item {
-          OutlinedTextField(
-            value = currentAddress,
-            onValueChange = { currentAddress = it },
-            label = { Text("Current Address *") },
-            placeholder = { Text("House #, Street, Area, City") },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 3,
-            shape = RoundedCornerShape(10.dp)
-          )
-        }
-
-        // 4. Vehicle Type Dropdown: Bike / Car
-        item {
-          ExposedDropdownMenuBox(
-            expanded = isVehicleDropdownExpanded,
-            onExpandedChange = { isVehicleDropdownExpanded = it }
-          ) {
-            OutlinedTextField(
-              value = vehicleType,
-              onValueChange = {},
-              readOnly = true,
-              label = { Text("Vehicle Type *") },
-              trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isVehicleDropdownExpanded) },
-              modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth(),
-              shape = RoundedCornerShape(10.dp)
-            )
-            ExposedDropdownMenu(
-              expanded = isVehicleDropdownExpanded,
-              onDismissRequest = { isVehicleDropdownExpanded = false }
-            ) {
-              DropdownMenuItem(
-                text = { Text("Bike (Motorcycle)") },
-                onClick = {
-                  vehicleType = "Bike"
-                  isVehicleDropdownExpanded = false
-                },
-                leadingIcon = { Icon(Icons.Filled.TwoWheeler, contentDescription = null) }
-              )
-              DropdownMenuItem(
-                text = { Text("Car (Automobile)") },
-                onClick = {
-                  vehicleType = "Car"
-                  isVehicleDropdownExpanded = false
-                },
-                leadingIcon = { Icon(Icons.Filled.DirectionsCar, contentDescription = null) }
-              )
-            }
-          }
-        }
-
-        // DOCUMENT UPLOAD SECTION
-        item {
-          Spacer(Modifier.height(4.dp))
-          Text(
-            text = "Required Verification Documents",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = JTTextPrimary
-          )
-          Text(
-            text = "Uploaded documents are private and stored securely for identity verification.",
-            fontSize = 11.5.sp,
-            color = JTTextSecondary
-          )
-        }
-
-        // 5. CNIC Front Image
-        item {
-          DocumentUploadCard(
-            title = "CNIC Front Side *",
-            subtitle = "Clear, well-lit photo of the front side",
-            docState = cnicFrontDoc,
-            onChoosePhoto = {
-              activeDocForPicker = DriverDocType.CNIC_FRONT
-              showPickerSheet = true
-            },
-            onClear = { cnicFrontDoc = DocUploadItem() }
-          )
-        }
-
-        // 6. CNIC Back Image
-        item {
-          DocumentUploadCard(
-            title = "CNIC Back Side *",
-            subtitle = "Clear photo of the back side showing barcode",
-            docState = cnicBackDoc,
-            onChoosePhoto = {
-              activeDocForPicker = DriverDocType.CNIC_BACK
-              showPickerSheet = true
-            },
-            onClear = { cnicBackDoc = DocUploadItem() }
-          )
-        }
-
-        // 7. Vehicle Number Plate Image
-        item {
-          DocumentUploadCard(
-            title = "Vehicle Number Plate *",
-            subtitle = "Clear rear-side photo showing registration plate",
-            docState = plateDoc,
-            onChoosePhoto = {
-              activeDocForPicker = DriverDocType.VEHICLE_PLATE
-              showPickerSheet = true
-            },
-            onClear = { plateDoc = DocUploadItem() }
-          )
-        }
-
-        // Submission Button & Validation Checks
-        item {
-          val isFormValid = fullName.trim().isNotBlank() &&
-            phone.trim().isNotBlank() &&
-            currentAddress.trim().isNotBlank() &&
-            vehicleType.isNotBlank() &&
-            !cnicFrontDoc.storagePath.isNullOrBlank() &&
-            !cnicBackDoc.storagePath.isNullOrBlank() &&
-            !plateDoc.storagePath.isNullOrBlank() &&
-            !cnicFrontDoc.isUploading &&
-            !cnicBackDoc.isUploading &&
-            !plateDoc.isUploading
-
-          if (!isFormValid) {
-            val missing = mutableListOf<String>()
-            if (fullName.isBlank()) missing.add("Name")
-            if (phone.isBlank()) missing.add("Phone")
-            if (currentAddress.isBlank()) missing.add("Address")
-            if (cnicFrontDoc.storagePath.isNullOrBlank()) missing.add("CNIC Front")
-            if (cnicBackDoc.storagePath.isNullOrBlank()) missing.add("CNIC Back")
-            if (plateDoc.storagePath.isNullOrBlank()) missing.add("Number Plate")
-
-            Text(
-              text = "Missing: ${missing.joinToString(", ")}",
-              fontSize = 11.5.sp,
-              color = Color(0xFFC2410C),
-              fontWeight = FontWeight.Medium
-            )
-          }
-
-          Button(
-            enabled = !busy && isFormValid,
-            onClick = {
-              scope.launch {
-                busy = true
-                message = null
-                error = null
-                try {
-                  val body = JSONObject().apply {
-                    put("p_full_name", fullName.trim())
-                    put("p_phone", phone.trim())
-                    put("p_vehicle_type", vehicleType)
-                    put("p_current_address", currentAddress.trim())
-                    put("p_cnic_front_path", cnicFrontDoc.storagePath)
-                    put("p_cnic_back_path", cnicBackDoc.storagePath)
-                    put("p_vehicle_plate_image_path", plateDoc.storagePath)
-                  }
-                  val result = SupabaseClient.rpc("submit_driver_application", body.toString())
-                  if (result.isSuccess) {
-                    message = "Driver application submitted successfully! Admin approval is required."
-                    load()
-                  } else {
-                    error = result.exceptionOrNull()?.message ?: "Application submission failed"
-                  }
-                } catch (e: Exception) {
-                  error = e.message ?: "Submission error"
-                } finally {
-                  busy = false
-                }
-              }
-            },
             modifier = Modifier
               .fillMaxWidth()
-              .height(48.dp),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
-          ) {
-            if (busy) {
-              CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
-              Spacer(Modifier.width(8.dp))
-              Text("Submitting…", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            } else {
-              Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
-              Spacer(Modifier.width(8.dp))
-              Text("Submit Driver Application", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            }
-          }
-        }
-      } else {
-        // APPLICATION STATUS CARD (PENDING, APPROVED, REJECTED, SUSPENDED)
-        val status = application?.optString("status") ?: "pending"
-        item {
-          Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+              .padding(horizontal = 16.dp)
+              .shadow(elevation = 3.dp, shape = RoundedCornerShape(22.dp)),
+            shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder)
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9))
           ) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Row(
+              modifier = Modifier.padding(16.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              // Left: Rider avatar with green checkmark badge
+              Box(
+                modifier = Modifier
+                  .size(70.dp)
+                  .clip(CircleShape)
+                  .background(Color(0xFFEFF6FF)),
+                contentAlignment = Alignment.Center
               ) {
-                Text("Driver Application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Surface(
-                  color = when (status) {
-                    "approved" -> Color(0xFFDCFCE7)
-                    "rejected", "suspended" -> Color(0xFFFEE2E2)
-                    else -> Color(0xFFFEF3C7)
-                  },
-                  shape = RoundedCornerShape(50)
+                Image(
+                  painter = painterResource(id = R.drawable.ic_driver_courier),
+                  contentDescription = "Driver Avatar",
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
+                )
+
+                if (status == "approved") {
+                  Box(
+                    modifier = Modifier
+                      .align(Alignment.BottomEnd)
+                      .size(20.dp)
+                      .clip(CircleShape)
+                      .background(Color(0xFF16A34A))
+                      .padding(2.dp),
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Icon(
+                      Icons.Filled.Check,
+                      contentDescription = null,
+                      tint = Color.White,
+                      modifier = Modifier.size(12.dp)
+                    )
+                  }
+                }
+              }
+
+              Spacer(Modifier.width(14.dp))
+
+              // Middle: Driver Application details
+              Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+              ) {
+                Text(
+                  "Driver Application",
+                  fontSize = 15.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color(0xFF0F172A)
+                )
+
+                Spacer(Modifier.height(2.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  Icon(Icons.Filled.DirectionsCar, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
+                  Text("Applicant: $applicantName", fontSize = 11.5.sp, color = Color(0xFF334155), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  Icon(Icons.Filled.TwoWheeler, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
+                  Text("Vehicle: $vehType", fontSize = 11.5.sp, color = Color(0xFF334155))
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
+                  Text("Address: $addrDisplay", fontSize = 11.5.sp, color = Color(0xFF334155), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+              }
+
+              // Right: Status badge pill
+              Surface(
+                color = when (status) {
+                  "approved" -> Color(0xFFDCFCE7)
+                  "rejected", "suspended" -> Color(0xFFFEE2E2)
+                  else -> Color(0xFFFEF3C7)
+                },
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                  1.dp,
+                  when (status) {
+                    "approved" -> Color(0xFF86EFAC)
+                    "rejected", "suspended" -> Color(0xFFFCA5A5)
+                    else -> Color(0xFFFDE68A)
+                  }
+                )
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                  if (status == "approved") {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+                  }
                   Text(
                     text = status.replaceFirstChar { it.uppercase() },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelLarge,
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = when (status) {
-                      "approved" -> Color(0xFF166534)
-                      "rejected", "suspended" -> Color(0xFF991B1B)
+                      "approved" -> Color(0xFF16A34A)
+                      "rejected", "suspended" -> Color(0xFFB91C1C)
                       else -> Color(0xFF92400E)
                     }
                   )
                 }
               }
+            }
+          }
+        }
+      }
 
-              application?.optString("full_name")?.takeIf { it.isNotBlank() }?.let {
-                Text("Applicant: $it", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-              }
-              application?.optString("vehicle_type")?.takeIf { it.isNotBlank() }?.let {
-                Text("Vehicle: $it", fontSize = 12.sp, color = JTTextSecondary)
-              }
-              application?.optString("current_address")?.takeIf { it.isNotBlank() }?.let {
-                Text("Address: $it", fontSize = 12.sp, color = JTTextSecondary)
-              }
+      // NOT APPROVED NOTICE / APPLICATION FORM
+      if (!enabled) {
+        item {
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+          ) {
+            Column(
+              modifier = Modifier.padding(24.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Text("Driver System Disabled", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+              Text("Driver applications are currently paused by administrator.", fontSize = 12.sp, color = JTTextSecondary)
+            }
+          }
+        }
+      } else if (application == null) {
+        // DRIVER APPLICATION FORM WITH 7 REQUIRED FIELDS
+        item {
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+          ) {
+            Column(
+              modifier = Modifier.padding(20.dp),
+              verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              Text("Become a JTBazar Driver", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+              Text("Enter your details and upload required verification documents.", fontSize = 12.sp, color = Color(0xFF64748B))
 
-              application?.optString("admin_note")?.takeIf { it.isNotBlank() && it != "null" }?.let { note ->
-                Surface(
-                  color = Color(0xFFF8FAFC),
-                  shape = RoundedCornerShape(8.dp),
-                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                  modifier = Modifier.fillMaxWidth()
+              // 1. Full Name
+              OutlinedTextField(
+                value = fullName,
+                onValueChange = { fullName = it },
+                label = { Text("Full Name *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
+              )
+
+              // 2. Phone
+              OutlinedTextField(
+                value = phone,
+                onValueChange = { phone = it },
+                label = { Text("Mobile Phone Number *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
+              )
+
+              // 3. Current Address
+              OutlinedTextField(
+                value = currentAddress,
+                onValueChange = { currentAddress = it },
+                label = { Text("Current Address *") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp)
+              )
+
+              // 4. Vehicle Type Dropdown
+              ExposedDropdownMenuBox(
+                expanded = isVehicleDropdownExpanded,
+                onExpandedChange = { isVehicleDropdownExpanded = it }
+              ) {
+                OutlinedTextField(
+                  value = vehicleType,
+                  onValueChange = {},
+                  readOnly = true,
+                  label = { Text("Vehicle Type *") },
+                  trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isVehicleDropdownExpanded) },
+                  modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                  shape = RoundedCornerShape(10.dp)
+                )
+                ExposedDropdownMenu(
+                  expanded = isVehicleDropdownExpanded,
+                  onDismissRequest = { isVehicleDropdownExpanded = false }
                 ) {
-                  Text(
-                    text = "Admin Note: $note",
-                    fontSize = 12.sp,
-                    color = JTTextPrimary,
-                    modifier = Modifier.padding(10.dp)
+                  DropdownMenuItem(
+                    text = { Text("Bike (Motorcycle)") },
+                    onClick = {
+                      vehicleType = "Bike"
+                      isVehicleDropdownExpanded = false
+                    }
+                  )
+                  DropdownMenuItem(
+                    text = { Text("Car (Automobile)") },
+                    onClick = {
+                      vehicleType = "Car"
+                      isVehicleDropdownExpanded = false
+                    }
                   )
                 }
+              }
+
+              HorizontalDivider(color = Color(0xFFE2E8F0), modifier = Modifier.padding(vertical = 4.dp))
+
+              Text("Required Verification Documents", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+
+              // 5. CNIC Front
+              DocumentUploadCard(
+                title = "CNIC Front Side *",
+                subtitle = "Clear photo of front side",
+                docState = cnicFrontDoc,
+                onChoosePhoto = {
+                  activeDocForPicker = DriverDocType.CNIC_FRONT
+                  showPickerSheet = true
+                },
+                onClear = { cnicFrontDoc = DocUploadItem() }
+              )
+
+              // 6. CNIC Back
+              DocumentUploadCard(
+                title = "CNIC Back Side *",
+                subtitle = "Clear photo of back side",
+                docState = cnicBackDoc,
+                onChoosePhoto = {
+                  activeDocForPicker = DriverDocType.CNIC_BACK
+                  showPickerSheet = true
+                },
+                onClear = { cnicBackDoc = DocUploadItem() }
+              )
+
+              // 7. Vehicle Plate
+              DocumentUploadCard(
+                title = "Vehicle Number Plate *",
+                subtitle = "Clear rear photo of bike/car",
+                docState = plateDoc,
+                onChoosePhoto = {
+                  activeDocForPicker = DriverDocType.VEHICLE_PLATE
+                  showPickerSheet = true
+                },
+                onClear = { plateDoc = DocUploadItem() }
+              )
+
+              val isFormValid = fullName.trim().isNotBlank() &&
+                phone.trim().isNotBlank() &&
+                currentAddress.trim().isNotBlank() &&
+                !cnicFrontDoc.storagePath.isNullOrBlank() &&
+                !cnicBackDoc.storagePath.isNullOrBlank() &&
+                !plateDoc.storagePath.isNullOrBlank() &&
+                !cnicFrontDoc.isUploading &&
+                !cnicBackDoc.isUploading &&
+                !plateDoc.isUploading
+
+              Button(
+                enabled = !busy && isFormValid,
+                onClick = {
+                  scope.launch {
+                    busy = true
+                    message = null
+                    error = null
+                    try {
+                      val body = JSONObject().apply {
+                        put("p_full_name", fullName.trim())
+                        put("p_phone", phone.trim())
+                        put("p_vehicle_type", vehicleType)
+                        put("p_current_address", currentAddress.trim())
+                        put("p_cnic_front_path", cnicFrontDoc.storagePath)
+                        put("p_cnic_back_path", cnicBackDoc.storagePath)
+                        put("p_vehicle_plate_image_path", plateDoc.storagePath)
+                      }
+                      val result = SupabaseClient.rpc("submit_driver_application", body.toString())
+                      if (result.isSuccess) {
+                        message = "Driver application submitted! Admin approval is required."
+                        load()
+                      } else {
+                        error = result.exceptionOrNull()?.message ?: "Application failed"
+                      }
+                    } catch (e: Exception) {
+                      error = e.message
+                    } finally {
+                      busy = false
+                    }
+                  }
+                },
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(48.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
+              ) {
+                Text(if (busy) "Submitting…" else "Submit Driver Application", fontWeight = FontWeight.Bold)
+              }
+            }
+          }
+        }
+      }
+
+      // 3. SECTION HEADER: "My Assigned Deliveries"
+      if (isApprovedDriver) {
+        item {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column {
+              Text(
+                "My Assigned Deliveries",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A)
+              )
+              Text(
+                "$activeCount active delivery assignments",
+                fontSize = 12.sp,
+                color = Color(0xFF64748B)
+              )
+            }
+
+            // Refresh pill button
+            Surface(
+              color = Color(0xFFEFF6FF),
+              shape = RoundedCornerShape(20.dp),
+              modifier = Modifier.clickable { scope.launch { load() } }
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+              ) {
+                Icon(
+                  Icons.Filled.Refresh,
+                  contentDescription = null,
+                  tint = Color(0xFF2563EB),
+                  modifier = Modifier.size(15.dp)
+                )
+                Text(
+                  "Refresh",
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color(0xFF2563EB)
+                )
               }
             }
           }
         }
 
-        // APPROVED DRIVER: ASSIGNED DELIVERIES LIST
-        if (status == "approved") {
-          item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-              Column(Modifier.weight(1f)) {
-                Text("My Assigned Deliveries", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("${deliveries.size} active delivery assignment${if (deliveries.size == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
-              }
-              IconButton(onClick = { scope.launch { load() } }, enabled = !loading) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh deliveries", tint = Color(0xFFEA580C))
-              }
-            }
-          }
+        // 4. DELIVERY STATUS FILTER PILLS (ALL, ACTIVE, PICKED UP, DELIVERED)
+        item {
+          LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            val filtersWithCounts = listOf(
+              DriverDeliveryFilter.ALL to allCount,
+              DriverDeliveryFilter.ACTIVE to activeCount,
+              DriverDeliveryFilter.PICKED_UP to pickedUpCount,
+              DriverDeliveryFilter.DELIVERED to deliveredCount
+            )
 
-          if (deliveries.isEmpty()) {
-            item {
-              Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder)
-              ) {
-                Column(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                  horizontalAlignment = Alignment.CenterHorizontally,
-                  verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                  Icon(Icons.Filled.LocalShipping, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(36.dp))
-                  Text("No Assigned Deliveries", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                  Text("Orders assigned to you by Admin will appear here in real-time.", style = MaterialTheme.typography.bodyMedium, color = JTTextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            items(filtersWithCounts) { (filter, count) ->
+              val isSelected = selectedFilter == filter && selectedTab != DriverBottomNavTab.HISTORY
+              Surface(
+                color = if (isSelected) Color(0xFFEA580C) else Color.White,
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                  1.dp,
+                  if (isSelected) Color(0xFFEA580C) else Color(0xFFE2E8F0)
+                ),
+                modifier = Modifier.clickable {
+                  selectedFilter = filter
+                  selectedTab = DriverBottomNavTab.DELIVERIES
                 }
+              ) {
+                Text(
+                  text = "${filter.label} ($count)",
+                  modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                  fontSize = 12.sp,
+                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                  color = if (isSelected) Color.White else Color(0xFF475569)
+                )
               }
             }
           }
+        }
 
-          items(deliveries, key = { it.optString("assignment_id") }) { delivery ->
-            val lat = delivery.optDouble("delivery_lat", Double.NaN)
-            val lng = delivery.optDouble("delivery_lng", Double.NaN)
-            val assignmentStatus = delivery.optString("assignment_status", "assigned")
-            val hasValidCoords = lat.isFinite() && lng.isFinite() && !(lat == 0.0 && lng == 0.0)
-
+        // 5. DELIVERY CARDS (MATCHING REFERENCE IMAGE EXACTLY)
+        if (filteredDeliveries.isEmpty()) {
+          item {
             Card(
-              modifier = Modifier.fillMaxWidth(),
-              shape = RoundedCornerShape(18.dp),
-              elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+              shape = RoundedCornerShape(20.dp),
               colors = CardDefaults.cardColors(containerColor = Color.White),
-              border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder)
+              border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
             ) {
-              Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Order Number & Status Badge
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("ORDER", style = MaterialTheme.typography.labelSmall, color = Color(0xFFEA580C), fontWeight = FontWeight.Bold)
-                    Text(delivery.optString("order_number"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                  }
-                  Surface(
-                    color = if (assignmentStatus == "picked_up") Color(0xFFEFF6FF) else if (assignmentStatus == "delivered") Color(0xFFDCFCE7) else Color(0xFFFFF7ED),
-                    shape = RoundedCornerShape(50),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (assignmentStatus == "picked_up") Color(0xFF93C5FD) else if (assignmentStatus == "delivered") Color(0xFF86EFAC) else Color(0xFFFDBA74))
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Icon(Icons.Filled.LocalShipping, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(36.dp))
+                Text("No Deliveries In This Section", fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
+                Text("Check other status tabs or refresh for newly assigned orders.", fontSize = 12.sp, color = Color(0xFF64748B), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+              }
+            }
+          }
+        }
+
+        items(filteredDeliveries, key = { it.optString("assignment_id") }) { delivery ->
+          val lat = delivery.optDouble("delivery_lat", Double.NaN)
+          val lng = delivery.optDouble("delivery_lng", Double.NaN)
+          val assignmentStatus = delivery.optString("assignment_status", "assigned")
+          val orderNumber = delivery.optString("order_number").ifBlank { "ORD-8942" }
+          val customerName = delivery.optString("customer_name").ifBlank { "Customer" }
+          val customerPhone = delivery.optString("customer_phone")
+          val addressText = driverAddressText(delivery)
+
+          // Format items summary (e.g. "BOLT B155 20000mAh Power Bank × 1")
+          val itemsArr = delivery.optJSONArray("items")
+          val itemsText = if (itemsArr != null && itemsArr.length() > 0) {
+            val list = mutableListOf<String>()
+            for (i in 0 until itemsArr.length()) {
+              val itm = itemsArr.optJSONObject(i) ?: continue
+              list.add("${itm.optString("name", "Product")} × ${itm.optInt("quantity", 1)}")
+            }
+            list.joinToString(", ")
+          } else {
+            "Standard Package × 1"
+          }
+
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp)
+              .shadow(elevation = 2.dp, shape = RoundedCornerShape(22.dp)),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9))
+          ) {
+            Column(
+              modifier = Modifier.padding(16.dp),
+              verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              // Row 1: Status Pill & Order ID Pill
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                // Status Pill (e.g., • Active, • Picked Up, • Delivered)
+                Surface(
+                  color = if (assignmentStatus == "delivered") Color(0xFFDCFCE7) else if (assignmentStatus == "picked_up") Color(0xFFEFF6FF) else Color(0xFFDCFCE7),
+                  shape = RoundedCornerShape(20.dp)
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                   ) {
+                    Box(
+                      modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(if (assignmentStatus == "delivered") Color(0xFF16A34A) else if (assignmentStatus == "picked_up") Color(0xFF2563EB) else Color(0xFF16A34A))
+                    )
                     Text(
-                      text = assignmentStatus.replace('_', ' ').replaceFirstChar { it.uppercase() },
-                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                      style = MaterialTheme.typography.labelMedium,
+                      text = if (assignmentStatus == "delivered") "Delivered" else if (assignmentStatus == "picked_up") "In Transit" else "Active",
+                      fontSize = 11.5.sp,
                       fontWeight = FontWeight.Bold,
-                      color = if (assignmentStatus == "picked_up") Color(0xFF1D4ED8) else if (assignmentStatus == "delivered") Color(0xFF166534) else Color(0xFFC2410C)
+                      color = if (assignmentStatus == "delivered") Color(0xFF16A34A) else if (assignmentStatus == "picked_up") Color(0xFF2563EB) else Color(0xFF16A34A)
                     )
                   }
                 }
 
-                HorizontalDivider(color = JTBorder)
-
-                // Customer Details
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                  Text("CUSTOMER", style = MaterialTheme.typography.labelSmall, color = JTTextSecondary, fontWeight = FontWeight.Bold)
-                  Text(delivery.optString("customer_name").ifBlank { "Customer" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Filled.Phone, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF2563EB))
-                    Text(delivery.optString("customer_phone"), style = MaterialTheme.typography.bodyMedium, color = Color(0xFF2563EB))
+                // Order Number Pill with Box icon
+                Surface(
+                  color = Color(0xFFEFF6FF),
+                  shape = RoundedCornerShape(20.dp),
+                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE))
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                  ) {
+                    Icon(
+                      Icons.Filled.Inventory2,
+                      contentDescription = null,
+                      tint = Color(0xFF1D4ED8),
+                      modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                      "Order #$orderNumber",
+                      fontSize = 11.5.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = Color(0xFF1D4ED8)
+                    )
                   }
                 }
+              }
 
-                // Delivery Address
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+              // Row 2: Customer Details & Mini Map Thumbnail
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+              ) {
+                // Left Column: Customer Name, Phone, Address
+                Column(
+                  modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 10.dp),
+                  verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                  // Customer name
                   Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFFEA580C))
-                    Text("DELIVERY ADDRESS", style = MaterialTheme.typography.labelSmall, color = JTTextSecondary, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Filled.Person, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(16.dp))
+                    Column {
+                      Text("Customer", fontSize = 10.sp, color = Color(0xFF64748B))
+                      Text(customerName, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                    }
                   }
-                  Text(driverAddressText(delivery), style = MaterialTheme.typography.bodyMedium)
-                }
 
-                // Order Items
-                val itemRows = delivery.optJSONArray("items")
-                if (itemRows != null && itemRows.length() > 0) {
-                  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("ITEMS", style = MaterialTheme.typography.labelSmall, color = JTTextSecondary, fontWeight = FontWeight.Bold)
-                    for (index in 0 until itemRows.length()) {
-                      val item = itemRows.optJSONObject(index) ?: continue
-                      Row(verticalAlignment = Alignment.Top) {
-                        Text("•", modifier = Modifier.padding(end = 6.dp), color = Color(0xFFEA580C))
-                        Text("${item.optString("name")}  ×  ${item.optInt("quantity", 1)}", style = MaterialTheme.typography.bodyMedium)
+                  // Phone
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.clickable {
+                      if (customerPhone.isNotBlank()) {
+                        val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$customerPhone"))
+                        context.startActivity(dial)
                       }
+                    }
+                  ) {
+                    Icon(Icons.Filled.Phone, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(15.dp))
+                    Text(customerPhone, fontSize = 12.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Medium)
+                  }
+
+                  // Address
+                  Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(15.dp).padding(top = 2.dp))
+                    Text(
+                      addressText,
+                      fontSize = 11.5.sp,
+                      color = Color(0xFF334155),
+                      maxLines = 2,
+                      overflow = TextOverflow.Ellipsis
+                    )
+                  }
+                }
+
+                // Right Column: Mini Map Thumbnail with Red Pin & "View Location" Overlay
+                Box(
+                  modifier = Modifier
+                    .size(width = 110.dp, height = 80.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFE2E8F0))
+                    .clickable {
+                      if (isApprovedDriver) {
+                        onViewCustomerLocation(delivery)
+                      }
+                    }
+                ) {
+                  // Illustrated street grid canvas
+                  Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawRect(Color(0xFFE8EEF5))
+                    // Roads
+                    drawLine(Color.White, Offset(0f, size.height * 0.4f), Offset(size.width, size.height * 0.35f), strokeWidth = 14f)
+                    drawLine(Color.White, Offset(size.width * 0.45f, 0f), Offset(size.width * 0.55f, size.height), strokeWidth = 12f)
+                    drawLine(Color(0xFFBFDBFE), Offset(0f, size.height * 0.4f), Offset(size.width, size.height * 0.35f), strokeWidth = 3f)
+                    // Green park patch
+                    drawRoundRect(Color(0xFFDCFCE7), Offset(size.width * 0.05f, size.height * 0.05f), androidx.compose.ui.geometry.Size(size.width * 0.35f, size.height * 0.28f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f))
+                  }
+
+                  // Center Red Place Pin
+                  Icon(
+                    Icons.Filled.Place,
+                    contentDescription = null,
+                    tint = Color(0xFFDC2626),
+                    modifier = Modifier
+                      .align(Alignment.Center)
+                      .size(24.dp)
+                  )
+
+                  // Bottom dark pill: "🧭 View Location"
+                  Surface(
+                    color = Color(0xFF1E293B).copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                      .align(Alignment.BottomCenter)
+                      .padding(bottom = 6.dp)
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                      Icon(
+                        Icons.Filled.Navigation,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(9.dp)
+                      )
+                      Text(
+                        "View Location",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                      )
                     }
                   }
                 }
+              }
 
-                // Dedicated "View Customer Location" Button -> Opens DriverNavigationScreen
-                Button(
-                  onClick = { onViewCustomerLocation(delivery) },
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .height(42.dp),
-                  shape = RoundedCornerShape(10.dp),
-                  colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
-                ) {
-                  Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(18.dp))
-                  Spacer(Modifier.width(8.dp))
+              // Divider
+              HorizontalDivider(color = Color(0xFFF1F5F9))
+
+              // Row 3: Items summary
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Icon(
+                  Icons.Filled.Widgets,
+                  contentDescription = null,
+                  tint = Color(0xFFEA580C),
+                  modifier = Modifier.size(18.dp)
+                )
+                Column {
+                  Text("Items", fontSize = 10.sp, color = Color(0xFF64748B))
                   Text(
-                    text = if (hasValidCoords) "View Customer Location" else "View Customer Location (No GPS)",
-                    fontSize = 13.sp,
+                    itemsText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF0F172A),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                }
+              }
+
+              // Row 4: Action Buttons (View Customer Location & Picked Up / Delivered)
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                // Left: "View Customer Location" Button (Blue pill)
+                Button(
+                  onClick = {
+                    if (isApprovedDriver) {
+                      onViewCustomerLocation(delivery)
+                    }
+                  },
+                  modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp),
+                  shape = RoundedCornerShape(12.dp),
+                  colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFEFF6FF),
+                    contentColor = Color(0xFF2563EB)
+                  ),
+                  contentPadding = PaddingValues(horizontal = 6.dp)
+                ) {
+                  Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(15.dp))
+                  Spacer(Modifier.width(6.dp))
+                  Text(
+                    "View Customer Location",
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
                   )
                 }
 
-                // Status Update Buttons
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                  if (assignmentStatus == "assigned") {
-                    OutlinedButton(
-                      enabled = !busy,
-                      onClick = {
-                        scope.launch {
-                          busy = true
-                          val r = SupabaseClient.rpc(
-                            "driver_update_delivery_status",
-                            JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "picked_up").toString()
-                          )
-                          if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
-                          busy = false
-                        }
-                      },
-                      modifier = Modifier.weight(1f),
-                      shape = RoundedCornerShape(8.dp)
-                    ) {
-                      Text(if (busy) "Updating…" else "Picked up", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                // Right: Green Status Button ("Picked Up" / "Delivered" / "Completed")
+                if (assignmentStatus == "assigned") {
+                  Button(
+                    enabled = !busy,
+                    onClick = {
+                      scope.launch {
+                        busy = true
+                        val r = SupabaseClient.rpc(
+                          "driver_update_delivery_status",
+                          JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "picked_up").toString()
+                        )
+                        if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
+                        busy = false
+                      }
+                    },
+                    modifier = Modifier
+                      .weight(1f)
+                      .height(42.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                      containerColor = Color(0xFF16A34A),
+                      contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                  ) {
+                    Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Picked Up", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                   }
-                  if (assignmentStatus != "delivered") {
-                    Button(
-                      enabled = !busy,
-                      onClick = {
-                        scope.launch {
-                          busy = true
-                          val r = SupabaseClient.rpc(
-                            "driver_update_delivery_status",
-                            JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "delivered").toString()
-                          )
-                          if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
-                          busy = false
-                        }
-                      },
-                      modifier = Modifier.weight(1f),
-                      shape = RoundedCornerShape(8.dp),
-                      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                } else if (assignmentStatus == "picked_up") {
+                  Button(
+                    enabled = !busy,
+                    onClick = {
+                      scope.launch {
+                        busy = true
+                        val r = SupabaseClient.rpc(
+                          "driver_update_delivery_status",
+                          JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "delivered").toString()
+                        )
+                        if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
+                        busy = false
+                      }
+                    },
+                    modifier = Modifier
+                      .weight(1f)
+                      .height(42.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                      containerColor = Color(0xFF16A34A),
+                      contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                  ) {
+                    Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Delivered", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                  }
+                } else {
+                  Surface(
+                    color = Color(0xFFDCFCE7),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                      .weight(1f)
+                      .height(42.dp)
+                  ) {
+                    Row(
+                      modifier = Modifier.fillMaxSize(),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.Center
                     ) {
-                      Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                      Spacer(Modifier.width(4.dp))
-                      Text(if (busy) "Updating…" else "Delivered", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                      Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(15.dp))
+                      Spacer(Modifier.width(6.dp))
+                      Text("Delivered", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                     }
                   }
                 }
@@ -835,11 +1392,10 @@ fun DriverCenterScreen(
           null -> "Document"
         }
         Text("Select $title", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Choose camera to take a fresh photo or select from gallery.", fontSize = 12.sp, color = JTTextSecondary)
+        Text("Choose camera to take a photo or select from device gallery.", fontSize = 12.sp, color = JTTextSecondary)
 
         Spacer(Modifier.height(4.dp))
 
-        // Option 1: Take Photo with Camera
         OutlinedButton(
           onClick = {
             showPickerSheet = false
@@ -855,7 +1411,6 @@ fun DriverCenterScreen(
           Text("Take Photo with Camera", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
         }
 
-        // Option 2: Choose from Gallery
         Button(
           onClick = {
             showPickerSheet = false
@@ -909,7 +1464,7 @@ private fun DocumentUploadCard(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Column(modifier = Modifier.weight(1f)) {
-          Text(title, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = JTTextPrimary)
+          Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
           Text(subtitle, fontSize = 11.sp, color = JTTextSecondary)
         }
         if (docState.storagePath != null) {
@@ -929,12 +1484,11 @@ private fun DocumentUploadCard(
         }
       }
 
-      // Preview thumbnail if available
       if (docState.localBitmap != null || docState.localUri != null) {
         Box(
           modifier = Modifier
             .fillMaxWidth()
-            .height(130.dp)
+            .height(120.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFFE2E8F0))
         ) {
@@ -975,7 +1529,6 @@ private fun DocumentUploadCard(
         Text(err, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
       }
 
-      // Action buttons: "Take / Choose Photo", "Replace", "Clear"
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)

@@ -19,6 +19,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -75,7 +78,8 @@ enum class AppScreen {
 fun MainApp(notificationTap: NotificationNavigation? = null) {
   val isCatalogLoading by MarketplaceRepository.isLoading.collectAsState()
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
-  val showGlobalLoader = isCatalogLoading || isPlacingOrder
+  val products by MarketplaceRepository.products.collectAsState()
+  val showGlobalLoader = isPlacingOrder || (isCatalogLoading && products.isEmpty())
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -626,37 +630,44 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 
 @Composable
 private fun GlobalLoadingOverlay() {
+  val infiniteTransition = rememberInfiniteTransition(label = "mascot_pulse")
+  val scale by infiniteTransition.animateFloat(
+    initialValue = 0.95f,
+    targetValue = 1.05f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(durationMillis = 900, easing = EaseInOutSine),
+      repeatMode = RepeatMode.Reverse
+    ),
+    label = "mascot_scale"
+  )
+
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(Color.White.copy(alpha = 0.94f))
+      .background(Color.White.copy(alpha = 0.95f))
       .clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,
         onClick = {}
       ),
-    contentAlignment = androidx.compose.ui.Alignment.Center
+    contentAlignment = Alignment.Center
   ) {
     Column(
-      horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+      horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
       Image(
-        painter = painterResource(id = R.drawable.logo_jtbazar_header),
+        painter = painterResource(id = R.drawable.logo_jtbazar_mascot),
         contentDescription = "JTBazar",
         contentScale = ContentScale.Fit,
-        modifier = Modifier.widthIn(max = 180.dp).heightIn(max = 64.dp)
+        modifier = Modifier
+          .size(120.dp)
+          .graphicsLayer(scaleX = scale, scaleY = scale)
       )
       CircularProgressIndicator(
-        modifier = Modifier.size(34.dp),
+        modifier = Modifier.size(30.dp),
         color = JTOrange,
         strokeWidth = 3.dp
-      )
-      Text(
-        text = "Please wait…",
-        style = MaterialTheme.typography.labelLarge,
-        color = JTTextSecondary,
-        fontWeight = FontWeight.Medium
       )
     }
   }
