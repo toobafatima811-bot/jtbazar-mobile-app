@@ -199,7 +199,6 @@ fun DriverCenterScreen(
         }
       }
     )
-    GlobalLoadingState.active.value = false
   }
 
   // Camera photo capture launcher
@@ -279,7 +278,6 @@ fun DriverCenterScreen(
 
   suspend fun load() {
     loading = true
-    GlobalLoadingState.active.value = true
     error = null
     try {
       val access = SupabaseClient.rpc("get_my_driver_access").getOrThrow()
@@ -1376,14 +1374,12 @@ fun DriverCenterScreen(
                     onClick = {
                       scope.launch {
                         busy = true
-                        GlobalLoadingState.active.value = true
                         val r = SupabaseClient.rpc(
                           "driver_update_delivery_status",
                           JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "delivered").toString()
                         )
                         if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
                         busy = false
-                        GlobalLoadingState.active.value = false
                       }
                     },
                     modifier = Modifier
