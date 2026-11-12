@@ -1349,7 +1349,7 @@ private fun ProductCampaignSection(
       }
     }
     Spacer(Modifier.height(9.dp))
-    activeCampaign.products.chunked(2).forEach { rowProducts ->
+    activeCampaign.products.chunked(productGridColumns).forEach { rowProducts ->
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         rowProducts.forEach { product ->
           Box(Modifier.weight(1f)) {
