@@ -558,6 +558,26 @@ object SupabaseAuthService {
     }
   }
 
+  /** Update the password for the currently authenticated Supabase user. */
+  suspend fun updatePassword(newPassword: String): Result<Unit> = withContext(Dispatchers.IO) {
+    try {
+      require(newPassword.length >= 6) { "Password must be at least 6 characters." }
+      val body = JSONObject().put("password", newPassword).toString().toRequestBody(JSON_MEDIA_TYPE)
+      val request = Request.Builder()
+        .url("${SupabaseConfig.authUrl}/user")
+        .patch(body)
+        .build()
+      SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
+        val responseBody = response.body?.string().orEmpty()
+        if (response.isSuccessful) Result.success(Unit)
+        else Result.failure(IOException(parseErrorMessage(responseBody, "Password update failed")))
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "updatePassword error", e)
+      Result.failure(e)
+    }
+  }
+
   /**
    * Request password reset email
    */
