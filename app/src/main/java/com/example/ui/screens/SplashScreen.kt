@@ -106,7 +106,7 @@ fun SplashScreen(
           // Soft warm glow behind mascot
           Box(
             modifier = Modifier
-              .size(240.dp)
+              .fillMaxSize(0.86f)
               .clip(CircleShape)
               .background(JTOrangeContainer.copy(alpha = 0.6f))
           )
