@@ -62,6 +62,77 @@ object SupabaseClient {
 
   private val _session = MutableStateFlow<SupabaseSession?>(null)
   val session: StateFlow<SupabaseSession?> = _session.asStateFlow()
+  private val refreshLock = Any()
+
+  /**
+   * Refresh a Supabase access token after a protected request returns 401.
+   * Uses an independent HTTP client so the refresh request cannot recursively
+   * invoke this authenticator. Supabase rotates refresh tokens, so persist both.
+   */
+  private fun refreshSessionForRequest(failedRequest: Request): Request? {
+    val previousCount = generateSequence(failedRequest.tag(Response::class.java)) { it.priorResponse }.count()
+    if (previousCount >= 2) return null
+
+    synchronized(refreshLock) {
+      val current = _session.value ?: return null
+      val failedBearer = failedRequest.header("Authorization")?.removePrefix("Bearer ")
+      // Another concurrent request may already have refreshed the shared session.
+      if (!current.accessToken.isNullOrBlank() && current.accessToken != failedBearer) {
+        return failedRequest.newBuilder()
+          .header("Authorization", "Bearer ${current.accessToken}")
+          .build()
+      }
+
+      val refreshToken = current.refreshToken?.takeIf { it.isNotBlank() } ?: return null
+      return try {
+        val body = JSONObject().put("refresh_token", refreshToken)
+          .toString().toRequestBody(JSON_MEDIA_TYPE)
+        val refreshRequest = Request.Builder()
+          .url("${SupabaseConfig.authUrl}/token?grant_type=refresh_token")
+          .post(body)
+          .header("apikey", SupabaseConfig.publishableKey)
+          .header("Content-Type", "application/json")
+          .build()
+        val refreshClient = OkHttpClient.Builder()
+          .connectTimeout(20, TimeUnit.SECONDS)
+          .readTimeout(30, TimeUnit.SECONDS)
+          .build()
+
+        refreshClient.newCall(refreshRequest).execute().use { refreshResponse ->
+          val responseBody = refreshResponse.body?.string().orEmpty()
+          if (!refreshResponse.isSuccessful) {
+            Log.w(TAG, "Supabase session refresh failed: HTTP ${refreshResponse.code}")
+            return null
+          }
+          val json = JSONObject(responseBody)
+          val accessToken = json.optString("access_token", "")
+          val rotatedRefreshToken = json.optString("refresh_token", refreshToken)
+          if (accessToken.isBlank()) return null
+
+          val updatedSession = current.copy(
+            accessToken = accessToken,
+            refreshToken = rotatedRefreshToken,
+            expiresIn = json.optLong("expires_in", current.expiresIn)
+          )
+          setSession(updatedSession)
+
+          appContext?.getSharedPreferences("jtbazar_auth_prefs", Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString("access_token", accessToken)
+            ?.putString("refresh_token", rotatedRefreshToken)
+            ?.apply()
+
+          Log.d(TAG, "Supabase session refreshed successfully")
+          failedRequest.newBuilder()
+            .header("Authorization", "Bearer $accessToken")
+            .build()
+        }
+      } catch (error: Exception) {
+        Log.e(TAG, "Supabase session refresh request failed", error)
+        null
+      }
+    }
+  }
 
   private val _currentUser = MutableStateFlow<SupabaseUser?>(null)
   val currentUser: StateFlow<SupabaseUser?> = _currentUser.asStateFlow()
@@ -118,6 +189,15 @@ object SupabaseClient {
         }
 
         chain.proceed(requestBuilder.build())
+      }
+      .authenticator { _, response ->
+        val path = response.request.url.encodedPath
+        // Never attempt to refresh an Auth endpoint's own failed request.
+        if (path.contains("/auth/v1/token") || path.contains("/auth/v1/refresh")) {
+          null
+        } else {
+          refreshSessionForRequest(response.request)
+        }
       }
       .addInterceptor(logging)
       .build()
