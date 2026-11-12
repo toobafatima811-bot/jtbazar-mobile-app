@@ -261,7 +261,7 @@ object SupabaseClient {
       val url = "${SupabaseConfig.storageUrl}/object/$bucket/$encodedPath"
       val request = Request.Builder().url(url)
         .post(bytes.toRequestBody(mimeType.toMediaType()))
-        .header("x-upsert", "false")
+        .header("x-upsert", "true")
         .build()
       okHttpClient.newCall(request).execute().use { response ->
         val body = response.body?.string() ?: ""

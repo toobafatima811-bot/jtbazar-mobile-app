@@ -41,7 +41,9 @@ class ExampleUnitTest {
     originalPrice = 2990,
     discountPercent = 18,
     rating = 4.8,
-    reviewCount = 42
+    reviewCount = 42,
+    availabilityKnown = true,
+    isAvailable = true
   )
 
   @Before

@@ -30,6 +30,7 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.screens.*
 import com.example.ui.theme.*
+import org.json.JSONObject
 
 data class NotificationNavigation(
   val id: String? = null,
@@ -66,6 +67,7 @@ enum class AppScreen {
   BUDGET_SHOPPING,
   VENDOR_CENTER,
   DRIVER_CENTER,
+  DRIVER_NAVIGATION,
   PUBLIC_SHOPS
 }
 
@@ -88,6 +90,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
   var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
+  var selectedDeliveryForNavigation by remember { mutableStateOf<JSONObject?>(null) }
 
   LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link) {
     val tap = notificationTap ?: return@LaunchedEffect
@@ -130,6 +133,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
       AppScreen.ACCOUNT_SETTINGS, AppScreen.SECURITY_PASSWORD -> currentScreen = AppScreen.ACCOUNT
       AppScreen.BUDGET_SHOPPING -> currentScreen = previousScreen
       AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER -> currentScreen = AppScreen.ACCOUNT
+      AppScreen.DRIVER_NAVIGATION -> currentScreen = AppScreen.DRIVER_CENTER
       AppScreen.PUBLIC_SHOPS -> currentScreen = AppScreen.HOME
       else -> {
         if (currentScreen != AppScreen.HOME) {
@@ -560,7 +564,44 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         }
 
         AppScreen.DRIVER_CENTER -> {
-          DriverCenterScreen(onBack = { navigateBack() })
+          DriverCenterScreen(
+            onBack = { navigateBack() },
+            onViewCustomerLocation = { delivery ->
+              selectedDeliveryForNavigation = delivery
+              navigateTo(AppScreen.DRIVER_NAVIGATION)
+            }
+          )
+        }
+
+        AppScreen.DRIVER_NAVIGATION -> {
+          val delivery = selectedDeliveryForNavigation
+          if (delivery != null) {
+            val lat = delivery.optDouble("delivery_lat", Double.NaN)
+            val lng = delivery.optDouble("delivery_lng", Double.NaN)
+            val orderNumber = delivery.optString("order_number")
+            val customerName = delivery.optString("customer_name")
+            val customerPhone = delivery.optString("customer_phone")
+            val address = driverAddressText(delivery)
+            val assignmentStatus = delivery.optString("assignment_status", "assigned")
+            val assignmentId = delivery.optString("assignment_id")
+
+            DriverNavigationScreen(
+              orderNumber = orderNumber,
+              customerName = customerName,
+              customerPhone = customerPhone,
+              deliveryAddress = address,
+              customerLat = lat,
+              customerLng = lng,
+              assignmentStatus = assignmentStatus,
+              assignmentId = assignmentId,
+              onStatusUpdated = {
+                // Return to Driver Center on delivery completion if desired or stay
+              },
+              onBack = { navigateBack() }
+            )
+          } else {
+            navigateBack()
+          }
         }
 
         AppScreen.BUDGET_SHOPPING -> {
