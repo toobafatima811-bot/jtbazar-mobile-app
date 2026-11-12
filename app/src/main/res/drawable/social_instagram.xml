@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="52dp" />
+            <gradient android:type="linear" android:angle="315" android:startColor="#405DE6" android:centerColor="#C13584" android:endColor="#FFDC80" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/ic_instagram_camera" />
+</layer-list>
