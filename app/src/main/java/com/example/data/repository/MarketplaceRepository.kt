@@ -740,15 +740,11 @@ object MarketplaceRepository {
     _errorMessage.value = "Return requests must be linked to the exact delivered order item and include product evidence. This app does not yet have the required evidence upload screen."
   }
 
-  fun submitComplaint(orderId: String?, subject: String, message: String) {
+  suspend fun submitComplaint(orderId: String?, subject: String, message: String): Result<Unit> {
     val user = SupabaseClient.currentUser.value
-    if (user == null) { _errorMessage.value = "Please sign in to contact support."; return }
+      ?: return Result.failure(IllegalStateException("Please sign in to contact support."))
     val complaint = SupabaseComplaintDto(id="", orderId=orderId, userId=user.id, subject=subject, message=message, createdAt="")
-    scope.launch {
-      SupabaseApiService.submitComplaint(complaint)
-        .onSuccess { _errorMessage.value = "Your support request has been submitted." }
-        .onFailure { _errorMessage.value = it.message }
-    }
+    return SupabaseApiService.submitComplaint(complaint).map { Unit }
   }
 
   fun markNotificationRead(id: String) {
