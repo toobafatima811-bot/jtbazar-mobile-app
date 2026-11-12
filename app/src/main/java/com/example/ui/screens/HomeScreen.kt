@@ -490,8 +490,6 @@ fun HomeScreen(
         }
       }
 
-      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "category_feature", onExploreCategoriesClick) }
-
       // 6. 2x2 Grid of Popular Products
       item {
         Spacer(modifier = Modifier.height(10.dp))
@@ -600,8 +598,6 @@ fun HomeScreen(
         }
       }
 
-      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "product_strip", onExploreCategoriesClick) }
-
 
       // New arrivals: same latest-published catalog ordering as the website.
       item {
@@ -650,8 +646,6 @@ fun HomeScreen(
           }
         }
       }
-
-      if (searchQuery.isBlank()) item { PromotionCampaignPlacement(visibleBannerCampaigns, "offer_section", onExploreCategoriesClick) }
 
       // 8. Trust Badges
       item {
