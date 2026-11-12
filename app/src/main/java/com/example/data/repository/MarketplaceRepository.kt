@@ -404,6 +404,8 @@ object MarketplaceRepository {
   private val _activeOrder = MutableStateFlow<OrderRecord?>(null)
   val activeOrder: StateFlow<OrderRecord?> = _activeOrder.asStateFlow()
 
+  fun selectOrder(order: OrderRecord) { _activeOrder.value = order }
+
   // ----------------------------------------------------
   // REVIEWS
   // ----------------------------------------------------
