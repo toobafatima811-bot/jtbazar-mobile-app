@@ -197,7 +197,7 @@ object SupabaseClient {
         if (path.contains("/auth/v1/token") || path.contains("/auth/v1/refresh")) {
           null
         } else {
-          refreshSessionForRequest(response.request)
+          refreshSessionForRequest(response)
         }
       }
       .addInterceptor(logging)
