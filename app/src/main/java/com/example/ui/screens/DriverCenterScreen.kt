@@ -210,7 +210,7 @@ fun DriverCenterScreen(onBack: () -> Unit) {
                     Text("ORDER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                     Text(delivery.optString("order_number"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                   }
-                  Surface(color = if (assignmentStatus == "picked_up") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(50)) {
+                  Surface(color = when (assignmentStatus) { "delivered" -> MaterialTheme.colorScheme.primaryContainer; "picked_up" -> MaterialTheme.colorScheme.tertiaryContainer; else -> MaterialTheme.colorScheme.secondaryContainer }, shape = RoundedCornerShape(50)) {
                     Text(assignmentStatus.replace('_', ' ').replaceFirstChar { it.uppercase() }, Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                   }
                 }
@@ -223,12 +223,14 @@ fun DriverCenterScreen(onBack: () -> Unit) {
                     Text(delivery.optString("customer_phone"), style = MaterialTheme.typography.bodyMedium)
                   }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text("DELIVERY ADDRESS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                if (assignmentStatus != "delivered") {
+                  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                      Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                      Text("DELIVERY ADDRESS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    }
+                    Text(driverAddressText(delivery), style = MaterialTheme.typography.bodyMedium)
                   }
-                  Text(driverAddressText(delivery), style = MaterialTheme.typography.bodyMedium)
                 }
                 val itemRows = delivery.optJSONArray("items")
                 if (itemRows != null && itemRows.length() > 0) {
