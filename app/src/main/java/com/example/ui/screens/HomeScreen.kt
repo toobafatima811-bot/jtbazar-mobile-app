@@ -52,6 +52,7 @@ import com.example.data.repository.ActiveProductCampaign
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.MarketplaceHero
+import com.example.ui.components.rememberAdaptiveColumnCount
 import com.example.ui.components.TrustBadgesRow
 import com.example.ui.theme.*
 
@@ -65,6 +66,7 @@ fun HomeScreen(
   onExploreShopsClick: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
+  val productGridColumns = rememberAdaptiveColumnCount(minCellWidth = 138.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
   val products by MarketplaceRepository.products.collectAsState()
   val trustedShops by MarketplaceRepository.shops.collectAsState()
   val categories by MarketplaceRepository.categories.collectAsState()
@@ -571,7 +573,7 @@ fun HomeScreen(
               .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
           ) {
-            val chunked = displayProducts.chunked(2)
+            val chunked = displayProducts.chunked(productGridColumns)
             chunked.forEach { rowItems ->
               Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -629,7 +631,7 @@ fun HomeScreen(
               modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
               verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-              newArrivals.chunked(2).forEach { rowItems ->
+              newArrivals.chunked(productGridColumns).forEach { rowItems ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                   rowItems.forEach { product ->
                     Box(Modifier.weight(1f)) {
