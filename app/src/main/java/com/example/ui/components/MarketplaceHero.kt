@@ -269,7 +269,7 @@ fun MarketplaceHero(
         Box(
           modifier = Modifier
             .fillMaxWidth()
-            .height(215.dp)
+            .aspectRatio(1.62f)
             .clip(RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp, bottomStart = 16.dp, bottomEnd = 16.dp))
             .background(Color(0xFFFFEDE0))
             .border(
