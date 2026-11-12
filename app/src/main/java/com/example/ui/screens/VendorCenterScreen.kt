@@ -412,7 +412,7 @@ private fun ShopLocationPickerDialog(
         Text("Choose shop location", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text("Drag the map and tap the exact shop location. The pin will be saved automatically.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
         AndroidView(
-          modifier = Modifier.fillMaxWidth().height(360.dp),
+          modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 420.dp).aspectRatio(1.05f),
           factory = { ctx ->
             Configuration.getInstance().userAgentValue = ctx.packageName
             MapView(ctx).apply {
