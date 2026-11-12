@@ -136,7 +136,8 @@ fun HomeScreen(
         onAvatarClick = onAccountClick,
         onLocationClick = { showAddressDialog = true },
         cartCount = cartCount,
-        currentLocation = currentLocation
+        currentLocation = currentLocation,
+        showLocationText = false
       )
     },
     modifier = modifier.fillMaxSize()
@@ -992,7 +993,7 @@ fun ProductCard(
     border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
     modifier = modifier
       .fillMaxWidth()
-      .height(306.dp)
+      .heightIn(min = 324.dp)
       .clickable(onClick = onProductClick)
       .testTag("product_card_${product.id}")
   ) {
@@ -1128,7 +1129,7 @@ fun ProductCard(
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp),
+            .heightIn(min = 48.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1139,17 +1140,21 @@ fun ProductCard(
             Text(
               text = "Rs. ${String.format("%,d", product.price)}",
               fontWeight = FontWeight.ExtraBold,
-              fontSize = 13.5.sp,
+              fontSize = 12.5.sp,
+              lineHeight = 15.sp,
               color = JTPurplePrimary,
-              maxLines = 1
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
             if (product.originalPrice > product.price) {
               Text(
                 text = "Rs. ${String.format("%,d", product.originalPrice)}",
-                fontSize = 10.5.sp,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
                 color = JTTextTertiary,
                 textDecoration = TextDecoration.LineThrough,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
             } else {
               Spacer(Modifier.height(14.dp))
