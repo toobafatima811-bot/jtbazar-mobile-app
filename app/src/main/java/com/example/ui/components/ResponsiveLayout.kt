@@ -19,6 +19,6 @@ fun rememberAdaptiveColumnCount(
 ): Int {
   val configuration = LocalConfiguration.current
   val availableWidth = (configuration.screenWidthDp.dp - horizontalPadding).coerceAtLeast(minCellWidth)
-  val count = floor(((availableWidth + spacing) / (minCellWidth + spacing)).value).toInt()
+  val count = floor(((availableWidth + spacing) / (minCellWidth + spacing)).toDouble()).toInt()
   return count.coerceIn(1, maxColumns.coerceAtLeast(1))
 }
