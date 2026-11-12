@@ -63,6 +63,7 @@ fun DriverCenterScreen(onBack: () -> Unit) {
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf<String?>(null) }
+  var selectedDeliveryTab by remember { mutableStateOf("active") }
 
   suspend fun load() {
     loading = true
@@ -169,27 +170,36 @@ fun DriverCenterScreen(onBack: () -> Unit) {
         }
 
         if (status == "approved") {
+          val activeDeliveries = deliveries.filter { it.optString("assignment_status") != "delivered" }
+          val completedDeliveries = deliveries.filter { it.optString("assignment_status") == "delivered" }
+          val visibleDeliveries = if (selectedDeliveryTab == "delivered") completedDeliveries else activeDeliveries
           item {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
               Column(Modifier.weight(1f)) {
                 Text("My deliveries", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("${deliveries.size} active assignment${if (deliveries.size == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(activeDeliveries.size.toString() + " active • " + completedDeliveries.size + " delivered", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
               IconButton(onClick = { scope.launch { load() } }, enabled = !loading) {
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh deliveries")
               }
             }
           }
-          if (deliveries.isEmpty()) item {
+          item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+              FilterChip(selected = selectedDeliveryTab == "active", onClick = { selectedDeliveryTab = "active" }, label = { Text("Active (" + activeDeliveries.size + ")") }, leadingIcon = { Icon(Icons.Filled.LocalShipping, contentDescription = null) }, modifier = Modifier.weight(1f))
+              FilterChip(selected = selectedDeliveryTab == "delivered", onClick = { selectedDeliveryTab = "delivered" }, label = { Text("Delivered (" + completedDeliveries.size + ")") }, leadingIcon = { Icon(Icons.Filled.Navigation, contentDescription = null) }, modifier = Modifier.weight(1f))
+            }
+          }
+          if (visibleDeliveries.isEmpty()) item {
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
               Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.LocalShipping, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
-                Text("No assigned deliveries", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("New orders assigned to you will appear here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(if (selectedDeliveryTab == "delivered") Icons.Filled.Navigation else Icons.Filled.LocalShipping, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
+                Text(if (selectedDeliveryTab == "delivered") "No delivered orders yet" else "No active deliveries", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(if (selectedDeliveryTab == "delivered") "Completed deliveries will appear here." else "New orders assigned to you will appear here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
             }
           }
-          items(deliveries, key = { it.optString("assignment_id") }) { delivery ->
+          items(visibleDeliveries, key = { it.optString("assignment_id") }) { delivery ->
             val lat = delivery.optDouble("delivery_lat", Double.NaN)
             val lng = delivery.optDouble("delivery_lng", Double.NaN)
             val assignmentStatus = delivery.optString("assignment_status", "assigned")
@@ -233,7 +243,7 @@ fun DriverCenterScreen(onBack: () -> Unit) {
                     }
                   }
                 }
-                if (lat.isFinite() && lng.isFinite()) {
+                if (assignmentStatus != "delivered" && lat.isFinite() && lng.isFinite()) {
                   OutlinedButton(onClick = {
                     val uri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving&dir_action=navigate")
                     context.startActivity(Intent(Intent.ACTION_VIEW, uri))
@@ -242,10 +252,10 @@ fun DriverCenterScreen(onBack: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Text("Navigate to customer")
                   }
-                } else {
+                } else if (assignmentStatus != "delivered") {
                   Text("Customer map pin is unavailable. Contact support before dispatch.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                if (assignmentStatus != "delivered") Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                   if (assignmentStatus == "assigned") {
                     Button(enabled = !busy, onClick = {
                       scope.launch {
