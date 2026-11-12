@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun CustomerSupportScreen(
@@ -30,6 +31,7 @@ fun CustomerSupportScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val coroutineScope = rememberCoroutineScope()
   var subject by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
   var category by remember { mutableStateOf("Order Delivery") }
@@ -90,7 +92,7 @@ fun CustomerSupportScreen(
           }
           Spacer(modifier = Modifier.height(8.dp))
           Text(
-            text = "Our Lahore & Karachi resolution teams operate Mon–Sat 9AM–9PM. Reach out directly via official channels:",
+            text = "JTBazar customer support is available through our official support email. Please include your order number so we can help you faster:",
             fontSize = 12.sp,
             color = JTTextSecondary,
             lineHeight = 16.sp
@@ -179,11 +181,17 @@ fun CustomerSupportScreen(
           }
 
           isSubmitting = true
-          MarketplaceRepository.submitComplaint(null, "[$category] ${subject.trim()}", message.trim())
-          isSubmitting = false
-          Toast.makeText(context, "Ticket submitted successfully. Ticket ID assigned.", Toast.LENGTH_LONG).show()
-          subject = ""
-          message = ""
+          coroutineScope.launch {
+            val result = MarketplaceRepository.submitComplaint(null, "[$category] ${subject.trim()}", message.trim())
+            isSubmitting = false
+            if (result.isSuccess) {
+              Toast.makeText(context, "Support request submitted successfully.", Toast.LENGTH_LONG).show()
+              subject = ""
+              message = ""
+            } else {
+              Toast.makeText(context, "Could not submit request: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+            }
+          }
         },
         enabled = !isSubmitting && subject.isNotBlank() && message.isNotBlank(),
         shape = RoundedCornerShape(12.dp),
