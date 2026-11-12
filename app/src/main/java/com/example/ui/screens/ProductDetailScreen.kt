@@ -335,7 +335,7 @@ fun ProductDetailScreen(
           modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .height(290.dp)
+            .aspectRatio(1f)
             .clip(RoundedCornerShape(20.dp))
             .background(JTSurfaceVariant)
         ) {
