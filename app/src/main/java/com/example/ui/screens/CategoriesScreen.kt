@@ -46,6 +46,7 @@ fun CategoriesScreen(
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
   val categories by MarketplaceRepository.categories.collectAsState()
+  val categoryColumns = rememberAdaptiveColumnCount(minCellWidth = 148.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
 
   var showAddressDialog by remember { mutableStateOf(false) }
   var selectedCategoryId by remember { mutableStateOf<String?>(null) }
@@ -237,7 +238,6 @@ fun CategoriesScreen(
         }
       }
 
-      val categoryColumns = rememberAdaptiveColumnCount(minCellWidth = 148.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
       val chunkedCats = filteredCategories.chunked(categoryColumns)
       items(chunkedCats) { rowItems ->
         Spacer(modifier = Modifier.height(12.dp))
