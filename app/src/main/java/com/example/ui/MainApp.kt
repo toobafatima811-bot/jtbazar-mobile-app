@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -100,6 +101,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
     }
   }
 
+  val accountScrollState = rememberScrollState()
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var isPullRefreshing by remember { mutableStateOf(false) }
   val pullRefreshScope = rememberCoroutineScope()
@@ -444,7 +446,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onNavigateToBudget = { navigateTo(AppScreen.BUDGET_SHOPPING) },
             onNavigateToVendorCenter = { navigateTo(AppScreen.VENDOR_CENTER) },
             onNavigateToDriver = { navigateTo(AppScreen.DRIVER_CENTER) },
-            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) }
+            onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
+            scrollState = accountScrollState
           )
         }
 
