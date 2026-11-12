@@ -16,6 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -636,21 +640,17 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 
 @Composable
 private fun GlobalLoadingOverlay() {
-  val infiniteTransition = rememberInfiniteTransition(label = "mascot_pulse")
-  val scale by infiniteTransition.animateFloat(
-    initialValue = 0.95f,
-    targetValue = 1.05f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(durationMillis = 900, easing = EaseInOutSine),
-      repeatMode = RepeatMode.Reverse
-    ),
-    label = "mascot_scale"
-  )
+  val context = LocalContext.current
+  val gifImageLoader = remember(context) {
+    ImageLoader.Builder(context)
+      .components { add(GifDecoder.Factory()) }
+      .build()
+  }
 
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(Color.White.copy(alpha = 0.95f))
+      .background(Color.White.copy(alpha = 0.96f))
       .clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,
@@ -658,23 +658,12 @@ private fun GlobalLoadingOverlay() {
       ),
     contentAlignment = Alignment.Center
   ) {
-    Column(
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-      Image(
-        painter = painterResource(id = R.drawable.logo_jtbazar_mascot),
-        contentDescription = "JTBazar",
-        contentScale = ContentScale.Fit,
-        modifier = Modifier
-          .size(120.dp)
-          .graphicsLayer(scaleX = scale, scaleY = scale)
-      )
-      CircularProgressIndicator(
-        modifier = Modifier.size(30.dp),
-        color = JTOrange,
-        strokeWidth = 3.dp
-      )
-    }
+    AsyncImage(
+      model = R.drawable.jtbazar_mascot_loader,
+      imageLoader = gifImageLoader,
+      contentDescription = "JTBazar loading",
+      contentScale = ContentScale.Fit,
+      modifier = Modifier.size(190.dp)
+    )
   }
 }
