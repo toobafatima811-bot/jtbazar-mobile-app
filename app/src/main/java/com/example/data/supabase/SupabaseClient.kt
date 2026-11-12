@@ -15,6 +15,31 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+
+object GlobalLoadingState {
+  private val activeRequests = AtomicInteger(0)
+  private val suppressedRequests = AtomicInteger(0)
+  private val _active = MutableStateFlow(false)
+  val active: StateFlow<Boolean> = _active.asStateFlow()
+
+  fun shouldTrackRequest(): Boolean = suppressedRequests.get() == 0
+
+  fun requestStarted() {
+    activeRequests.incrementAndGet()
+    _active.value = true
+  }
+
+  fun requestFinished() {
+    val remaining = activeRequests.decrementAndGet().coerceAtLeast(0)
+    if (remaining == 0) _active.value = false
+  }
+
+  suspend fun <T> withoutLoading(block: suspend () -> T): T {
+    suppressedRequests.incrementAndGet()
+    return try { block() } finally { suppressedRequests.decrementAndGet() }
+  }
+}
 
 /**
  * Singleton Supabase HTTP Client.
@@ -57,6 +82,9 @@ object SupabaseClient {
       .readTimeout(30, TimeUnit.SECONDS)
       .writeTimeout(30, TimeUnit.SECONDS)
       .addInterceptor { chain ->
+        val trackLoading = GlobalLoadingState.shouldTrackRequest()
+        if (trackLoading) GlobalLoadingState.requestStarted()
+        try {
         val original = chain.request()
         val requestBuilder = original.newBuilder()
 
@@ -88,6 +116,9 @@ object SupabaseClient {
         }
 
         chain.proceed(requestBuilder.build())
+        } finally {
+          if (trackLoading) GlobalLoadingState.requestFinished()
+        }
       }
       .addInterceptor(logging)
       .build()
