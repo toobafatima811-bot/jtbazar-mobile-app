@@ -15,7 +15,7 @@ import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import java.util.Locale
-import com.example.ui.GlobalLoadingState
+import com.example.data.supabase.GlobalLoadingState
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -171,7 +171,6 @@ fun DriverCenterScreen(
       DriverDocType.VEHICLE_PLATE -> "vehicle_plate"
     }
 
-    GlobalLoadingState.active.value = true
     val uploadingItem = DocUploadItem(localUri = uri, localBitmap = bitmap, isUploading = true)
     when (docType) {
       DriverDocType.CNIC_FRONT -> cnicFrontDoc = uploadingItem
@@ -301,7 +300,6 @@ fun DriverCenterScreen(
       error = e.message ?: "Could not load driver information."
     } finally {
       loading = false
-      GlobalLoadingState.active.value = false
     }
   }
 
@@ -902,7 +900,6 @@ fun DriverCenterScreen(
                 onClick = {
                   scope.launch {
                     busy = true
-                    GlobalLoadingState.active.value = true
                     message = null
                     error = null
                     try {
@@ -935,7 +932,6 @@ fun DriverCenterScreen(
                       error = e.message
                     } finally {
                       busy = false
-                      GlobalLoadingState.active.value = false
                     }
                   }
                 },
@@ -1352,14 +1348,12 @@ fun DriverCenterScreen(
                     onClick = {
                       scope.launch {
                         busy = true
-                        GlobalLoadingState.active.value = true
                         val r = SupabaseClient.rpc(
                           "driver_update_delivery_status",
                           JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "picked_up").toString()
                         )
                         if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
                         busy = false
-                        GlobalLoadingState.active.value = false
                       }
                     },
                     modifier = Modifier
