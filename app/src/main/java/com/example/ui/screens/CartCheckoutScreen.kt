@@ -137,11 +137,11 @@ fun CartCheckoutScreen(
             timeZone = java.util.TimeZone.getTimeZone("UTC")
           }.format(java.util.Date())
           isPinConfirmed = true
-          Toast.makeText(context, "Location pin captured: ${String.format("%.4f", loc.latitude)}, ${String.format("%.4f", loc.longitude)}", Toast.LENGTH_SHORT).show()
+          Toast.makeText(context, "Delivery location pin confirmed.", Toast.LENGTH_SHORT).show()
         }
       } catch (_: SecurityException) {}
     } else {
-      Toast.makeText(context, "Location permission not granted. Location pin remains optional.", Toast.LENGTH_SHORT).show()
+      Toast.makeText(context, "Location permission is required to confirm your delivery pin.", Toast.LENGTH_SHORT).show()
     }
   }
 
@@ -337,7 +337,7 @@ fun CartCheckoutScreen(
                 Toast.makeText(context, unavailableCartItem.product.title + " stock or selected option could not be verified. Refresh the catalog or remove it from your cart.", Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
-              if (cartItems.any { it.product.foodSellingUnit != null } && (deliveryLat == null || deliveryLng == null)) {
+              if (deliveryLat == null || deliveryLng == null || !isPinConfirmed) {
                 Toast.makeText(context, "Add your current location pin to confirm the 5 km food delivery area.", Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
@@ -361,7 +361,7 @@ fun CartCheckoutScreen(
                 deliveryNote = deliveryInstructions.trim(),
                 deliveryLat = deliveryLat,
                 deliveryLng = deliveryLng,
-                deliveryLocationName = if (deliveryLat != null) "$areaLocality, $city" else null,
+                deliveryLocationName = if (deliveryLat != null) listOf(areaLocality, city).filter { it.isNotBlank() }.joinToString(", ") else null,
                 deliveryLocationCapturedAt = locationCapturedAt
               ) { result ->
                 if (result.isSuccess) {
@@ -816,13 +816,13 @@ private fun CheckoutView(
 
         if (isPinConfirmed && deliveryLat != null && deliveryLng != null) {
           Text(
-            text = "GPS Coordinates: ${String.format("%.4f", deliveryLat)}, ${String.format("%.4f", deliveryLng)}",
+            text = "Your delivery pin is saved securely for JTBazar delivery.",
             fontSize = 11.sp,
             color = Color(0xFF03543F)
           )
         } else {
           Text(
-            text = "Capture device GPS pin for express neighborhood food dispatch & exact door drop-off.",
+            text = "Confirm your delivery location pin. It is required for every order so the driver and Admin can find your address accurately.",
             fontSize = 11.sp,
             color = JTTextSecondary
           )
@@ -836,7 +836,7 @@ private fun CheckoutView(
           ) {
             Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(14.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Update My Location (GPS)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text("Confirm My Delivery Location", fontSize = 11.sp, fontWeight = FontWeight.Bold)
           }
         }
       }
