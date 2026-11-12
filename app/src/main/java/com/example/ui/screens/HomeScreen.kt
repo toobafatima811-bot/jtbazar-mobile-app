@@ -33,7 +33,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.Intent
-import android.net.Uri
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,18 +42,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.example.R
 import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ActiveProductCampaign
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
-import com.example.ui.components.JTBazarPullRefresh
 import com.example.ui.components.MarketplaceHero
 import com.example.ui.components.TrustBadgesRow
 import com.example.ui.theme.*
-import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -70,24 +67,12 @@ fun HomeScreen(
   val trustedShops by MarketplaceRepository.shops.collectAsState()
   val categories by MarketplaceRepository.categories.collectAsState()
   val homepageHeroes by MarketplaceRepository.homepageHeroes.collectAsState()
-  val homepagePromotions by MarketplaceRepository.homepagePromotions.collectAsState()
   val activeProductCampaigns by MarketplaceRepository.activeProductCampaigns.collectAsState()
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
-
-  val nowIso = remember { java.time.Instant.now().toString() }
-  val visibleBannerCampaigns = homepagePromotions.filter { campaign ->
-    campaign.campaignType == "banner" && !campaign.showOnLaunch &&
-      (campaign.targetPlatform == "android" || campaign.targetPlatform == "both") &&
-      (campaign.startsAt.isNullOrBlank() || campaign.startsAt <= nowIso) &&
-      (campaign.endsAt.isNullOrBlank() || campaign.endsAt >= nowIso)
-  }
-
-  var isPullRefreshing by remember { mutableStateOf(false) }
-  val refreshScope = rememberCoroutineScope()
 
   var showAddressDialog by remember { mutableStateOf(false) }
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
@@ -229,8 +214,6 @@ fun HomeScreen(
       }
 
       if (searchQuery.isBlank()) {
-        item { PromotionCampaignPlacement(visibleBannerCampaigns, "top_promo", onExploreCategoriesClick) }
-        item { PromotionCampaignPlacement(visibleBannerCampaigns, "hero_banner", onExploreCategoriesClick) }
 
         // Website Parity: Full Homepage Hero Section
         item {
@@ -266,8 +249,6 @@ fun HomeScreen(
             Text("Browse Trusted Shops")
           }
         }
-
-        item { PromotionCampaignPlacement(visibleBannerCampaigns, "seller_banner", onExploreCategoriesClick) }
       }
 
       // 4. Shop by Category (Horizontal Row)
@@ -791,52 +772,6 @@ fun SearchInputBar(
 
 
 @Composable
-private fun PromotionCampaignPlacement(
-  campaigns: List<com.example.data.supabase.SupabasePromotionDto>,
-  position: String,
-  onExploreCategoriesClick: () -> Unit
-) {
-  val context = LocalContext.current
-  val placedCampaigns = campaigns.filter { it.displayPosition == position }
-  if (placedCampaigns.isEmpty()) return
-  Column(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-    verticalArrangement = Arrangement.spacedBy(10.dp)
-  ) {
-    placedCampaigns.forEach { campaign ->
-      val image = campaign.bannerImageUrls.firstOrNull() ?: campaign.bannerImageUrl
-      if (!image.isNullOrBlank()) {
-        Card(
-          shape = RoundedCornerShape(14.dp),
-          modifier = Modifier.fillMaxWidth().clickable {
-            val destination = campaign.ctaDestination.orEmpty()
-            if (destination.startsWith("https://") || destination.startsWith("http://")) {
-              runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(destination))) }
-            } else {
-              onExploreCategoriesClick()
-            }
-          }
-        ) {
-          Column {
-            AsyncImage(
-              model = image,
-              contentDescription = campaign.title,
-              contentScale = ContentScale.Crop,
-              modifier = Modifier.fillMaxWidth().heightIn(max = 190.dp)
-            )
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-              Text(campaign.title, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-              campaign.description?.let { Text(it, fontSize = 12.sp, color = JTTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-              campaign.ctaText?.let { Text(it, fontSize = 11.sp, color = JTOrangeDark, fontWeight = FontWeight.Bold) }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
 fun InstantDeliveryBanner(
   area: String,
   modifier: Modifier = Modifier
@@ -1293,58 +1228,38 @@ fun SocialMediaSection(modifier: Modifier = Modifier) {
       horizontalArrangement = Arrangement.spacedBy(16.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      // Instagram: https://www.instagram.com/jtbazarofficial/
+      // Official supplied brand marks
       Surface(
         shape = CircleShape,
-        color = Color(0xFFE1306C),
+        color = Color.White,
         shadowElevation = 3.dp,
-        modifier = Modifier
-          .size(46.dp)
-          .clickable {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/jtbazarofficial/"))
-            context.startActivity(intent)
-          }
-          .testTag("social_instagram")
+        modifier = Modifier.size(50.dp).clickable {
+          context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/jtbazarofficial/")))
+        }.testTag("social_instagram")
       ) {
-        Box(contentAlignment = Alignment.Center) {
-          Icon(Icons.Filled.CameraAlt, contentDescription = "Instagram", tint = Color.White, modifier = Modifier.size(22.dp))
-        }
+        Image(painterResource(R.drawable.social_instagram), "Instagram", modifier = Modifier.fillMaxSize())
       }
 
-      // Facebook: https://www.facebook.com/profile.php?id=61595825413366
       Surface(
         shape = CircleShape,
-        color = Color(0xFF1877F2),
+        color = Color.White,
         shadowElevation = 3.dp,
-        modifier = Modifier
-          .size(46.dp)
-          .clickable {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.facebook.com/profile.php?id=61595825413366"))
-            context.startActivity(intent)
-          }
-          .testTag("social_facebook")
+        modifier = Modifier.size(50.dp).clickable {
+          context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.facebook.com/profile.php?id=61595825413366")))
+        }.testTag("social_facebook")
       ) {
-        Box(contentAlignment = Alignment.Center) {
-          Icon(Icons.Filled.Share, contentDescription = "Facebook", tint = Color.White, modifier = Modifier.size(22.dp))
-        }
+        Image(painterResource(R.drawable.social_facebook), "Facebook", modifier = Modifier.fillMaxSize())
       }
 
-      // TikTok: https://www.tiktok.com/@jtbazarofficial
       Surface(
         shape = CircleShape,
-        color = Color.Black,
+        color = Color.White,
         shadowElevation = 3.dp,
-        modifier = Modifier
-          .size(46.dp)
-          .clickable {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.tiktok.com/@jtbazarofficial"))
-            context.startActivity(intent)
-          }
-          .testTag("social_tiktok")
+        modifier = Modifier.size(50.dp).clickable {
+          context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.tiktok.com/@jtbazarofficial")))
+        }.testTag("social_tiktok")
       ) {
-        Box(contentAlignment = Alignment.Center) {
-          Icon(Icons.Filled.MusicNote, contentDescription = "TikTok", tint = Color.White, modifier = Modifier.size(22.dp))
-        }
+        Image(painterResource(R.drawable.social_tiktok), "TikTok", modifier = Modifier.fillMaxSize())
       }
     }
 
