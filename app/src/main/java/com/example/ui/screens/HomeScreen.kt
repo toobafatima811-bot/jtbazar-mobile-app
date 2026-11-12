@@ -993,12 +993,12 @@ fun ProductCard(
     border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
     modifier = modifier
       .fillMaxWidth()
-      .heightIn(min = 324.dp)
+      .wrapContentHeight()
       .clickable(onClick = onProductClick)
       .testTag("product_card_${product.id}")
   ) {
     Column(
-      modifier = Modifier.fillMaxSize()
+      modifier = Modifier.fillMaxWidth()
     ) {
       // Image Box with Badge & Heart (Exact 140dp height)
       Box(
@@ -1057,9 +1057,8 @@ fun ProductCard(
       Column(
         modifier = Modifier
           .fillMaxWidth()
-          .weight(1f)
           .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(5.dp)
       ) {
         Column {
           // Tag badge slot with fixed 20dp height
