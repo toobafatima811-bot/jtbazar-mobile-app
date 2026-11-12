@@ -69,8 +69,9 @@ object SupabaseClient {
    * Uses an independent HTTP client so the refresh request cannot recursively
    * invoke this authenticator. Supabase rotates refresh tokens, so persist both.
    */
-  private fun refreshSessionForRequest(failedRequest: Request): Request? {
-    val previousCount = generateSequence(failedRequest.tag(Response::class.java)) { it.priorResponse }.count()
+  private fun refreshSessionForRequest(failedResponse: Response): Request? {
+    val previousCount = generateSequence(failedResponse) { it.priorResponse }.count()
+    val failedRequest = failedResponse.request
     if (previousCount >= 2) return null
 
     synchronized(refreshLock) {
