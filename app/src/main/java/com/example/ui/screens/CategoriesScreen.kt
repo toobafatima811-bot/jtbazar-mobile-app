@@ -47,7 +47,7 @@ fun CategoriesScreen(
   val categories by MarketplaceRepository.categories.collectAsState()
 
   var showAddressDialog by remember { mutableStateOf(false) }
-  var selectedChip by remember { mutableStateOf("All Categories") }
+  var selectedCategoryId by remember { mutableStateOf<String?>(null) }
   var searchQuery by remember { mutableStateOf("") }
 
   if (showAddressDialog) {
@@ -154,148 +154,25 @@ fun CategoriesScreen(
         }
       }
 
-      // 2. Horizontal Filter Chips
+      // 2. Live category filters sourced from Supabase
       item {
         Spacer(modifier = Modifier.height(10.dp))
-        val chips = listOf("All Categories", "Food & Groceries", "Local Artisan", "Home Living")
-        LazyRow(
-          contentPadding = PaddingValues(horizontal = 16.dp),
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          items(chips) { chip ->
-            val isSelected = chip == selectedChip
-            Surface(
-              shape = RoundedCornerShape(20.dp),
-              color = if (isSelected) JTPurplePrimary else Color.Transparent,
-              border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-              modifier = Modifier.clickable { selectedChip = chip }
-            ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
-              ) {
-                if (chip == "All Categories") {
-                  Icon(
-                    imageVector = Icons.Filled.GridView,
-                    contentDescription = null,
-                    tint = if (isSelected) Color.White else JTTextSecondary,
-                    modifier = Modifier.size(15.dp)
-                  )
-                  Spacer(modifier = Modifier.width(6.dp))
-                }
-                Text(
-                  text = chip,
-                  fontSize = 12.sp,
-                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                  color = if (isSelected) Color.White else JTTextPrimary
-                )
-              }
-            }
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          item {
+            FilterChip(selected = selectedCategoryId == null, onClick = { selectedCategoryId = null },
+              label = { Text("All", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+              leadingIcon = { Icon(Icons.Filled.GridView, contentDescription = null, modifier = Modifier.size(15.dp)) },
+              colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JTOrange, selectedLabelColor = Color.White, selectedLeadingIconColor = Color.White))
+          }
+          items(categories, key = { it.id }) { category ->
+            FilterChip(selected = selectedCategoryId == category.id,
+              onClick = { selectedCategoryId = if (selectedCategoryId == category.id) null else category.id },
+              label = { Text(category.title, fontSize = 12.sp, maxLines = 1) },
+              colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JTOrange, selectedLabelColor = Color.White))
           }
         }
       }
-
-      // 3. Featured Category Banner: "JTBazar Food & Fresh Market"
-      item {
-        Spacer(modifier = Modifier.height(12.dp))
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTPurplePrimary,
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Column(
-            modifier = Modifier.padding(16.dp)
-          ) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Color.White.copy(alpha = 0.25f)
-              ) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                ) {
-                  Icon(
-                    imageVector = Icons.Filled.Verified,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(12.dp)
-                  )
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text(
-                    text = "Verified Kitchens & Marts",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                  )
-                }
-              }
-
-              Text(
-                text = "PKR Best Rates",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.8f)
-              )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-              text = "JTBazar Food & Fresh Market",
-              fontSize = 16.sp,
-              fontWeight = FontWeight.ExtraBold,
-              color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-              text = "Selling by Kg, Dozen, Litre & Family Packs with express verified delivery across cities.",
-              fontSize = 11.sp,
-              color = Color.White.copy(alpha = 0.85f),
-              lineHeight = 15.sp
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White.copy(alpha = 0.15f)
-              ) {
-                Text(
-                  text = "Atta • Daal • Parathas",
-                  color = Color.White,
-                  fontSize = 10.sp,
-                  fontWeight = FontWeight.SemiBold,
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-              }
-              Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White.copy(alpha = 0.15f)
-              ) {
-                Text(
-                  text = "Fresh Dairy Daily",
-                  color = Color.White,
-                  fontSize = 10.sp,
-                  fontWeight = FontWeight.SemiBold,
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-              }
-            }
-          }
-        }
-      }
-
-      // 4. Section Header: Explore Categories (10 Departments)
+      // 3. Section Header: Explore Categories (10 Departments)
       item {
         Spacer(modifier = Modifier.height(18.dp))
         Row(
@@ -312,7 +189,7 @@ fun CategoriesScreen(
             color = JTTextPrimary
           )
           Text(
-            text = "10 Departments",
+            text = "${categories.size} Departments",
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = JTTextSecondary
@@ -321,13 +198,11 @@ fun CategoriesScreen(
       }
 
       // 5. 2-Column Grid of Categories
-      val filteredCategories = if (searchQuery.isBlank()) {
-        categories
-      } else {
-        categories.filter {
-          it.title.contains(searchQuery, ignoreCase = true) ||
-            it.sampleItems.contains(searchQuery, ignoreCase = true)
-        }
+      val filteredCategories = categories.filter { category ->
+        (selectedCategoryId == null || category.id == selectedCategoryId) &&
+          (searchQuery.isBlank() ||
+            category.title.contains(searchQuery, ignoreCase = true) ||
+            category.sampleItems.contains(searchQuery, ignoreCase = true))
       }
 
       if (filteredCategories.isEmpty()) {
@@ -384,15 +259,7 @@ fun CategoriesScreen(
         }
       }
 
-      // 6. Food & Groceries Hub Preview Card
-      item {
-        Spacer(modifier = Modifier.height(24.dp))
-        FoodGroceryHubPreview(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        )
-      }
+
     }
   }
 }
