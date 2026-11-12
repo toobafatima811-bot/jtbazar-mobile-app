@@ -119,20 +119,41 @@ fun JTBazarTopBar(
         // Compact location action on the home screen; other screens may show the address label.
         if (title == null) {
           Surface(
-            shape = CircleShape,
+            shape = if (showLocationText) RoundedCornerShape(16.dp) else CircleShape,
             color = JTPurpleContainer.copy(alpha = 0.5f),
             modifier = Modifier
-              .size(38.dp)
+              .then(if (showLocationText) Modifier.height(38.dp) else Modifier.size(38.dp))
               .clickable { onLocationClick() }
               .testTag("location_picker")
           ) {
-            Box(contentAlignment = Alignment.Center) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.Center,
+              modifier = Modifier.padding(horizontal = if (showLocationText) 8.dp else 0.dp)
+            ) {
               Icon(
                 imageVector = Icons.Filled.LocationOn,
                 contentDescription = if (showLocationText) currentLocation else "Select delivery location",
                 tint = JTPurplePrimary,
                 modifier = Modifier.size(19.dp)
               )
+              if (showLocationText) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = currentLocation,
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = JTTextPrimary,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                  imageVector = Icons.Filled.KeyboardArrowDown,
+                  contentDescription = null,
+                  tint = JTTextSecondary,
+                  modifier = Modifier.size(14.dp)
+                )
+              }
             }
           }
         }
