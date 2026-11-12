@@ -30,6 +30,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.R
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
@@ -38,6 +39,7 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.GlobalLoadingState
 import com.example.ui.components.CampaignLaunchPopupDialog
+import com.example.ui.components.JTBazarPullRefresh
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import org.json.JSONObject
@@ -99,6 +101,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   }
 
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
+  var isPullRefreshing by remember { mutableStateOf(false) }
+  val pullRefreshScope = rememberCoroutineScope()
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
   var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
@@ -322,6 +326,33 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         .fillMaxSize()
         .padding(paddingValues)
     ) {
+      JTBazarPullRefresh(
+        isRefreshing = isPullRefreshing,
+        enabled = currentScreen in setOf(
+          AppScreen.HOME, AppScreen.CATEGORIES, AppScreen.CATEGORY_PRODUCTS,
+          AppScreen.DISCOVER, AppScreen.WISHLIST, AppScreen.ACCOUNT,
+          AppScreen.CART_CHECKOUT, AppScreen.ORDER_TRACKING, AppScreen.MY_ORDERS,
+          AppScreen.NOTIFICATIONS, AppScreen.RETURNS_REFUNDS, AppScreen.PUBLIC_SHOPS,
+          AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER
+        ),
+        onRefresh = {
+          if (!isPullRefreshing) {
+            pullRefreshScope.launch {
+              isPullRefreshing = true
+              try {
+                MarketplaceRepository.refreshLiveCatalogSuspending(
+                  showLoading = false,
+                  refreshUserData = true
+                )
+                MarketplaceRepository.refreshShops()
+              } finally {
+                isPullRefreshing = false
+              }
+            }
+          }
+        },
+        modifier = Modifier.fillMaxSize()
+      ) {
       when (currentScreen) {
         AppScreen.SPLASH -> {
           SplashScreen(
@@ -629,6 +660,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onBack = { navigateBack() }
           )
         }
+      }
       }
 
       val activeCampaignPopup by CampaignPopupManager.activePopupCampaign.collectAsState()
