@@ -235,7 +235,7 @@ fun BudgetShoppingScreen(
         }
       } else {
         LazyVerticalGrid(
-          columns = GridCells.Adaptive(minSize = 138.dp),
+          columns = GridCells.Fixed(productGridColumns),
           modifier = Modifier.fillMaxSize(),
           contentPadding = PaddingValues(16.dp),
           horizontalArrangement = Arrangement.spacedBy(12.dp),
