@@ -171,7 +171,7 @@ fun MarketplaceHero(
               color = Color(0xFFC05621)
             )
           }
-
+        }
 
         // 2. Title & Subtitle with smooth slide crossfade
         AnimatedContent(
