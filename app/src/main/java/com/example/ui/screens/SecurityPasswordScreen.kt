@@ -36,8 +36,10 @@ fun SecurityPasswordScreen(
   val coroutineScope = rememberCoroutineScope()
   val currentUser by SupabaseClient.currentUser.collectAsState()
 
+  var currentPassword by remember { mutableStateOf("") }
   var newPassword by remember { mutableStateOf("") }
   var confirmPassword by remember { mutableStateOf("") }
+  var currentPasswordVisible by remember { mutableStateOf(false) }
   var passwordVisible by remember { mutableStateOf(false) }
   var confirmPasswordVisible by remember { mutableStateOf(false) }
   var isUpdating by remember { mutableStateOf(false) }
@@ -98,6 +100,17 @@ fun SecurityPasswordScreen(
       )
 
       OutlinedTextField(
+        value = currentPassword,
+        onValueChange = { currentPassword = it },
+        label = { Text("Current Password *") },
+        leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = JTPurplePrimary) },
+        trailingIcon = { IconButton(onClick = { currentPasswordVisible = !currentPasswordVisible }) { Icon(if (currentPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff, contentDescription = null) } },
+        visualTransformation = if (currentPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("security_current_password_input")
+      )
+      OutlinedTextField(
         value = newPassword,
         onValueChange = { newPassword = it },
         label = { Text("New Password *") },
@@ -146,36 +159,51 @@ fun SecurityPasswordScreen(
       Button(
         onClick = {
           val email = currentUser?.email ?: return@Button
-          if (newPassword.length < 6 || !isPasswordMatch) {
-            Toast.makeText(context, "Password must be at least 6 characters and match confirmation", Toast.LENGTH_SHORT).show()
+          if (currentPassword.isBlank() || newPassword.length < 6 || !isPasswordMatch) {
+            Toast.makeText(context, "Enter your current password and a matching new password (at least 6 characters).", Toast.LENGTH_LONG).show()
             return@Button
           }
-
           isUpdating = true
           coroutineScope.launch {
-            // Trigger password update via reset password or direct request
-            val res = SupabaseAuthService.resetPassword(email)
+            val verified = SupabaseAuthService.signIn(email, currentPassword, context)
+            val result = if (verified.isSuccess) SupabaseAuthService.updatePassword(newPassword) else Result.failure(verified.exceptionOrNull() ?: IllegalStateException("Current password is incorrect."))
             isUpdating = false
-            if (res.isSuccess) {
-              Toast.makeText(context, "Password reset confirmation sent to $email. Follow instructions to finalize.", Toast.LENGTH_LONG).show()
+            if (result.isSuccess) {
+              Toast.makeText(context, "Password updated successfully.", Toast.LENGTH_LONG).show()
+              currentPassword = ""
               newPassword = ""
               confirmPassword = ""
             } else {
-              Toast.makeText(context, "Failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, "Could not update password: " + result.exceptionOrNull()?.message, Toast.LENGTH_LONG).show()
             }
           }
         },
-        enabled = !isUpdating && newPassword.length >= 6 && isPasswordMatch,
+        enabled = !isUpdating && currentPassword.isNotBlank() && newPassword.length >= 6 && isPasswordMatch,
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
         modifier = Modifier.fillMaxWidth().height(48.dp).testTag("security_update_button")
       ) {
-        if (isUpdating) {
-          CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-        } else {
-          Text("Update Password", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        }
+        if (isUpdating) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        else Text("Update Password", fontWeight = FontWeight.Bold, fontSize = 14.sp)
       }
+
+      TextButton(
+        onClick = {
+          val email = currentUser?.email
+          if (email.isNullOrBlank()) Toast.makeText(context, "Your account email is unavailable.", Toast.LENGTH_SHORT).show()
+          else {
+            isUpdating = true
+            coroutineScope.launch {
+              val result = SupabaseAuthService.resetPassword(email)
+              isUpdating = false
+              val message = if (result.isSuccess) "Password reset email sent to " + email else "Could not send reset email: " + result.exceptionOrNull()?.message
+              Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+          }
+        },
+        enabled = !isUpdating,
+        modifier = Modifier.fillMaxWidth()
+      ) { Text("Forgot password? Send reset email", color = JTPurplePrimary, fontWeight = FontWeight.SemiBold) }
     }
   }
 }
