@@ -438,6 +438,7 @@ fun HomeScreen(
         items(activeProductCampaigns, key = { "deal_${it.campaign.id}" }) { activeCampaign ->
           ProductCampaignSection(
             activeCampaign = activeCampaign,
+            productGridColumns = productGridColumns,
             onProductClick = onProductClick,
             onAddToCart = { MarketplaceRepository.addToCart(it) },
             onToggleWishlist = { productId -> MarketplaceRepository.toggleWishlist(productId) }
@@ -1312,6 +1313,7 @@ fun SocialMediaSection(modifier: Modifier = Modifier) {
 @Composable
 private fun ProductCampaignSection(
   activeCampaign: ActiveProductCampaign,
+  productGridColumns: Int = 2,
   onProductClick: (Product) -> Unit,
   onAddToCart: (Product) -> Unit,
   onToggleWishlist: (String) -> Unit
@@ -1361,7 +1363,9 @@ private fun ProductCampaignSection(
             )
           }
         }
-        if (rowProducts.size == 1) Spacer(Modifier.weight(1f))
+        repeat((productGridColumns - rowProducts.size).coerceAtLeast(0)) {
+          Spacer(Modifier.weight(1f))
+        }
       }
       Spacer(Modifier.height(12.dp))
     }
