@@ -19,6 +19,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
+import com.example.ui.components.rememberAdaptiveColumnCount
 import com.example.ui.theme.*
 
 /** Native category listing: shows only products assigned to the selected live category. */
@@ -31,6 +32,7 @@ fun CategoryProductsScreen(
   onCartClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
+  val productGridColumns = rememberAdaptiveColumnCount(minCellWidth = 138.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
   val products by MarketplaceRepository.products.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
@@ -87,7 +89,7 @@ fun CategoryProductsScreen(
             Text("Coming soon", color = JTOrangeDark, fontWeight = FontWeight.Bold)
           }
         }
-        val chunked = categoryProducts.chunked(2)
+        val chunked = categoryProducts.chunked(productGridColumns)
         chunked.forEach { rowItems ->
           item {
             Row(
