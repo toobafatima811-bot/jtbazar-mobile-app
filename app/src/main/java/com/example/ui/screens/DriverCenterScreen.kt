@@ -6,6 +6,16 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.location.Geocoder
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import org.osmdroid.config.Configuration
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import java.util.Locale
+import com.example.ui.GlobalLoadingState
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -129,6 +139,9 @@ fun DriverCenterScreen(
   var fullName by remember { mutableStateOf(user?.fullName.orEmpty()) }
   var phone by remember { mutableStateOf(user?.phone.orEmpty()) }
   var currentAddress by remember { mutableStateOf("") }
+  var applicationLat by remember { mutableStateOf<Double?>(null) }
+  var applicationLng by remember { mutableStateOf<Double?>(null) }
+  var showApplicationLocationPicker by remember { mutableStateOf(false) }
   var vehicleType by remember { mutableStateOf("Bike") }
   var isVehicleDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -264,6 +277,7 @@ fun DriverCenterScreen(
 
   suspend fun load() {
     loading = true
+    GlobalLoadingState.active.value = true
     error = null
     try {
       val access = SupabaseClient.rpc("get_my_driver_access").getOrThrow()
@@ -284,6 +298,7 @@ fun DriverCenterScreen(
       error = e.message ?: "Could not load driver information."
     } finally {
       loading = false
+      GlobalLoadingState.active.value = false
     }
   }
 
@@ -586,7 +601,7 @@ fun DriverCenterScreen(
         val applicantName = appObj.optString("full_name").ifBlank { user?.fullName ?: "Driver" }
         val vehType = appObj.optString("vehicle_type").ifBlank { "Motorcycle" }
         val rawAddr = appObj.optString("current_address")
-        val addrDisplay = if (rawAddr.isNotBlank() && rawAddr != "null") rawAddr else "Karachi, Pakistan"
+        val addrDisplay = if (rawAddr.isNotBlank() && rawAddr != "null") rawAddr else "Location not set"
         val status = appObj.optString("status", "pending")
 
         item {
@@ -770,14 +785,25 @@ fun DriverCenterScreen(
                 shape = RoundedCornerShape(10.dp)
               )
 
-              // 3. Current Address
+              // 3. Current Address + required map pin
               OutlinedTextField(
                 value = currentAddress,
                 onValueChange = { currentAddress = it },
                 label = { Text("Current Address *") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(10.dp),
+                supportingText = { Text(if (applicationLat != null && applicationLng != null) "Map location selected" else "Select your exact location on the map") }
               )
+              OutlinedButton(
+                onClick = { showApplicationLocationPicker = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEA580C))
+              ) {
+                Icon(Icons.Filled.Map, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (applicationLat != null && applicationLng != null) "Change Map Location" else "Choose Current Location on Map")
+              }
 
               // 4. Vehicle Type Dropdown
               ExposedDropdownMenuBox(
@@ -859,6 +885,7 @@ fun DriverCenterScreen(
               val isFormValid = fullName.trim().isNotBlank() &&
                 phone.trim().isNotBlank() &&
                 currentAddress.trim().isNotBlank() &&
+                applicationLat != null && applicationLng != null &&
                 !cnicFrontDoc.storagePath.isNullOrBlank() &&
                 !cnicBackDoc.storagePath.isNullOrBlank() &&
                 !plateDoc.storagePath.isNullOrBlank() &&
@@ -885,6 +912,15 @@ fun DriverCenterScreen(
                       }
                       val result = SupabaseClient.rpc("submit_driver_application", body.toString())
                       if (result.isSuccess) {
+                        val locationResult = SupabaseClient.rpc(
+                          "driver_save_application_location",
+                          JSONObject()
+                            .put("p_lat", applicationLat)
+                            .put("p_lng", applicationLng)
+                            .put("p_address", currentAddress.trim())
+                            .toString()
+                        )
+                        if (locationResult.isFailure) throw (locationResult.exceptionOrNull() ?: IllegalStateException("Could not save map location"))
                         message = "Driver application submitted! Admin approval is required."
                         load()
                       } else {
@@ -1383,6 +1419,18 @@ fun DriverCenterScreen(
         }
       }
     }
+  }
+
+  if (showApplicationLocationPicker) {
+    DriverApplicationLocationPicker(
+      onDismiss = { showApplicationLocationPicker = false },
+      onLocationSelected = { lat, lng, address ->
+        applicationLat = lat
+        applicationLng = lng
+        if (address.isNotBlank()) currentAddress = address
+        showApplicationLocationPicker = false
+      }
+    )
   }
 
   // BOTTOM SHEET: PICK CAMERA OR GALLERY
