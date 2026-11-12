@@ -875,7 +875,7 @@ fun GrandBachatPromoCard(
       Column(
         modifier = Modifier
           .fillMaxHeight()
-          .fillMaxWidth(0.72f),
+          .fillMaxWidth(0.84f),
         verticalArrangement = Arrangement.SpaceBetween
       ) {
         Surface(
