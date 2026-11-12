@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,7 +53,8 @@ fun AccountScreen(
   onNavigateToVendorCenter: () -> Unit,
   onNavigateToDriver: () -> Unit,
   onCartClick: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  scrollState: ScrollState = rememberScrollState()
 ) {
   val context = LocalContext.current
   val coroutineScope = rememberCoroutineScope()
@@ -104,7 +106,7 @@ fun AccountScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .verticalScroll(rememberScrollState())
+        .verticalScroll(scrollState)
         .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
