@@ -98,7 +98,8 @@ fun SplashScreen(
         // Mascot 3D Illustration on crisp white
         Box(
           modifier = Modifier
-            .size(280.dp)
+            .fillMaxWidth(0.72f)
+            .aspectRatio(1f)
             .scale(scale.value),
           contentAlignment = Alignment.Center
         ) {
