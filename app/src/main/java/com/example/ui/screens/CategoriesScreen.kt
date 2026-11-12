@@ -32,6 +32,7 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.theme.*
+import com.example.ui.components.rememberAdaptiveColumnCount
 
 @Composable
 fun CategoriesScreen(
@@ -236,7 +237,8 @@ fun CategoriesScreen(
         }
       }
 
-      val chunkedCats = filteredCategories.chunked(2)
+      val categoryColumns = rememberAdaptiveColumnCount(minCellWidth = 148.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
+      val chunkedCats = filteredCategories.chunked(categoryColumns)
       items(chunkedCats) { rowItems ->
         Spacer(modifier = Modifier.height(12.dp))
         Row(
@@ -283,7 +285,7 @@ fun CategoryCard(
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .height(98.dp)
+          .aspectRatio(1.65f)
           .background(JTSurfaceVariant)
       ) {
         // Use Coil for both remote category images and bundled fallback resources.
