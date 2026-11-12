@@ -566,9 +566,23 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onBack = { navigateBack() },
             onNotificationClick = { notification ->
               when (notification.type.lowercase()) {
-                "order" -> navigateTo(AppScreen.MY_ORDERS)
-                "account" -> currentScreen = AppScreen.ACCOUNT
-                "store" -> currentScreen = AppScreen.HOME
+                "order" -> {
+                  val order = notification.relatedOrderId?.let { relatedId ->
+                    MarketplaceRepository.orders.value.firstOrNull { it.orderId == relatedId }
+                  }
+                  if (order != null) {
+                    MarketplaceRepository.selectOrder(order)
+                    navigateTo(AppScreen.ORDER_TRACKING)
+                  } else {
+                    navigateTo(AppScreen.MY_ORDERS)
+                  }
+                }
+                "account" -> {
+                  currentScreen = AppScreen.ACCOUNT
+                }
+                "store", "product", "promotion" -> {
+                  currentScreen = AppScreen.HOME
+                }
                 else -> currentScreen = AppScreen.HOME
               }
             }
