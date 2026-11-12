@@ -26,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.example.R
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
@@ -34,6 +35,10 @@ import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.screens.*
 import com.example.ui.theme.*
 import org.json.JSONObject
+
+object GlobalLoadingState {
+  val active = MutableStateFlow(false)
+}
 
 data class NotificationNavigation(
   val id: String? = null,
@@ -79,7 +84,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val isCatalogLoading by MarketplaceRepository.isLoading.collectAsState()
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
-  val showGlobalLoader = isPlacingOrder || (isCatalogLoading && products.isEmpty())
+  val isGlobalLoading by GlobalLoadingState.active.collectAsState()
+  val showGlobalLoader = isGlobalLoading || isPlacingOrder || (isCatalogLoading && products.isEmpty())
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -132,8 +138,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
       AppScreen.SPLASH -> currentScreen = AppScreen.HOME
       AppScreen.LOGIN, AppScreen.REGISTER, AppScreen.FORGOT_PASSWORD -> currentScreen = AppScreen.ACCOUNT
       AppScreen.EMAIL_OTP, AppScreen.LOGIN_OTP, AppScreen.RESET_PASSWORD -> currentScreen = AppScreen.LOGIN
-      AppScreen.MY_PROFILE, AppScreen.MY_ORDERS, AppScreen.MY_ADDRESSES,
-      AppScreen.NOTIFICATIONS, AppScreen.RETURNS_REFUNDS, AppScreen.CUSTOMER_SUPPORT,
+      AppScreen.MY_PROFILE, AppScreen.NOTIFICATIONS -> currentScreen = if (previousScreen == AppScreen.DRIVER_CENTER) AppScreen.DRIVER_CENTER else AppScreen.ACCOUNT
+      AppScreen.MY_ORDERS, AppScreen.MY_ADDRESSES, AppScreen.RETURNS_REFUNDS, AppScreen.CUSTOMER_SUPPORT,
       AppScreen.ACCOUNT_SETTINGS, AppScreen.SECURITY_PASSWORD -> currentScreen = AppScreen.ACCOUNT
       AppScreen.BUDGET_SHOPPING -> currentScreen = previousScreen
       AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER -> currentScreen = AppScreen.ACCOUNT
@@ -570,6 +576,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         AppScreen.DRIVER_CENTER -> {
           DriverCenterScreen(
             onBack = { navigateBack() },
+            onOpenProfile = { navigateTo(AppScreen.MY_PROFILE) },
+            onOpenNotifications = { navigateTo(AppScreen.NOTIFICATIONS) },
             onViewCustomerLocation = { delivery ->
               selectedDeliveryForNavigation = delivery
               navigateTo(AppScreen.DRIVER_NAVIGATION)
