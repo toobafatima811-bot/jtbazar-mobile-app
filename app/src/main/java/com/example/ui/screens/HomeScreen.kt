@@ -1006,7 +1006,7 @@ fun ProductCard(
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .height(140.dp)
+          .aspectRatio(1.08f)
           .background(JTSurfaceVariant)
       ) {
         AsyncImage(
@@ -1100,14 +1100,14 @@ fun ProductCard(
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
             lineHeight = 15.sp,
-            modifier = Modifier.height(46.dp)
+            modifier = Modifier.fillMaxWidth()
           )
 
           Spacer(modifier = Modifier.height(3.dp))
 
           // Rating row with fixed 16dp height
           Row(
-            modifier = Modifier.height(16.dp),
+            modifier = Modifier.heightIn(min = 16.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Icon(
