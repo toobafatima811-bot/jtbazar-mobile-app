@@ -2,6 +2,9 @@ package com.example.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -10,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -18,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import com.example.R
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
@@ -65,6 +71,9 @@ enum class AppScreen {
 
 @Composable
 fun MainApp(notificationTap: NotificationNavigation? = null) {
+  val isCatalogLoading by MarketplaceRepository.isLoading.collectAsState()
+  val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
+  val showGlobalLoader = isCatalogLoading || isPlacingOrder
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -566,6 +575,48 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           )
         }
       }
+
+      if (showGlobalLoader && currentScreen != AppScreen.SPLASH) {
+        GlobalLoadingOverlay()
+      }
+    }
+  }
+}
+
+@Composable
+private fun GlobalLoadingOverlay() {
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(Color.White.copy(alpha = 0.94f))
+      .clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        onClick = {}
+      ),
+    contentAlignment = androidx.compose.ui.Alignment.Center
+  ) {
+    Column(
+      horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+      Image(
+        painter = painterResource(id = R.drawable.logo_jtbazar_header),
+        contentDescription = "JTBazar",
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.widthIn(max = 180.dp).heightIn(max = 64.dp)
+      )
+      CircularProgressIndicator(
+        modifier = Modifier.size(34.dp),
+        color = JTOrange,
+        strokeWidth = 3.dp
+      )
+      Text(
+        text = "Please wait…",
+        style = MaterialTheme.typography.labelLarge,
+        color = JTTextSecondary,
+        fontWeight = FontWeight.Medium
+      )
     }
   }
 }
