@@ -110,6 +110,7 @@ private fun PublicShopDetailScreen(
   var reviewComment by remember(shop.id) { mutableStateOf("") }
   var reviewOpen by remember(shop.id) { mutableStateOf(false) }
   var reviewMessage by remember(shop.id) { mutableStateOf<String?>(null) }
+  var reviewSubmitting by remember(shop.id) { mutableStateOf(false) }
 
   LaunchedEffect(shop.id) {
     sellerReviews = try { SellerReviewService.listApproved(shop.id) } catch (_: Exception) { JSONArray() }
@@ -174,19 +175,29 @@ private fun PublicShopDetailScreen(
             onClick = {
               scope.launch {
                 try {
-                  val deliveredIds = orders.filter { it.orderStatus.equals("DELIVERED", true) }.map { it.orderId }
-                  SellerReviewService.submitForDeliveredOrder(shop.id, reviewRating, reviewComment, deliveredIds)
+                  reviewSubmitting = true
+                  reviewMessage = null
+                  SellerReviewService.submitForDeliveredOrder(shop.id, reviewRating, reviewComment)
                   sellerReviews = SellerReviewService.listApproved(shop.id)
                   reviewComment = ""
                   reviewOpen = false
-                  reviewMessage = "Review submitted"
-                } catch (_: Exception) {
-                  reviewMessage = "Could not submit review. Please check your delivered order and try again."
+                  reviewMessage = "Thank you! Your review has been submitted."
+                } catch (error: Exception) {
+                  reviewMessage = error.message?.takeIf { it.isNotBlank() }
+                    ?: "Your review could not be submitted. Please try again."
+                } finally {
+                  reviewSubmitting = false
                 }
               }
             },
-            enabled = reviewComment.isNotBlank()
-          ) { Text("Submit review") }
+            enabled = reviewComment.trim().length >= 3 && !reviewSubmitting
+          ) {
+            if (reviewSubmitting) {
+              CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+              Spacer(Modifier.width(8.dp))
+            }
+            Text(if (reviewSubmitting) "Submitting..." else "Submit review")
+          }
           reviewMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
         }
       } else {
