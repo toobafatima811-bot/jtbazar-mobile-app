@@ -378,7 +378,9 @@ object SupabaseApiService {
               province = obj.optString("province", "Punjab"),
               postalCode = if (obj.has("postal_code")) obj.optString("postal_code") else null,
               tag = obj.optString("tag", "HOME"),
-              isDefault = obj.optBoolean("is_default", false)
+              isDefault = obj.optBoolean("is_default", false),
+              latitude = if (obj.isNull("latitude")) null else obj.optDouble("latitude"),
+              longitude = if (obj.isNull("longitude")) null else obj.optDouble("longitude")
             )
           )
         }
