@@ -398,7 +398,9 @@ object MarketplaceRepository {
             city = newAddress.city,
             province = newAddress.province,
             tag = newAddress.tag,
-            isDefault = newAddress.isDefault
+            isDefault = newAddress.isDefault,
+            latitude = newAddress.latitude,
+            longitude = newAddress.longitude
           )
         ).onSuccess { loadUserData(userId) }.onFailure { _errorMessage.value = it.message }
       }
