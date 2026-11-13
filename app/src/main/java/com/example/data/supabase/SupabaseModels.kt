@@ -86,7 +86,9 @@ data class SupabaseAddressDto(
   val province: String = "",
   val postalCode: String? = null,
   val tag: String = "HOME",
-  val isDefault: Boolean = false
+  val isDefault: Boolean = false,
+  val latitude: Double? = null,
+  val longitude: Double? = null
 )
 
 data class SupabaseOrderDto(
