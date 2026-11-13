@@ -68,7 +68,6 @@ fun ProductDetailScreen(
 
   // Accordion states
   var craftStoryExpanded by remember { mutableStateOf(true) }
-  var deliveryGuaranteeExpanded by remember { mutableStateOf(false) }
   var reviewsExpanded by remember { mutableStateOf(false) }
 
   var showWriteReviewDialog by remember { mutableStateOf(false) }
@@ -165,7 +164,7 @@ fun ProductDetailScreen(
     )
   }
 
-  val unitPrice = product.price
+  val unitPrice = liveProduct.price
   val totalPrice = unitPrice * quantity
   val selectedSize = product.sizes.getOrNull(selectedSizeIndex)?.title
   val canPurchase = MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)
@@ -693,8 +692,8 @@ fun ProductDetailScreen(
         }
       }
 
-      // 11. Accordion Sections
-      item {
+      // 11. Product details and real customer reviews
+      if (product.craftStory.isNotBlank() || product.highlights.isNotEmpty()) item {
         Spacer(modifier = Modifier.height(18.dp))
 
         // Accordion 1: Product Highlights & Craft Story
@@ -738,7 +737,7 @@ fun ProductDetailScreen(
 
             AnimatedVisibility(visible = craftStoryExpanded) {
               Column(modifier = Modifier.padding(top = 12.dp)) {
-                Text(
+                if (product.craftStory.isNotBlank()) Text(
                   text = product.craftStory,
                   fontSize = 11.sp,
                   color = JTTextSecondary,
@@ -774,63 +773,7 @@ fun ProductDetailScreen(
           }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Accordion 2: Nationwide Delivery & 7-Day Guarantee
-        Surface(
-          shape = RoundedCornerShape(14.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .clickable { deliveryGuaranteeExpanded = !deliveryGuaranteeExpanded },
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                  imageVector = Icons.Filled.LocalShipping,
-                  contentDescription = null,
-                  tint = JTPurplePrimary,
-                  modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = "Nationwide Delivery & 7-Day Guarantee",
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 13.sp,
-                  color = JTTextPrimary
-                )
-              }
-              Icon(
-                imageVector = if (deliveryGuaranteeExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                contentDescription = null,
-                tint = JTTextSecondary
-              )
-            }
-
-            AnimatedVisibility(visible = deliveryGuaranteeExpanded) {
-              Column(modifier = Modifier.padding(top = 10.dp)) {
-                Text(
-                  text = "Safe transit assured with custom foam packaging for ceramic fragile shipments. Easy 7-day hassle-free replacement or refund guarantee on damaged goods.",
-                  fontSize = 11.sp,
-                  color = JTTextSecondary,
-                  lineHeight = 16.sp
-                )
-              }
-            }
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Accordion 3: Shopper Reviews (128)
+        // Customer reviews from Supabase
         Surface(
           shape = RoundedCornerShape(14.dp),
           color = JTCardBg,
@@ -856,7 +799,7 @@ fun ProductDetailScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Shopper Reviews (${product.reviewCount})",
+                  text = "Customer Reviews (" + productReviews.size + ")",
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp,
                   color = JTTextPrimary
@@ -906,7 +849,7 @@ fun ProductDetailScreen(
                 } else {
                   productReviews.forEach { rev ->
                     ReviewSnippet(
-                      name = rev.userName.ifBlank { "Verified Buyer" },
+                      name = rev.userName.ifBlank { "Customer" },
                       comment = rev.comment,
                       rating = rev.rating
                     )
