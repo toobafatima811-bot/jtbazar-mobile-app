@@ -53,6 +53,7 @@ import com.example.data.supabase.SupabaseClient
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
 import com.example.ui.theme.*
+import com.example.location.AddressReverseGeocoder
 import kotlinx.coroutines.launch
 
 enum class CartCheckoutStage {
@@ -116,10 +117,10 @@ fun CartCheckoutScreen(
   var saveAddressToAccount by remember { mutableStateOf(true) }
 
   // Location Pin State
-  var deliveryLat by remember { mutableStateOf<Double?>(null) }
-  var deliveryLng by remember { mutableStateOf<Double?>(null) }
+  var deliveryLat by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude) }
+  var deliveryLng by remember(selectedAddress) { mutableStateOf(selectedAddress?.longitude) }
   var locationCapturedAt by remember { mutableStateOf<String?>(null) }
-  var isPinConfirmed by remember { mutableStateOf(false) }
+  var isPinConfirmed by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude != null && selectedAddress.longitude != null) }
 
   val locationPermissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -137,7 +138,24 @@ fun CartCheckoutScreen(
             timeZone = java.util.TimeZone.getTimeZone("UTC")
           }.format(java.util.Date())
           isPinConfirmed = true
-          Toast.makeText(context, "Delivery location pin confirmed.", Toast.LENGTH_SHORT).show()
+          coroutineScope.launch {
+            val resolved = AddressReverseGeocoder.resolve(context, loc.latitude, loc.longitude)
+            if (resolved != null) {
+              if (resolved.street.isNotBlank()) streetAddress = resolved.street
+              if (resolved.area.isNotBlank()) areaLocality = resolved.area
+              if (resolved.city.isNotBlank()) city = resolved.city
+              Toast.makeText(
+                context,
+                if (resolved.street.isNotBlank()) "Location and street address detected. Please verify the house number."
+                else "Location captured. Please enter your street and house number.",
+                Toast.LENGTH_LONG
+              ).show()
+            } else {
+              Toast.makeText(context, "Location captured. Please enter your street and house number.", Toast.LENGTH_LONG).show()
+            }
+          }
+        } else {
+          Toast.makeText(context, "Could not get a recent location. Turn on GPS and try again.", Toast.LENGTH_LONG).show()
         }
       } catch (_: SecurityException) {}
     } else {
@@ -294,6 +312,9 @@ fun CartCheckoutScreen(
               city = addr.city
               streetAddress = addr.addressLine
               areaLocality = addr.area
+              deliveryLat = addr.latitude
+              deliveryLng = addr.longitude
+              isPinConfirmed = addr.latitude != null && addr.longitude != null
               MarketplaceRepository.selectAddress(addr)
             },
             deliveryLat = deliveryLat,
@@ -350,7 +371,11 @@ fun CartCheckoutScreen(
                 addressLine = streetAddress.trim(),
                 area = areaLocality.trim(),
                 city = city.trim(),
-                province = "Punjab"
+                province = selectedAddress?.province.orEmpty(),
+                tag = selectedAddress?.tag ?: "HOME",
+                isDefault = selectedAddress?.isDefault ?: addresses.isEmpty(),
+                latitude = deliveryLat,
+                longitude = deliveryLng
               )
               MarketplaceRepository.selectAddress(activeAddr)
               if (saveAddressToAccount && SupabaseClient.isAuthenticated) {
