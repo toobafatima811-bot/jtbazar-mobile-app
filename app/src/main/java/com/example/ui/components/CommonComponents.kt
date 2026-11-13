@@ -1,5 +1,15 @@
 package com.example.ui.components
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.location.LocationManager
+import android.os.Build
+import android.os.CancellationSignal
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +32,10 @@ import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -376,194 +390,198 @@ fun AddressSelectionSheet(
   onDismiss: () -> Unit,
   onAddNewAddress: ((DeliveryAddress) -> Unit)? = null
 ) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
   var showNewAddressForm by remember { mutableStateOf(addresses.isEmpty()) }
-  var name by remember { mutableStateOf("") }
+  var recipientName by remember { mutableStateOf("") }
   var phone by remember { mutableStateOf("") }
   var addressLine by remember { mutableStateOf("") }
-  var area by remember { mutableStateOf("Gulberg III") }
+  var area by remember { mutableStateOf("") }
   var city by remember { mutableStateOf("") }
-  var tag by remember { mutableStateOf("HOME") }
+  var label by remember { mutableStateOf("HOME") }
+  var customLabel by remember { mutableStateOf("") }
+  var latitude by remember { mutableStateOf<Double?>(null) }
+  var longitude by remember { mutableStateOf<Double?>(null) }
+  var locating by remember { mutableStateOf(false) }
+  var locationError by remember { mutableStateOf<String?>(null) }
+
+  fun applyDeviceLocation(location: android.location.Location) {
+    latitude = location.latitude
+    longitude = location.longitude
+    locating = true
+    scope.launch {
+      val parts = withContext(Dispatchers.IO) {
+        runCatching {
+          @Suppress("DEPRECATION")
+          Geocoder(context, Locale.getDefault()).getFromLocation(location.latitude, location.longitude, 1)
+            ?.firstOrNull()
+        }.getOrNull()
+      }
+      if (parts != null) {
+        addressLine = listOfNotNull(parts.subThoroughfare, parts.thoroughfare).joinToString(" ").ifBlank { parts.getAddressLine(0).orEmpty() }
+        area = parts.subLocality ?: parts.locality ?: parts.subAdminArea ?: area
+        city = parts.locality ?: parts.subAdminArea ?: parts.adminArea ?: city
+        if (addressLine.isBlank()) addressLine = parts.getAddressLine(0).orEmpty()
+        locationError = null
+      } else {
+        locationError = "GPS coordinates captured. Please enter the address details manually."
+      }
+      locating = false
+    }
+  }
+
+  val locationPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+      permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    if (!granted) {
+      locationError = "Location permission was not granted."
+      return@rememberLauncherForActivityResult
+    }
+    try {
+      val manager = context.getSystemService(android.content.Context.LOCATION_SERVICE) as LocationManager
+      locating = true
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val provider = if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) LocationManager.GPS_PROVIDER else LocationManager.NETWORK_PROVIDER
+        manager.getCurrentLocation(provider, CancellationSignal(), context.mainExecutor) { location ->
+          if (location != null) applyDeviceLocation(location)
+          else {
+            locating = false
+            locationError = "Could not get current location. Turn on device location and try again."
+          }
+        }
+      } else {
+        @Suppress("DEPRECATION")
+        val location = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+          ?: manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        if (location != null) applyDeviceLocation(location)
+        else {
+          locating = false
+          locationError = "Could not get current location. Turn on device location and try again."
+        }
+      }
+    } catch (_: SecurityException) {
+      locating = false
+      locationError = "Location permission is required."
+    }
+  }
 
   AlertDialog(
     onDismissRequest = onDismiss,
     confirmButton = {
       if (showNewAddressForm) {
         Button(
+          enabled = recipientName.isNotBlank() && phone.isNotBlank() && addressLine.isNotBlank() && city.isNotBlank() && !locating,
           onClick = {
-            if (name.isNotBlank() && phone.isNotBlank() && addressLine.isNotBlank()) {
-              val newAddr = DeliveryAddress(
-                id = "addr_${System.currentTimeMillis()}",
-                name = name.trim(),
-                phone = phone.trim(),
-                addressLine = addressLine.trim(),
-                area = area.trim(),
-                city = city.trim(),
-                province = "Punjab",
-                tag = tag,
-                isDefault = addresses.isEmpty()
-              )
-              onAddNewAddress?.invoke(newAddr)
-              onSelect(newAddr)
-              onDismiss()
-            }
+            val savedLabel = if (label == "OTHER") customLabel.trim().ifBlank { "OTHER" } else label
+            val newAddr = DeliveryAddress(
+              id = "addr_${System.currentTimeMillis()}",
+              name = recipientName.trim(),
+              phone = phone.trim(),
+              addressLine = addressLine.trim(),
+              area = area.trim(),
+              city = city.trim(),
+              province = "Punjab",
+              tag = savedLabel,
+              isDefault = addresses.isEmpty(),
+              latitude = latitude,
+              longitude = longitude
+            )
+            onAddNewAddress?.invoke(newAddr)
+            onSelect(newAddr)
+            onDismiss()
           },
           colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
-        ) {
-          Text("Save & Deliver Here", fontWeight = FontWeight.Bold)
-        }
+        ) { Text("Save Location", fontWeight = FontWeight.Bold) }
       } else {
-        TextButton(onClick = onDismiss) {
-          Text("Done", color = JTPurplePrimary, fontWeight = FontWeight.Bold)
-        }
+        TextButton(onClick = onDismiss) { Text("Done", color = JTPurplePrimary, fontWeight = FontWeight.Bold) }
       }
     },
     dismissButton = {
       if (showNewAddressForm && addresses.isNotEmpty()) {
-        TextButton(onClick = { showNewAddressForm = false }) {
-          Text("Cancel", color = JTTextSecondary)
-        }
+        TextButton(onClick = { showNewAddressForm = false }) { Text("Cancel", color = JTTextSecondary) }
       }
     },
     title = {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Filled.LocationOn, contentDescription = null, tint = JTPurplePrimary)
         Spacer(modifier = Modifier.width(8.dp))
-        Text(
-          text = if (showNewAddressForm) "Add Delivery Address" else "Select Delivery Area",
-          fontWeight = FontWeight.Bold,
-          fontSize = 17.sp
-        )
+        Text(if (showNewAddressForm) "Add Delivery Location" else "Select Saved Location", fontWeight = FontWeight.Bold, fontSize = 17.sp)
       }
     },
     text = {
-      Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth()
-      ) {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
         if (showNewAddressForm) {
-          OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Recipient Full Name") },
-            placeholder = { Text("e.g. Tariq Mehmood") },
-            singleLine = true,
+          OutlinedButton(
+            enabled = !locating,
+            onClick = {
+              val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+              val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+              if (fine || coarse) {
+                locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+              } else {
+                locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+              }
+            },
             modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = phone,
-            onValueChange = { phone = it },
-            label = { Text("Mobile Phone Number") },
-            placeholder = { Text("+92 300 1234567") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = addressLine,
-            onValueChange = { addressLine = it },
-            label = { Text("House / Street / Building") },
-            placeholder = { Text("House # 12, Street 4") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-              value = area,
-              onValueChange = { area = it },
-              label = { Text("Area / Colony") },
-              singleLine = true,
-              modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-              value = city,
-              onValueChange = { city = it },
-              label = { Text("City") },
-              singleLine = true,
-              modifier = Modifier.weight(1f)
-            )
-          }
-          Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
           ) {
-            listOf("HOME", "OFFICE").forEach { t ->
-              FilterChip(
-                selected = tag == t,
-                onClick = { tag = t },
-                label = { Text(t, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-              )
+            Icon(Icons.Filled.MyLocation, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(if (locating) "Getting current location..." else "Use Current Location")
+          }
+          if (latitude != null && longitude != null) {
+            Text("GPS: ${String.format(Locale.US, "%.6f", latitude)} , ${String.format(Locale.US, "%.6f", longitude)}", fontSize = 11.sp, color = JTTextSecondary)
+          }
+          locationError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+          OutlinedTextField(value = label, onValueChange = {}, readOnly = true, label = { Text("Location type") }, modifier = Modifier.fillMaxWidth())
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("HOME", "OFFICE", "OTHER").forEach { value ->
+              FilterChip(selected = label == value, onClick = { label = value }, label = { Text(value, fontSize = 11.sp) })
             }
+          }
+          if (label == "OTHER") {
+            OutlinedTextField(value = customLabel, onValueChange = { customLabel = it }, label = { Text("Your location name") }, placeholder = { Text("e.g. Shop, Warehouse") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+          }
+          OutlinedTextField(value = recipientName, onValueChange = { recipientName = it }, label = { Text("Recipient Full Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+          OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Mobile Phone Number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+          OutlinedTextField(value = addressLine, onValueChange = { addressLine = it }, label = { Text("House / Street / Building") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Area / Colony") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("City") }, modifier = Modifier.weight(1f))
           }
         } else {
           if (addresses.isEmpty()) {
-            Text(
-              text = "No saved addresses found. Add an address to receive your Cash on Delivery orders.",
-              fontSize = 12.sp,
-              color = JTTextSecondary
-            )
+            Text("No saved locations yet. Add a delivery location to continue.", fontSize = 12.sp, color = JTTextSecondary)
           } else {
             addresses.forEach { addr ->
               val isSelected = addr.id == selectedAddress?.id
               Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = if (isSelected) JTPurpleContainer.copy(alpha = 0.6f) else JTBackground,
-                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, JTPurplePrimary) else androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .clickable { onSelect(addr) }
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) JTPurplePrimary else JTBorder),
+                modifier = Modifier.fillMaxWidth().clickable { onSelect(addr) }
               ) {
-                Row(
-                  modifier = Modifier.padding(12.dp),
-                  verticalAlignment = Alignment.CenterVertically
-                ) {
-                  Column(modifier = Modifier.weight(1f)) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                  Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                      Text(
-                        text = "${addr.area}, ${addr.city}",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                      )
-                      Spacer(modifier = Modifier.width(6.dp))
-                      Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = JTAmberContainer
-                      ) {
-                        Text(
-                          text = addr.tag,
-                          fontSize = 10.sp,
-                          fontWeight = FontWeight.Bold,
-                          color = JTAmberDark,
-                          modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
-                      }
+                      Text(addr.tag, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                      Spacer(Modifier.width(6.dp))
+                      if (addr.isDefault) Text("DEFAULT", color = JTPurplePrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                      text = addr.addressLine,
-                      fontSize = 12.sp,
-                      color = JTTextSecondary
-                    )
+                    Text("${addr.area}, ${addr.city}", fontSize = 12.sp, color = JTTextSecondary)
+                    Text(addr.addressLine, fontSize = 12.sp, color = JTTextSecondary)
+                    if (addr.latitude != null && addr.longitude != null) Text("GPS location saved", fontSize = 10.sp, color = JTPurplePrimary)
                   }
-                  if (isSelected) {
-                    Icon(
-                      Icons.Filled.Check,
-                      contentDescription = "Selected",
-                      tint = JTPurplePrimary,
-                      modifier = Modifier.size(20.dp)
-                    )
-                  }
+                  if (isSelected) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = JTPurplePrimary)
                 }
               }
             }
           }
-
-          OutlinedButton(
-            onClick = { showNewAddressForm = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp)
-          ) {
+          OutlinedButton(onClick = { showNewAddressForm = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Add New Delivery Address", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(6.dp))
+            Text("Add New Location", fontSize = 12.sp, fontWeight = FontWeight.Bold)
           }
         }
       }
