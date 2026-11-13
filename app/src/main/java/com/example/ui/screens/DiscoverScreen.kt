@@ -96,7 +96,6 @@ fun DiscoverScreen(
   var userLatitude by remember { mutableStateOf<Double?>(null) }
   var userLongitude by remember { mutableStateOf<Double?>(null) }
   var selectedCityName by remember { mutableStateOf("Select city") }
-  var showCityPickerDialog by remember { mutableStateOf(false) }
   var selectedShop by remember { mutableStateOf<ShopRecord?>(null) }
 
   fun loadCurrentLocation() {
@@ -130,6 +129,11 @@ fun DiscoverScreen(
       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     hasLocationPermission = granted
     if (granted) loadCurrentLocation()
+  }
+
+  LaunchedEffect(Unit) {
+    if (hasLocationPermission) loadCurrentLocation()
+    else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
   }
 
   LaunchedEffect(hasLocationPermission) {
@@ -241,7 +245,7 @@ fun DiscoverScreen(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
               )
             },
-            onPickCity = { showCityPickerDialog = true },
+            onPickCity = { if (hasLocationPermission) loadCurrentLocation() else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) },
             selectedShop = selectedShop,
             onSelectShop = { selectedShop = it },
             onExploreShopProducts = { shop ->
@@ -275,44 +279,7 @@ fun DiscoverScreen(
     }
   }
 
-  // Manual City Selection Dialog when location permission is not available or user wants to switch
-  if (showCityPickerDialog) {
-    val majorCities = listOf("Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar")
 
-    AlertDialog(
-      onDismissRequest = { showCityPickerDialog = false },
-      title = { Text("Select Your City", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("Choose a city to explore local shops within delivery range:", fontSize = 12.sp, color = JTTextSecondary)
-          majorCities.forEach { city ->
-            Surface(
-              shape = RoundedCornerShape(8.dp),
-              color = if (selectedCityName == city) JTPurpleContainer else JTSurfaceVariant,
-              modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                  selectedCityName = city
-                  userLatitude = null
-                  userLongitude = null
-                  showCityPickerDialog = false
-                }
-            ) {
-              Text(
-                text = city,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-              )
-            }
-          }
-        }
-      },
-      confirmButton = {
-        TextButton(onClick = { showCityPickerDialog = false }) { Text("Close") }
-      }
-    )
-  }
 }
 
 // ----------------------------------------------------
