@@ -220,6 +220,8 @@ fun LoginScreen(
               if (otpResult.isSuccess) {
                 onLoginOtpRequired(email.trim())
               } else {
+                // Do not leave a password-authenticated session active when the required OTP step failed.
+                SupabaseAuthService.signOut(context)
                 errorMessage = otpResult.exceptionOrNull()?.message
                   ?: "We could not send your verification code. Please try again."
               }
