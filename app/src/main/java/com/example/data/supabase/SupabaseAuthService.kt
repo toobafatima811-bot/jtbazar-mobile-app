@@ -305,6 +305,21 @@ object SupabaseAuthService {
           // Account is pending email verification. Do not mark it as signed in,
           // persist an empty token, or create a customer profile before OTP.
           Log.d(TAG, "Signup created pending email verification for $userEmail")
+          val identities = userObj.optJSONArray("identities")
+          if (identities != null && identities.length() == 0) {
+            // Supabase obfuscates repeated signups; request a fresh code for an existing unverified account.
+            val resendBody = JSONObject().put("type", "signup").put("email", email.trim())
+            val resendRequest = Request.Builder()
+              .url("${SupabaseConfig.authUrl}/resend")
+              .post(resendBody.toString().toRequestBody(JSON_MEDIA_TYPE))
+              .build()
+            SupabaseClient.okHttpClient.newCall(resendRequest).execute().use { resendResponse ->
+              if (!resendResponse.isSuccessful) {
+                val resendError = resendResponse.body?.string().orEmpty()
+                Log.w(TAG, "Signup resend failed (${resendResponse.code}): ${parseErrorMessage(resendError, "Email verification code resend failed")}")
+              }
+            }
+          }
         }
 
         Result.success(session)
