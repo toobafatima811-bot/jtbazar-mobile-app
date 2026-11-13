@@ -30,7 +30,7 @@ data class SupabaseProductDto(
   val sellerId: String? = null,
   val id: String,
   val title: String,
-  val vendor: String = "JTBazar Official",
+  val vendor: String = "",
   val categoryId: String = "",
   val category: String,
   val price: Int,
@@ -68,7 +68,7 @@ data class SupabaseProductDto(
 data class SupabaseCategoryDto(
   val id: String,
   val title: String,
-  val countText: String = "100+ Products",
+  val countText: String = "",
   val sampleItems: String = "",
   val imageUrl: String? = null,
   val badge: String? = null,
@@ -192,14 +192,14 @@ data class SupabaseProductCampaignDto(
 )
 
 data class SupabaseStoreSettingsDto(
-  val deliveryFee: Int = 450,
+  val deliveryFee: Int = 0,
   val freeDeliveryEnabled: Boolean = false,
   val additionalDeliveryFee: Int = 0,
-  val codEnabled: Boolean = true,
-  val returnWindowDays: Int = 7,
-  val supportEmail: String? = "jtbazar2423@gmail.com",
-  val supportPhone: String? = "+923700822507",
-  val supportWhatsapp: String? = "+923700822507",
+  val codEnabled: Boolean = false,
+  val returnWindowDays: Int = 0,
+  val supportEmail: String? = null,
+  val supportPhone: String? = null,
+  val supportWhatsapp: String? = null,
   val storeName: String = "JTBazar"
 ) {
   val effectiveDeliveryFee: Int
