@@ -52,7 +52,10 @@ fun ProductDetailScreen(
   val context = LocalContext.current
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val liveProducts by MarketplaceRepository.products.collectAsState()
-  val liveProduct = liveProducts.firstOrNull { it.id == product.id } ?: product
+  val selectedLiveProduct by MarketplaceRepository.selectedProduct.collectAsState()
+  val liveProduct = liveProducts.firstOrNull { it.id == product.id }
+    ?: selectedLiveProduct?.takeIf { it.id == product.id }
+    ?: product
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
