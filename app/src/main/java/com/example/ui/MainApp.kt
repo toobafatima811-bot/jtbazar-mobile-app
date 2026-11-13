@@ -107,6 +107,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val pullRefreshScope = rememberCoroutineScope()
   var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
+  var selectedPublicShopId by remember { mutableStateOf<String?>(null) }
   var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
   var selectedDeliveryForNavigation by remember { mutableStateOf<JSONObject?>(null) }
 
@@ -152,7 +153,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
       AppScreen.BUDGET_SHOPPING -> currentScreen = previousScreen
       AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER -> currentScreen = AppScreen.ACCOUNT
       AppScreen.DRIVER_NAVIGATION -> currentScreen = AppScreen.DRIVER_CENTER
-      AppScreen.PUBLIC_SHOPS -> currentScreen = AppScreen.HOME
+      AppScreen.PUBLIC_SHOPS -> currentScreen = previousScreen
       else -> {
         if (currentScreen != AppScreen.HOME) {
           currentScreen = AppScreen.HOME
@@ -459,7 +460,11 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               onBackClick = { navigateBack() },
               onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
               onBuyNowClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-              onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+              onAccountClick = { currentScreen = AppScreen.ACCOUNT },
+              onVisitShop = { shopId ->
+                selectedPublicShopId = shopId
+                navigateTo(AppScreen.PUBLIC_SHOPS)
+              }
             )
           } else {
             navigateBack()
@@ -610,7 +615,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 
         AppScreen.PUBLIC_SHOPS -> {
           PublicShopsScreen(
-            onBack = { navigateBack() },
+            onBack = { selectedPublicShopId = null; navigateBack() },
+            initialShopId = selectedPublicShopId,
             onProductClick = { product ->
               selectedProduct = product
               MarketplaceRepository.selectProduct(product)
