@@ -355,7 +355,7 @@ private fun NearbyShopsMapView(
     when {
       userLat != null && userLng != null -> GeoPoint(userLat, userLng)
       nearbyShops.firstOrNull() != null -> GeoPoint(nearbyShops.first().first.latitude, nearbyShops.first().first.longitude)
-      else -> GeoPoint(30.3753, 69.3451)
+      else -> GeoPoint(0.0, 0.0)
     }
   }
 
