@@ -410,6 +410,8 @@ object SupabaseApiService {
       put("province", address.province)
       if (!address.postalCode.isNullOrBlank()) put("postal_code", address.postalCode)
       put("is_default", address.isDefault)
+      address.latitude?.let { put("latitude", it) }
+      address.longitude?.let { put("longitude", it) }
     }
     if (address.id.isNotBlank() && !address.id.startsWith("addr_")) {
       SupabaseClient.patch("customer_addresses?id=eq.${address.id}&user_id=eq.${address.userId}", json.toString())
