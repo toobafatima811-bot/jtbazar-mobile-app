@@ -29,7 +29,7 @@
         </provider>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="jtbazar_updates" />
+            android:value="jtbazar_updates_sound_v2" />
         <service
             android:name=".notifications.JTBazarFirebaseMessagingService"
             android:exported="false">
