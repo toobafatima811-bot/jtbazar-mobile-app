@@ -94,7 +94,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
           orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus)
           ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
         }
-      } catch (e: Exception) { errorMessage = e.message ?: "Vendor information could not be loaded." }
+      } catch (e: Exception) { errorMessage = vendorLoadErrorMessage(e) }
       finally { loading = false }
     }
   }
@@ -141,6 +141,14 @@ fun VendorCenterScreen(onBack: () -> Unit) {
         if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
         if (info.isNotBlank()) Text(info, color = Color(0xFF16803C))
         when {
+          errorMessage.isNotBlank() -> {
+            Text("Connection problem", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+            Text("Aapki application ya shop ka koi data submit nahi hua. Internet check karke dobara try karein.", color = Color.Gray)
+            Button(onClick = { refresh() }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
+              Text("Retry connection")
+            }
+          }
           application?.vendorLocked == true -> {
             Text("Vendor account restricted", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             StatusPanel(application!!)
@@ -484,4 +492,21 @@ private fun SummaryTile(label: String, value: String, modifier: Modifier = Modif
 private fun StatusPanel(app: VendorApplication) {
   val color = when (app.status.lowercase()) { "approved" -> Color(0xFF16803C); "rejected" -> Color(0xFFB91C1C); else -> Color(0xFFB7791F) }
   Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(app.shopName, fontWeight = FontWeight.Bold); Text("Application status: ${app.status.uppercase()}", color = color, fontWeight = FontWeight.Bold) } }
+}
+
+
+private fun vendorLoadErrorMessage(error: Throwable): String {
+  val details = generateSequence(error) { it.cause }
+    .mapNotNull { it.message }
+    .joinToString(" ")
+    .lowercase()
+  return when {
+    details.contains("unable to resolve host") || details.contains("unknownhostexception") || details.contains("no address associated with hostname") ->
+      "JTBazar server ka address abhi resolve nahi ho raha. Ye DNS ya internet network ka masla ho sakta hai. Wi-Fi/mobile data check karein aur dobara koshish karein."
+    details.contains("timeout") || details.contains("timed out") ->
+      "JTBazar server se response nahi mila. Internet connection check karke dobara koshish karein."
+    details.contains("failed to connect") || details.contains("network is unreachable") ->
+      "Internet connection available nahi lag raha. Network check karke dobara koshish karein."
+    else -> "Vendor information load nahi ho saki. Dobara koshish karein."
+  }
 }
