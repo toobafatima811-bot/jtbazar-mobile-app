@@ -22,8 +22,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -989,6 +991,23 @@ fun ProductCard(
   val cartItems by MarketplaceRepository.cartItems.collectAsState()
   val hasVariants = product.palettes.isNotEmpty() || product.sizes.isNotEmpty()
   val isInCart = cartItems.any { it.product.id == product.id }
+  // Match the website's restrained 7.2s shine sweep without affecting card interaction.
+  val shineTransition = rememberInfiniteTransition(label = "product_card_shine")
+  val shineProgress by shineTransition.animateFloat(
+    initialValue = 1.4f,
+    targetValue = -1.4f,
+    animationSpec = infiniteRepeatable(
+      animation = keyframes {
+        durationMillis = 7200
+        1.4f at 0
+        1.4f at 5500
+        -1.4f at 6800
+        1.4f at 7200
+      },
+      repeatMode = RepeatMode.Restart
+    ),
+    label = "product_card_shine_progress"
+  )
 
   Card(
     shape = RoundedCornerShape(16.dp),
@@ -1000,6 +1019,28 @@ fun ProductCard(
       .clickable(onClick = onProductClick)
       .testTag("product_card_${product.id}")
   ) {
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(16.dp))
+        .drawWithCache {
+          val sweep = Brush.linearGradient(
+            colors = listOf(
+              Color.Transparent,
+              Color.White.copy(alpha = 0.035f),
+              Color.White.copy(alpha = 0.20f),
+              Color.White.copy(alpha = 0.035f),
+              Color.Transparent
+            ),
+            start = Offset(size.width * shineProgress, 0f),
+            end = Offset(size.width * (shineProgress + 0.42f), size.height)
+          )
+          onDrawWithContent {
+            drawContent()
+            drawRect(sweep)
+          }
+        }
+    ) {
     Column(
       modifier = Modifier.fillMaxWidth()
     ) {
@@ -1212,6 +1253,7 @@ fun ProductCard(
           }
         }
       }
+    }
     }
   }
 }
