@@ -56,6 +56,13 @@ fun RegistrationScreen(
 
   var isLoading by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf<String?>(null) }
+  val googleOAuthStatus by SupabaseAuthService.googleOAuthStatus.collectAsState()
+  LaunchedEffect(googleOAuthStatus) {
+    if (googleOAuthStatus != null && googleOAuthStatus != "success") {
+      errorMessage = googleOAuthStatus
+      SupabaseAuthService.clearGoogleOAuthStatus()
+    }
+  }
 
   val isEmailValid = email.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()
   val isPasswordMatch = password.isNotEmpty() && password == confirmPassword
@@ -330,10 +337,18 @@ fun RegistrationScreen(
       // Continue with Google
       OutlinedButton(
         onClick = {
-          // Open Supabase Google OAuth provider URL
-          val authUrl = "${SupabaseConfig.authUrl}/authorize?provider=google"
-          val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-          context.startActivity(intent)
+          errorMessage = null
+          SupabaseAuthService.createGoogleOAuthUrl(context)
+            .onSuccess { authUrl ->
+              try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+              } catch (e: Exception) {
+                errorMessage = e.message ?: "Could not open Google sign-in."
+              }
+            }
+            .onFailure { error ->
+              errorMessage = error.message ?: "Could not start Google sign-in."
+            }
         },
         shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
