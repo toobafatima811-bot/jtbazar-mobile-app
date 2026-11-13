@@ -147,7 +147,7 @@ object SupabaseAuthService {
       Result.success(url)
     } catch (e: Exception) {
       Log.e(TAG, "Could not start Google OAuth", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -329,7 +329,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "signUp error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -384,7 +384,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "verifySignupOtp error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -408,7 +408,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "resendSignupOtp error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -478,7 +478,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "signIn error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -500,7 +500,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "sendLoginOtp error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -542,7 +542,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "verifyLoginOtp error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -572,7 +572,7 @@ object SupabaseAuthService {
       Result.success(Unit)
     } catch (e: Exception) {
       Log.e(TAG, "signOut error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -592,7 +592,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "updatePassword error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -620,7 +620,7 @@ object SupabaseAuthService {
       }
     } catch (e: Exception) {
       Log.e(TAG, "resetPassword error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
@@ -702,7 +702,7 @@ object SupabaseAuthService {
       )
     } catch (e: Exception) {
       Log.e(TAG, "upsertProfile error", e)
-      Result.failure(e)
+      Result.failure(IOException(authFailureMessage(e, "Something went wrong. Please try again.")))
     }
   }
 
