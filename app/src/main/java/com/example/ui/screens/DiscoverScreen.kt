@@ -53,6 +53,7 @@ import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.theme.*
+import com.example.location.AddressReverseGeocoder
 import kotlin.math.*
 import java.util.Locale
 import com.google.android.gms.location.LocationServices
@@ -79,6 +80,7 @@ fun DiscoverScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val locationScope = rememberCoroutineScope()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
@@ -109,7 +111,12 @@ fun DiscoverScreen(
           if (location != null) {
             userLatitude = location.latitude
             userLongitude = location.longitude
-            selectedCityName = "Your current area"
+            locationScope.launch {
+              val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
+              selectedCityName = listOf(resolved?.area, resolved?.city)
+                .filterNotNull().filter { it.isNotBlank() }.distinct().joinToString(", ")
+                .ifBlank { "Your current area" }
+            }
           } else {
             Toast.makeText(context, "Current location unavailable. Please enable device location.", Toast.LENGTH_SHORT).show()
           }
