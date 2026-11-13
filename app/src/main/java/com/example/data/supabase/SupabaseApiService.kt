@@ -411,6 +411,7 @@ object SupabaseApiService {
       put("city", address.city)
       put("province", address.province)
       if (!address.postalCode.isNullOrBlank()) put("postal_code", address.postalCode)
+      put("tag", address.tag)
       put("is_default", address.isDefault)
       address.latitude?.let { put("latitude", it) }
       address.longitude?.let { put("longitude", it) }
