@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
+import com.example.ui.components.rememberAdaptiveColumnCount
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.SellerReviewService
 import org.json.JSONArray
@@ -105,6 +106,7 @@ private fun PublicShopDetailScreen(
   val user by SupabaseClient.currentUser.collectAsState()
   val orders by MarketplaceRepository.orders.collectAsState()
   val scope = rememberCoroutineScope()
+  val productColumns = rememberAdaptiveColumnCount(minCellWidth = 150.dp, horizontalPadding = 32.dp, spacing = 12.dp)
   var sellerReviews by remember(shop.id) { mutableStateOf(JSONArray()) }
   var reviewRating by remember(shop.id) { mutableIntStateOf(5) }
   var reviewComment by remember(shop.id) { mutableStateOf("") }
@@ -208,18 +210,23 @@ private fun PublicShopDetailScreen(
       if (products.isEmpty()) {
         Text("No published products from this shop are currently available.")
       } else {
-        products.forEach { product ->
-          Card(
-            modifier = Modifier.fillMaxWidth().clickable { onProductClick(product) },
-            shape = RoundedCornerShape(12.dp)
+        products.chunked(productColumns).forEach { productRow ->
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
           ) {
-            Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-              AsyncImage(model = product.imageUrl, contentDescription = product.title, modifier = Modifier.size(64.dp))
-              Spacer(Modifier.width(12.dp))
-              Column(Modifier.weight(1f)) {
-                Text(product.title, fontWeight = FontWeight.SemiBold)
-                Text("PKR ${product.price}", style = MaterialTheme.typography.bodySmall)
-              }
+            productRow.forEach { product ->
+              ProductCard(
+                product = product,
+                onProductClick = { onProductClick(product) },
+                onAddToCart = { MarketplaceRepository.addToCart(product) },
+                onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
+                modifier = Modifier.weight(1f)
+              )
+            }
+            repeat((productColumns - productRow.size).coerceAtLeast(0)) {
+              Spacer(Modifier.weight(1f))
             }
           }
         }
