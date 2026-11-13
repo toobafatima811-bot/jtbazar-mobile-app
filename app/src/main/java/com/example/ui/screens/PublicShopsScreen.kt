@@ -86,7 +86,7 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit, ini
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                   Text(shop.name, fontWeight = FontWeight.Bold)
-                  Text("Verified seller • ${shopProducts.size.coerceAtLeast(shop.productCount)} products", style = MaterialTheme.typography.bodySmall)
+                  Text((if (shop.isVerified) "Verified seller" else "Seller") + " • " + shopProducts.size.coerceAtLeast(shop.productCount) + " products", style = MaterialTheme.typography.bodySmall)
                   if (shop.city.isNotBlank()) Text(shop.city, style = MaterialTheme.typography.bodySmall)
                 }
                 Text("View", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -142,7 +142,7 @@ private fun PublicShopDetailScreen(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
               Text(shop.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-              Text("Verified seller • ${products.size.coerceAtLeast(shop.productCount)} products", style = MaterialTheme.typography.bodySmall)
+              Text((if (shop.isVerified) "Verified seller" else "Seller") + " • " + products.size.coerceAtLeast(shop.productCount) + " products", style = MaterialTheme.typography.bodySmall)
               if (shop.city.isNotBlank()) Text(shop.city, style = MaterialTheme.typography.bodySmall)
             }
           }
