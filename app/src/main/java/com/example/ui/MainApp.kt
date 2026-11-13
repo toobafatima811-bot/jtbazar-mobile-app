@@ -415,7 +415,11 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               navigateTo(AppScreen.PRODUCT_DETAIL)
             },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+            onAccountClick = { currentScreen = AppScreen.ACCOUNT },
+            onOpenShop = { shopId ->
+              selectedPublicShopId = shopId
+              navigateTo(AppScreen.PUBLIC_SHOPS)
+            }
           )
         }
 
