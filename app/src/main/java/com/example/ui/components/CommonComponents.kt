@@ -2,7 +2,6 @@ package com.example.ui.components
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.location.Geocoder
 import android.location.LocationManager
 import android.os.Build
 import android.os.CancellationSignal
@@ -37,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import com.example.location.AddressReverseGeocoder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -411,19 +411,12 @@ fun AddressSelectionSheet(
     longitude = location.longitude
     locating = true
     scope.launch {
-      val parts = withContext(Dispatchers.IO) {
-        runCatching {
-          @Suppress("DEPRECATION")
-          Geocoder(context, Locale.getDefault()).getFromLocation(location.latitude, location.longitude, 1)
-            ?.firstOrNull()
-        }.getOrNull()
-      }
-      if (parts != null) {
-        addressLine = listOfNotNull(parts.subThoroughfare, parts.thoroughfare).joinToString(" ").ifBlank { parts.getAddressLine(0).orEmpty() }
-        area = parts.subLocality ?: parts.locality ?: parts.subAdminArea ?: area
-        city = parts.locality ?: parts.subAdminArea ?: parts.adminArea ?: city
-        if (addressLine.isBlank()) addressLine = parts.getAddressLine(0).orEmpty()
-        locationError = null
+      val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
+      if (resolved != null) {
+        if (resolved.street.isNotBlank()) addressLine = resolved.street
+        if (resolved.area.isNotBlank()) area = resolved.area
+        if (resolved.city.isNotBlank()) city = resolved.city
+        locationError = if (resolved.street.isBlank()) "Street name was not available. Please enter your house/street details." else null
       } else {
         locationError = "GPS coordinates captured. Please enter the address details manually."
       }
@@ -483,7 +476,7 @@ fun AddressSelectionSheet(
               addressLine = addressLine.trim(),
               area = area.trim(),
               city = city.trim(),
-              province = "Punjab",
+              province = "",
               tag = savedLabel,
               isDefault = addresses.isEmpty(),
               latitude = latitude,
