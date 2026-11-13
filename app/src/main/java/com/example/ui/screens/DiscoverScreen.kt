@@ -277,15 +277,7 @@ fun DiscoverScreen(
 
   // Manual City Selection Dialog when location permission is not available or user wants to switch
   if (showCityPickerDialog) {
-    val majorCities = listOf(
-      "Lahore" to Pair(31.5204, 74.3587),
-      "Karachi" to Pair(24.8607, 67.0011),
-      "Islamabad" to Pair(33.6844, 73.0479),
-      "Rawalpindi" to Pair(33.5651, 73.0169),
-      "Faisalabad" to Pair(31.4504, 73.1350),
-      "Multan" to Pair(30.1575, 71.5249),
-      "Peshawar" to Pair(34.0151, 71.5249)
-    )
+    val majorCities = listOf("Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan", "Peshawar")
 
     AlertDialog(
       onDismissRequest = { showCityPickerDialog = false },
@@ -293,7 +285,7 @@ fun DiscoverScreen(
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text("Choose a city to explore local shops within delivery range:", fontSize = 12.sp, color = JTTextSecondary)
-          majorCities.forEach { (city, coords) ->
+          majorCities.forEach { city ->
             Surface(
               shape = RoundedCornerShape(8.dp),
               color = if (selectedCityName == city) JTPurpleContainer else JTSurfaceVariant,
@@ -301,8 +293,8 @@ fun DiscoverScreen(
                 .fillMaxWidth()
                 .clickable {
                   selectedCityName = city
-                  userLatitude = coords.first
-                  userLongitude = coords.second
+                  userLatitude = null
+                  userLongitude = null
                   showCityPickerDialog = false
                 }
             ) {
