@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -60,6 +61,12 @@ fun ProductDetailScreen(
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
   val publicShops by MarketplaceRepository.shops.collectAsState()
+  val activeCampaigns by MarketplaceRepository.activeProductCampaigns.collectAsState()
+  var campaignNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+  val productCampaign = activeCampaigns.firstOrNull { entry -> entry.products.any { it.id == product.id } }?.campaign
+  val campaignEndMillis = remember(productCampaign?.endsAt) { productCampaign?.endsAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } }
+  LaunchedEffect(campaignEndMillis) { while (campaignEndMillis != null && campaignNow < campaignEndMillis) { kotlinx.coroutines.delay(1000); campaignNow = System.currentTimeMillis() } }
+  BackHandler { onBackClick() }
   val sellerShop = publicShops.firstOrNull { it.id == liveProduct.sellerId }
 
   var showAddressDialog by remember { mutableStateOf(false) }
@@ -356,6 +363,31 @@ fun ProductDetailScreen(
           }
 
 
+        }
+      }
+
+
+      if (campaignEndMillis != null && campaignEndMillis > campaignNow) item {
+        val remaining = ((campaignEndMillis - campaignNow) / 1000L).coerceAtLeast(0L)
+        val days = remaining / 86400
+        val hours = (remaining % 86400) / 3600
+        val minutes = (remaining % 3600) / 60
+        val seconds = remaining % 60
+        Surface(color = Color(0xFFFFF1F0), shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD5D1)), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+          Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(productCampaign?.displayTitle?.ifBlank { "Flash Deal ends in" } ?: "Flash Deal ends in", fontWeight = FontWeight.Bold, color = Color(0xFFB42318), fontSize = 14.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+              val timerParts = if (days > 0) listOf(days, hours, minutes, seconds) else listOf(hours, minutes, seconds)
+              timerParts.forEachIndexed { index, value ->
+                Surface(color = Color(0xFFB42318), shape = RoundedCornerShape(8.dp)) {
+                  Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(value.toString().padStart(2, '0'), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                    Text(if (days > 0) listOf("DAYS", "HRS", "MIN", "SEC")[index] else listOf("HRS", "MIN", "SEC")[index], color = Color.White, fontSize = 9.sp)
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
