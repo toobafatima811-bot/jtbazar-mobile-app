@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Looper
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +33,9 @@ import androidx.core.content.ContextCompat
 import com.example.data.supabase.SupabaseClient
 import com.example.ui.theme.*
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,6 +49,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import org.osmdroid.views.overlay.gestures.RotationGestureOverlay
 import java.util.Locale
 
 @SuppressLint("MissingPermission")
@@ -107,12 +112,32 @@ fun DriverNavigationScreen(
     }
   }
 
+  // Keep the driver's position fresh while this navigation screen is visible.
+  DisposableEffect(hasLocationPermission) {
+    if (!hasLocationPermission) return@DisposableEffect onDispose { }
+    val fused = LocationServices.getFusedLocationProviderClient(context)
+    val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000L)
+      .setMinUpdateIntervalMillis(1500L)
+      .setWaitForAccurateLocation(true)
+      .build()
+    val callback = object : LocationCallback() {
+      override fun onLocationResult(result: LocationResult) {
+        result.lastLocation?.let { driverLocation = it }
+      }
+    }
+    try {
+      fused.requestLocationUpdates(request, callback, Looper.getMainLooper())
+    } catch (_: SecurityException) { }
+    onDispose { fused.removeLocationUpdates(callback) }
+  }
+
   // Route state
   var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
   var distanceText by remember { mutableStateOf<String?>(null) }
   var durationText by remember { mutableStateOf<String?>(null) }
   var isFetchingRoute by remember { mutableStateOf(false) }
   var osmdroidMap by remember { mutableStateOf<MapView?>(null) }
+  var mapCameraInitialized by remember { mutableStateOf(false) }
 
   // Action status state
   var currentStatus by remember { mutableStateOf(assignmentStatus) }
@@ -279,6 +304,8 @@ fun DriverNavigationScreen(
             MapView(ctx).apply {
               setTileSource(TileSourceFactory.MAPNIK)
               setMultiTouchControls(true)
+              val rotationGestures = RotationGestureOverlay(this).apply { isEnabled = true }
+              overlays.add(rotationGestures)
               isTilesScaledToDpi = true
               controller.setZoom(15.0)
               controller.setCenter(GeoPoint(customerLat, customerLng))
@@ -286,7 +313,10 @@ fun DriverNavigationScreen(
             }
           },
           update = { map ->
+            // Keep the rotation gesture overlay installed while refreshing route/markers.
+            val rotationOverlay = map.overlays.filterIsInstance<RotationGestureOverlay>().firstOrNull()
             map.overlays.clear()
+            rotationOverlay?.let { map.overlays.add(it) }
 
             // 1. Add route polyline if available
             if (routePoints.isNotEmpty()) {
@@ -320,13 +350,18 @@ fun DriverNavigationScreen(
               }
               map.overlays.add(driverMarker)
 
-              // Adjust bounding box to show both points comfortably
-              try {
-                val box = BoundingBox.fromGeoPoints(listOf(GeoPoint(dLoc.latitude, dLoc.longitude), GeoPoint(customerLat, customerLng)))
-                map.zoomToBoundingBox(box.increaseByScale(1.35f), true)
-              } catch (_: Exception) {}
-            } else {
+              // Fit both locations only once. Subsequent GPS updates must not fight
+              // the driver's manual pan, zoom, or map rotation gestures.
+              if (!mapCameraInitialized) {
+                try {
+                  val box = BoundingBox.fromGeoPoints(listOf(GeoPoint(dLoc.latitude, dLoc.longitude), GeoPoint(customerLat, customerLng)))
+                  map.zoomToBoundingBox(box.increaseByScale(1.35f), true)
+                  mapCameraInitialized = true
+                } catch (_: Exception) { }
+              }
+            } else if (!mapCameraInitialized) {
               map.controller.setCenter(GeoPoint(customerLat, customerLng))
+              mapCameraInitialized = true
             }
 
             map.invalidate()
@@ -368,7 +403,8 @@ fun DriverNavigationScreen(
             val dLoc = driverLocation
             if (dLoc != null && osmdroidMap != null) {
               osmdroidMap?.controller?.animateTo(GeoPoint(dLoc.latitude, dLoc.longitude))
-              osmdroidMap?.controller?.setZoom(16.5)
+              osmdroidMap?.controller?.setZoom(17.0)
+              osmdroidMap?.mapOrientation = 0f
             } else if (!hasLocationPermission) {
               permissionLauncher.launch(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
