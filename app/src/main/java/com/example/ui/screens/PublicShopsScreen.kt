@@ -27,12 +27,15 @@ import org.json.JSONArray
 import kotlinx.coroutines.launch
 
 @Composable
-fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit) {
+fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit, initialShopId: String? = null) {
   val shops by MarketplaceRepository.shops.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
   var selectedShop by remember { mutableStateOf<ShopRecord?>(null) }
 
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
+  LaunchedEffect(shops, initialShopId) {
+    if (!initialShopId.isNullOrBlank()) selectedShop = shops.firstOrNull { it.id == initialShopId }
+  }
 
   if (selectedShop != null) {
     PublicShopDetailScreen(
