@@ -1517,7 +1517,7 @@ private fun DriverApplicationLocationPicker(
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   var mapView by remember { mutableStateOf<MapView?>(null) }
-  var selectedPoint by remember { mutableStateOf(GeoPoint(24.8607, 67.0011)) }
+  var selectedPoint by remember { mutableStateOf(GeoPoint(0.0, 0.0)) }
   var isLocating by remember { mutableStateOf(false) }
   var locationError by remember { mutableStateOf<String?>(null) }
   var hasLocationPermission by remember {
@@ -1578,7 +1578,7 @@ private fun DriverApplicationLocationPicker(
                 setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
                 isTilesScaledToDpi = true
-                controller.setZoom(15.5)
+                controller.setZoom(2.5)
                 controller.setCenter(selectedPoint)
                 mapView = this
               }
@@ -1624,6 +1624,10 @@ private fun DriverApplicationLocationPicker(
               val point = mapView?.mapCenter ?: selectedPoint
               val lat = point.latitude
               val lng = point.longitude
+              if (lat == 0.0 && lng == 0.0) {
+                locationError = "Select your actual location using GPS or move the map to the correct point."
+                return@Button
+              }
               scope.launch {
                 val address = withContext(Dispatchers.IO) {
                   try {
