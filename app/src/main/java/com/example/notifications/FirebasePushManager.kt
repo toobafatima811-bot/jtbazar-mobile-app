@@ -26,6 +26,7 @@ object FirebasePushManager {
   private const val TAG = "FirebasePushManager"
   private const val PREFS_NAME = "jtbazar_fcm_prefs"
   private const val KEY_CACHED_TOKEN = "cached_fcm_token"
+  const val NOTIFICATION_CHANNEL_ID = "jtbazar_updates_sound_v2"
   private const val KEY_LAST_REGISTERED_USER = "last_registered_user"
   private const val KEY_LAST_REGISTERED_TOKEN = "last_registered_token"
 
@@ -68,10 +69,18 @@ object FirebasePushManager {
       val manager = context.getSystemService(android.app.NotificationManager::class.java)
       manager?.createNotificationChannel(
         android.app.NotificationChannel(
-          "jtbazar_updates",
-          "JTBazar updates",
+          NOTIFICATION_CHANNEL_ID,
+          "JTBazar notifications",
           android.app.NotificationManager.IMPORTANCE_DEFAULT
-        )
+        ).apply {
+          description = "Order updates, delivery alerts and important JTBazar notifications"
+          setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+            android.media.AudioAttributes.Builder()
+              .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+              .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+              .build())
+          enableVibration(true)
+        }
       )
     }
   }
