@@ -30,10 +30,18 @@ class JTBazarFirebaseMessagingService : FirebaseMessagingService() {
     super.onMessageReceived(message)
     val title = message.notification?.title ?: message.data["title"] ?: "JTBazar"
     val body = message.notification?.body ?: message.data["body"] ?: "You have a new update."
-    val channelId = "jtbazar_updates"
+    val channelId = FirebasePushManager.NOTIFICATION_CHANNEL_ID
     val manager = getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      manager.createNotificationChannel(NotificationChannel(channelId, "JTBazar updates", NotificationManager.IMPORTANCE_DEFAULT))
+      manager.createNotificationChannel(NotificationChannel(channelId, "JTBazar notifications", NotificationManager.IMPORTANCE_DEFAULT).apply {
+        description = "Order updates, delivery alerts and important JTBazar notifications"
+        setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+          android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build())
+        enableVibration(true)
+      })
     }
     val intent = Intent(this, MainActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
