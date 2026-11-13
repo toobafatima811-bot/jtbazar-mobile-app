@@ -344,7 +344,7 @@ fun ProductDetailScreen(
               color = JTRed
             ) {
               Text(
-                text = "${product.discountPercent}% OFF",
+                text = "${liveProduct.discountPercent}% OFF",
                 color = Color.White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
@@ -385,7 +385,7 @@ fun ProductDetailScreen(
               )
               Spacer(modifier = Modifier.width(4.dp))
               Text(
-                text = if (product.reviewCount > 0) String.format(java.util.Locale.US, "%.1f", product.rating) + " (" + product.reviewCount + " reviews)" else "No reviews yet",
+                text = if (liveProduct.reviewCount > 0) String.format(java.util.Locale.US, "%.1f", liveProduct.rating) + " (" + liveProduct.reviewCount + " reviews)" else "No reviews yet",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTAmberDark
@@ -414,7 +414,7 @@ fun ProductDetailScreen(
             ) {
               Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                  text = "Rs. ${String.format("%,d", product.price)}",
+                  text = "Rs. ${String.format("%,d", liveProduct.price)}",
                   fontSize = 24.sp,
                   fontWeight = FontWeight.ExtraBold,
                   color = JTPurplePrimary
@@ -774,7 +774,11 @@ fun ProductDetailScreen(
           }
         }
 
-        // Customer reviews from Supabase
+      }
+
+      // Customer reviews from Supabase - independent card
+      item {
+        Spacer(modifier = Modifier.height(12.dp))
         Surface(
           shape = RoundedCornerShape(14.dp),
           color = JTCardBg,
