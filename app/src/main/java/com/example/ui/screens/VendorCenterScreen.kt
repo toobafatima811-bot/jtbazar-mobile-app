@@ -144,7 +144,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
           errorMessage.isNotBlank() -> {
             Text("Connection problem", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
-            Text("Aapki application ya shop ka koi data submit nahi hua. Internet check karke dobara try karein.", color = Color.Gray)
+            Text("No application or shop data was submitted. Check your internet connection and try again.", color = Color.Gray)
             Button(onClick = { refresh() }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
               Text("Retry connection")
             }
@@ -320,8 +320,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                   require(cnic.length == 13) { "Enter a 13-digit CNIC number." }
                   require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani phone number." }
                   require(currentAddress.trim().length >= 3 && fullAddress.trim().length >= 10 && shopLocation.trim().length >= 10) { "Complete all shop address fields." }
-                  val lat = latitude.toDoubleOrNull() ?: error("Enter a valid latitude.")
-                  val lng = longitude.toDoubleOrNull() ?: error("Enter a valid longitude.")
+                  val lat = latitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
+                  val lng = longitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
                   require(lat in -90.0..90.0 && lng in -180.0..180.0) { "Map coordinates are invalid." }
                   require(verificationPath != null && frontPath != null && backPath != null) { "Upload all three verification documents." }
                   require(u.email?.isNotBlank() == true) { "Your account email is missing." }
@@ -465,7 +465,7 @@ private fun ShopLocationPickerDialog(
           },
           modifier = Modifier.fillMaxWidth()
         ) { Text("Use my current location") }
-        Text("Latitude: %.6f   Longitude: %.6f".format(Locale.US, selectedPoint.latitude, selectedPoint.longitude), style = MaterialTheme.typography.bodySmall)
+        
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
           Button(onClick = { onConfirm(selectedPoint) }, enabled = hasSelectedPoint, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Use this location") }
