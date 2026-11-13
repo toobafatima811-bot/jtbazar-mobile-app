@@ -382,16 +382,13 @@ fun ProductDetailScreen(
               )
               Spacer(modifier = Modifier.width(4.dp))
               Text(
-                text = "${product.rating} (${product.reviewCount} verified reviews)",
+                text = if (product.reviewCount > 0) String.format(java.util.Locale.US, "%.1f", product.rating) + " (" + product.reviewCount + " reviews)" else "No reviews yet",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTAmberDark
               )
             }
-          }
-
-
-        )
+        }
       }
 
       // 5. Price & In-Stock Card
