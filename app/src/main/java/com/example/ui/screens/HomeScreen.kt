@@ -1397,7 +1397,7 @@ private fun ProductCampaignSection(
       Modifier.fillMaxWidth()
         .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x337A286F), spotColor = Color(0x337A286F))
         .clip(RoundedCornerShape(20.dp))
-        .background(Brush.horizontalGradient(listOf(Color(0xFF43206F), Color(0xFF792B80), Color(0xFFE85A2A)))
+        .background(Brush.horizontalGradient(listOf(Color(0xFF43206F), Color(0xFF792B80), Color(0xFFE85A2A))))
     ) {
       Box(Modifier.align(Alignment.TopEnd).offset(x = 28.dp, y = (-45).dp).size(170.dp).border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape))
       Text("%", Modifier.align(Alignment.TopEnd).offset(x = (-92).dp, y = (-18).dp), color = Color.White.copy(alpha = 0.13f), fontSize = 78.sp, fontWeight = FontWeight.Black)
@@ -1409,7 +1409,7 @@ private fun ProductCampaignSection(
         }
       } else {
         Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 22.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-          Box(Modifier.weight(1f)) { CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size) }
+          Box(Modifier.weight(1f)) { CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size, campaignTypeLabel) }
           CampaignCountdownPanel(remainingSeconds, Modifier.width(210.dp))
         }
       }
