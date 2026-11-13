@@ -52,9 +52,9 @@ object MarketplaceRepository {
   val additionalDeliveryFee: StateFlow<Int> = _additionalDeliveryFee.asStateFlow()
   private val _storeSettings = MutableStateFlow<SupabaseStoreSettingsDto?>(null)
   val storeSettings: StateFlow<SupabaseStoreSettingsDto?> = _storeSettings.asStateFlow()
-  private val _codEnabled = MutableStateFlow(true)
+  private val _codEnabled = MutableStateFlow(false)
   val codEnabled: StateFlow<Boolean> = _codEnabled.asStateFlow()
-  private val _returnWindowDays = MutableStateFlow(7)
+  private val _returnWindowDays = MutableStateFlow(0)
   val returnWindowDays: StateFlow<Int> = _returnWindowDays.asStateFlow()
 
   // Countdown seconds for daily promotion
@@ -99,12 +99,31 @@ object MarketplaceRepository {
   private val _selectedProduct = MutableStateFlow<Product?>(null)
   val selectedProduct: StateFlow<Product?> = _selectedProduct.asStateFlow()
 
+  private fun applyProductReviewAggregate(productId: String, rows: List<SupabaseReviewDto>) {
+    val validRatings = rows.map { it.rating }.filter { it in 1..5 }
+    val count = validRatings.size
+    val average = if (count > 0) validRatings.average() else 0.0
+    _products.update { products ->
+      products.map { product ->
+        if (product.id == productId) product.copy(rating = average, reviewCount = count) else product
+      }
+    }
+    _selectedProduct.value?.let { selected ->
+      if (selected.id == productId) _selectedProduct.value = selected.copy(rating = average, reviewCount = count)
+    }
+  }
+
   fun selectProduct(product: Product) {
     _selectedProduct.value = product
     scope.launch {
       SupabaseApiService.fetchProductReviews(product.id).onSuccess { rows ->
         _reviews.update { current -> current.filterNot { it.productId == product.id } + rows }
-      }.onFailure { _errorMessage.value = it.message }
+        applyProductReviewAggregate(product.id, rows)
+      }.onFailure {
+        _errorMessage.value = it.message
+        // Do not present cached or guessed ratings when live reviews cannot be verified.
+        applyProductReviewAggregate(product.id, emptyList())
+      }
     }
   }
 
@@ -731,6 +750,7 @@ object MarketplaceRepository {
         .onSuccess {
           SupabaseApiService.fetchProductReviews(productId).onSuccess { rows ->
             _reviews.update { current -> current.filterNot { it.productId == productId } + rows }
+            applyProductReviewAggregate(productId, rows)
           }
           _errorMessage.value = "Your review has been submitted for moderation."
         }
