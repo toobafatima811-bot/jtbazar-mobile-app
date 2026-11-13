@@ -220,8 +220,8 @@ fun LoginScreen(
               if (otpResult.isSuccess) {
                 onLoginOtpRequired(email.trim())
               } else {
-                // If OTP request is not mandatory or direct sign-in allowed, finish login
-                onLoginSuccess()
+                errorMessage = otpResult.exceptionOrNull()?.message
+                  ?: "We could not send your verification code. Please try again."
               }
             } else {
               isLoading = false
