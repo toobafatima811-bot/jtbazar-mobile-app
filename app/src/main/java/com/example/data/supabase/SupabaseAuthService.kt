@@ -704,15 +704,57 @@ object SupabaseAuthService {
   }
 
   private fun parseErrorMessage(jsonStr: String, fallback: String): String {
-    return try {
-      val json = JSONObject(jsonStr)
-      json.optString("error_description",
-        json.optString("msg",
-          json.optString("message", fallback)
-        )
-      )
-    } catch (_: Exception) {
-      fallback
+    val json = try { JSONObject(jsonStr) } catch (_: Exception) { JSONObject() }
+    val rawCode = json.optString("error_code").ifBlank { json.optString("code") }.lowercase()
+    val rawMessage = json.optString("error_description")
+      .ifBlank { json.optString("msg") }
+      .ifBlank { json.optString("message") }
+      .ifBlank { json.optString("error") }
+      .ifBlank { fallback }
+    val message = rawMessage.lowercase()
+    return when {
+      rawCode.contains("invalid_credentials") || message.contains("invalid login credentials") ->
+        "Email or password is incorrect. Please check and try again."
+      rawCode.contains("email_not_confirmed") || message.contains("email not confirmed") ->
+        "Please verify your email with the 6-digit code before signing in."
+      rawCode.contains("user_already_exists") || message.contains("user already registered") || message.contains("already been registered") ->
+        "An account with this email already exists. Please sign in or request a new verification code."
+      rawCode.contains("weak_password") || message.contains("password should be") ->
+        "Choose a stronger password with at least 6 characters."
+      rawCode.contains("over_email_send_rate_limit") || message.contains("rate limit") || message.contains("too many requests") ->
+        "Too many email requests. Please wait a few minutes before trying again."
+      rawCode.contains("email_address_invalid") || message.contains("invalid email") ->
+        "Please enter a valid email address."
+      rawCode.contains("otp_expired") || message.contains("expired") ->
+        "This verification code has expired. Request a new code and try again."
+      rawCode.contains("otp_disabled") ->
+        "Email verification is temporarily unavailable. Please contact support."
+      rawCode.contains("provider_disabled") || message.contains("provider is not enabled") ->
+        "This sign-in method is currently unavailable. Please try another method."
+      rawCode.contains("identity_already_exists") || message.contains("identity already exists") ->
+        "This Google account is already connected to another JTBazar account."
+      rawCode.contains("bad_code_verifier") || message.contains("code verifier") ->
+        "Google sign-in session expired. Please start Google sign-in again."
+      message.contains("network is unreachable") || message.contains("unable to resolve host") || message.contains("failed to connect") ->
+        "Cannot connect to JTBazar right now. Check your internet connection and try again."
+      message.contains("timeout") ->
+        "The request took too long. Please check your connection and try again."
+      rawMessage == fallback && fallback.isBlank() -> "Something went wrong. Please try again."
+      else -> rawMessage.take(220)
+    }
+  }
+
+  private fun authFailureMessage(error: Throwable, fallback: String): String {
+    val detail = error.message.orEmpty()
+    return when {
+      error is java.net.UnknownHostException || detail.contains("Unable to resolve host", true) ->
+        "No internet connection. Please reconnect and try again."
+      error is java.net.SocketTimeoutException || detail.contains("timeout", true) ->
+        "Connection timed out. Please try again."
+      error is java.io.InterruptedIOException ->
+        "The request was interrupted. Please try again."
+      detail.isNotBlank() -> detail.take(220)
+      else -> fallback
     }
   }
 }
