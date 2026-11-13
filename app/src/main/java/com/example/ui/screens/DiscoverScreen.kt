@@ -15,6 +15,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -61,6 +63,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
 
 enum class DiscoverTab {
   NEARBY_SHOPS,
@@ -72,6 +75,7 @@ fun DiscoverScreen(
   onProductClick: (Product) -> Unit,
   onCartClick: () -> Unit,
   onAccountClick: () -> Unit,
+  onOpenShop: (String) -> Unit,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -241,8 +245,7 @@ fun DiscoverScreen(
             selectedShop = selectedShop,
             onSelectShop = { selectedShop = it },
             onExploreShopProducts = { shop ->
-              // Filter products for this shop and show toast
-              Toast.makeText(context, "Opening ${shop.name}...", Toast.LENGTH_SHORT).show()
+              onOpenShop(shop.id)
             }
           )
         }
@@ -350,7 +353,7 @@ private fun NearbyShopsMapView(
   val nearbyShops = remember(validShops, userLat, userLng, cityName) {
     validShops.map { it to distanceKm(it) }
       .filter { (shop, distance) ->
-        if (distance != null) distance <= 50.0
+        if (distance != null) distance <= 10.0
         else cityName != "Select city" && (shop.city.contains(cityName, ignoreCase = true) ||
           shop.address.contains(cityName, ignoreCase = true))
       }
@@ -399,6 +402,25 @@ private fun NearbyShopsMapView(
               map.overlays.add(this)
             }
           }
+          if (userLat != null && userLng != null) {
+            val earthRadiusKm = 6371.0
+            val radiusRadians = 10.0 / earthRadiusKm
+            val centerLat = Math.toRadians(userLat)
+            val centerLng = Math.toRadians(userLng)
+            val circlePoints = (0..72).map { step ->
+              val bearing = 2.0 * Math.PI * step / 72.0
+              val lat = asin(sin(centerLat) * cos(radiusRadians) + cos(centerLat) * sin(radiusRadians) * cos(bearing))
+              val lng = centerLng + atan2(sin(bearing) * sin(radiusRadians) * cos(centerLat), cos(radiusRadians) - sin(centerLat) * sin(lat))
+              GeoPoint(Math.toDegrees(lat), Math.toDegrees(lng))
+            }
+            Polygon(map).apply {
+              points = circlePoints
+              fillPaint.color = android.graphics.Color.argb(28, 255, 140, 0)
+              outlinePaint.color = android.graphics.Color.argb(190, 255, 140, 0)
+              outlinePaint.strokeWidth = 3f
+              map.overlays.add(this)
+            }
+          }
           nearbyShops.forEach { (shop, distance) ->
             Marker(map).apply {
               position = GeoPoint(shop.latitude, shop.longitude)
@@ -439,7 +461,7 @@ private fun NearbyShopsMapView(
                 fontWeight = FontWeight.Bold, fontSize = 12.sp, color = JTTextPrimary
               )
               Text(
-                if (userLat != null && userLng != null) "Showing shops nearest to you"
+                if (userLat != null && userLng != null) "Shops within 10 km radius"
                 else "Choose a city or enable location",
                 fontSize = 10.sp, color = JTTextSecondary
               )
@@ -522,6 +544,15 @@ private fun NearbyShopsMapView(
             colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
             modifier = Modifier.fillMaxWidth().height(40.dp).testTag("open_shop_button")
           ) { Text("Open Shop & View Products", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+          Spacer(Modifier.height(10.dp))
+          Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            nearbyShops.forEach { (shop, distance) ->
+              val selected = shop.id == activeShop.id
+              Surface(color = if (selected) JTOrange else JTSurfaceVariant, shape = RoundedCornerShape(18.dp), modifier = Modifier.clickable { onSelectShop(shop) }) {
+                Text(text = shop.name + (distance?.let { " · " + String.format(Locale.US, "%.1f", it) + " km" } ?: ""), color = if (selected) Color.White else JTTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+              }
+            }
+          }
         }
       }
     }
