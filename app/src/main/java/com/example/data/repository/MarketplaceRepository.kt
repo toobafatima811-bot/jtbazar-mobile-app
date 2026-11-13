@@ -856,7 +856,9 @@ object MarketplaceRepository {
               city = dto.city,
               province = dto.province,
               tag = dto.tag,
-              isDefault = dto.isDefault
+              isDefault = dto.isDefault,
+              latitude = dto.latitude,
+              longitude = dto.longitude
             )
           }
           _addresses.value = addrList
