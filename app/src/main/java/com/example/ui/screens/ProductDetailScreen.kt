@@ -46,6 +46,7 @@ fun ProductDetailScreen(
   onCartClick: () -> Unit,
   onBuyNowClick: () -> Unit,
   onAccountClick: () -> Unit,
+  onVisitShop: (String) -> Unit,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -55,6 +56,8 @@ fun ProductDetailScreen(
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
+  val publicShops by MarketplaceRepository.shops.collectAsState()
+  val sellerShop = publicShops.firstOrNull { it.id == liveProduct.sellerId }
 
   var showAddressDialog by remember { mutableStateOf(false) }
   var quantity by remember { mutableIntStateOf(1) }
@@ -77,6 +80,7 @@ fun ProductDetailScreen(
 
   LaunchedEffect(product.id) {
     MarketplaceRepository.selectProduct(product)
+    MarketplaceRepository.refreshShops()
   }
 
   if (showWriteReviewDialog) {
@@ -273,29 +277,7 @@ fun ProductDetailScreen(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = JTPurpleContainer
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
-              Icon(
-                imageVector = Icons.Filled.Verified,
-                contentDescription = null,
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(14.dp)
-              )
-              Spacer(modifier = Modifier.width(4.dp))
-              Text(
-                text = "Artisan Collection",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTPurplePrimary
-              )
-            }
-          }
+          Text(text = liveProduct.category, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = JTTextSecondary, modifier = Modifier.weight(1f), maxLines = 1)
 
           Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             IconButton(
@@ -368,56 +350,10 @@ fun ProductDetailScreen(
               )
             }
 
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = Color.White.copy(alpha = 0.9f)
-            ) {
-              Text(
-                text = "Lead-Free Safe",
-                color = JTTextPrimary,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-              )
-            }
+
           }
 
-          // Carousel Indicators at bottom center
-          Row(
-            modifier = Modifier
-              .align(Alignment.BottomCenter)
-              .padding(bottom = 12.dp)
-              .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-              .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Box(
-              modifier = Modifier
-                .width(18.dp)
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Color.White)
-            )
-            Box(
-              modifier = Modifier
-                .size(5.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.5f))
-            )
-            Box(
-              modifier = Modifier
-                .size(5.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.5f))
-            )
-            Box(
-              modifier = Modifier
-                .size(5.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.5f))
-            )
-          }
+
         }
       }
 
@@ -455,42 +391,7 @@ fun ProductDetailScreen(
             }
           }
 
-          Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = JTPurpleContainer
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-              Icon(
-                imageVector = Icons.Filled.LocalShipping,
-                contentDescription = null,
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(13.dp)
-              )
-              Spacer(modifier = Modifier.width(4.dp))
-              Text(
-                text = "Free Shipping",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTPurplePrimary
-              )
-            }
-          }
-        }
-      }
 
-      // 4. Product Title
-      item {
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-          text = product.title,
-          fontWeight = FontWeight.ExtraBold,
-          fontSize = 19.sp,
-          color = JTTextPrimary,
-          lineHeight = 24.sp,
-          modifier = Modifier.padding(horizontal = 16.dp)
         )
       }
 
@@ -576,175 +477,57 @@ fun ProductDetailScreen(
         }
       }
 
-      // 6. JTBazar Fresh & Pantry Note
-      item {
-        Spacer(modifier = Modifier.height(12.dp))
-        Surface(
-          shape = RoundedCornerShape(16.dp),
-          color = Color(0xFFFFF9ED),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.Top
+      // Seller information is loaded from the live public shop directory.
+      if (liveProduct.sellerId != null && sellerShop != null) {
+        item {
+          Spacer(modifier = Modifier.height(14.dp))
+          Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = JTCardBg,
+            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
           ) {
-            Box(
-              modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFFFDE68A)),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = Icons.Filled.Storefront,
-                contentDescription = null,
-                tint = JTAmberDark,
-                modifier = Modifier.size(20.dp)
-              )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-              Text(
-                text = "JTBazar Fresh & Pantry Note",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTTextPrimary
-              )
-              Spacer(modifier = Modifier.height(2.dp))
-              Text(
-                text = "Also Available: Food & pantry items can be ordered by standard units (kg, gram, dozen, pack) with direct Cash on Delivery across Pakistan.",
-                fontSize = 11.sp,
-                color = JTTextSecondary,
-                lineHeight = 15.sp
-              )
-            }
-          }
-        }
-      }
-
-      // 7. Vendor Card (Multan Craft Heritage)
-      item {
-        Spacer(modifier = Modifier.height(14.dp))
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                  modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(JTPurpleContainer),
-                  contentAlignment = Alignment.Center
-                ) {
-                  Text(
-                    text = product.vendorAvatarText,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp,
-                    color = JTPurplePrimary
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (!sellerShop.logoUrl.isNullOrBlank()) {
+                  AsyncImage(
+                    model = sellerShop.logoUrl,
+                    contentDescription = sellerShop.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp))
                   )
+                } else {
+                  Box(
+                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(JTSurfaceVariant),
+                    contentAlignment = Alignment.Center
+                  ) { Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTTextSecondary) }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                   Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                      text = product.vendor,
-                      fontSize = 14.sp,
-                      fontWeight = FontWeight.Bold,
-                      color = JTTextPrimary
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                      imageVector = Icons.Filled.Verified,
-                      contentDescription = "Verified",
-                      tint = JTPurplePrimary,
-                      modifier = Modifier.size(15.dp)
-                    )
+                    Text(sellerShop.name, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1)
+                    if (sellerShop.isVerified) {
+                      Spacer(Modifier.width(4.dp))
+                      Icon(Icons.Filled.Verified, contentDescription = "Verified shop", tint = JTOrange, modifier = Modifier.size(16.dp))
+                    }
                   }
-                  Text(
-                    text = "${product.vendorRating}  •  ${product.vendorSales}",
-                    fontSize = 11.sp,
-                    color = JTTextSecondary
-                  )
+                  if (sellerShop.city.isNotBlank()) {
+                    Text(sellerShop.city, style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
+                  }
+                }
+                TextButton(onClick = { onVisitShop(sellerShop.id) }) { Text("Visit Shop", color = JTOrange) }
+              }
+              if (sellerShop.address.isNotBlank()) {
+                HorizontalDivider(color = JTBorder)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(Icons.Filled.LocationOn, contentDescription = null, tint = JTOrange, modifier = Modifier.size(16.dp))
+                  Spacer(Modifier.width(8.dp))
+                  Text(sellerShop.address, style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
                 }
               }
-
-              Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = JTPurpleContainer,
-                modifier = Modifier.clickable {
-                  Toast.makeText(context, "Visiting ${product.vendor}", Toast.LENGTH_SHORT).show()
-                }
-              ) {
-                Text(
-                  text = "Visit\nShop",
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = JTPurplePrimary,
-                  textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
+              if (sellerShop.description.isNotBlank()) {
+                Text(sellerShop.description, style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
               }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = JTBorder)
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(
-                imageVector = Icons.Filled.LocalShipping,
-                contentDescription = null,
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(16.dp)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = "Delivery to ",
-                fontSize = 11.sp,
-                color = JTTextSecondary
-              )
-              Text(
-                text = currentLocation,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTTextPrimary
-              )
-              Text(
-                text = " in 2–3 business days",
-                fontSize = 11.sp,
-                color = JTTextSecondary
-              )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(
-                imageVector = Icons.Filled.Payments,
-                contentDescription = null,
-                tint = JTAmberDark,
-                modifier = Modifier.size(16.dp)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = "Cash on Delivery (COD) & Online Bank Transfer Supported",
-                fontSize = 11.sp,
-                color = JTTextSecondary
-              )
             }
           }
         }
@@ -894,15 +677,10 @@ fun ProductDetailScreen(
           ) {
             Column {
               Text(
-                text = "Quantity (Sets)",
+                text = "Quantity",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 color = JTTextPrimary
-              )
-              Text(
-                text = "2 plates per ordered set",
-                fontSize = 11.sp,
-                color = JTTextSecondary
               )
             }
 
