@@ -174,7 +174,7 @@ object SupabaseApiService {
       }
       val foodUnit = obj.optString("food_selling_unit").takeIf { it.isNotBlank() && it != "null" }
       val dailyStatus = obj.optString("daily_status").takeIf { it.isNotBlank() && it != "null" }
-      SupabaseProductDto(id=id,sellerId=obj.optString("seller_id").takeIf { it.isNotBlank() && it != "null" },title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"JTBazar",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=true,availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
+      SupabaseProductDto(id=id,sellerId=obj.optString("seller_id").takeIf { it.isNotBlank() && it != "null" },title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=obj.optBoolean("is_new_arrival",false),availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
     }
   }
 
@@ -186,14 +186,14 @@ object SupabaseApiService {
         val row = rows.getJSONObject(0)
         SupabaseStoreSettingsDto(
           storeName = row.optString("store_name", "JTBazar"),
-          supportEmail = row.optString("support_email", "jtbazar2423@gmail.com").takeIf { it.isNotBlank() && it != "null" },
-          supportPhone = row.optString("support_phone", "+923700822507").takeIf { it.isNotBlank() && it != "null" },
-          supportWhatsapp = row.optString("support_whatsapp", "+923700822507").takeIf { it.isNotBlank() && it != "null" },
-          deliveryFee = row.optDouble("delivery_fee", 450.0).toInt(),
+          supportEmail = row.optString("support_email").takeIf { it.isNotBlank() && it != "null" },
+          supportPhone = row.optString("support_phone").takeIf { it.isNotBlank() && it != "null" },
+          supportWhatsapp = row.optString("support_whatsapp").takeIf { it.isNotBlank() && it != "null" },
+          deliveryFee = row.optDouble("delivery_fee", 0.0).toInt(),
           freeDeliveryEnabled = row.optBoolean("free_delivery_enabled", false),
           additionalDeliveryFee = row.optDouble("additional_delivery_fee", 0.0).toInt(),
-          codEnabled = row.optBoolean("cod_enabled", true),
-          returnWindowDays = row.optInt("return_window_days", 7)
+          codEnabled = row.optBoolean("cod_enabled", false),
+          returnWindowDays = row.optInt("return_window_days", 0)
         )
       }
     } catch (e: Exception) { Result.failure(e) }
@@ -696,20 +696,20 @@ object SupabaseApiService {
             val name = obj.optString("shop_name", "").takeIf { it.isNotBlank() } ?: continue
             list.add(
               com.example.data.model.ShopRecord(
-                id = obj.optString("id", "shop_$i"),
+                id = obj.optString("id", "").takeIf { it.isNotBlank() } ?: continue,
                 name = name,
                 slug = obj.optString("slug", ""),
                 productCount = obj.optInt("product_count", 0),
-                description = obj.optString("description", "Verified Vendor"),
+                description = obj.optString("description", ""),
                 logoUrl = obj.optString("shop_image_url").takeIf { it.startsWith("http") },
                 bannerUrl = null,
                 city = obj.optString("shop_location_label", ""),
                 address = obj.optString("shop_location_label", ""),
                 latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 0.0) else 0.0,
                 longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 0.0) else 0.0,
-                isVerified = true,
+                isVerified = obj.optBoolean("is_verified", false),
                 phone = "",
-                deliveryRadiusKm = 5.0
+                deliveryRadiusKm = obj.optDouble("delivery_radius_km", 0.0)
               )
             )
           }
