@@ -121,7 +121,7 @@ fun CartCheckoutScreen(
   var deliveryLat by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude) }
   var deliveryLng by remember(selectedAddress) { mutableStateOf(selectedAddress?.longitude) }
   var locationCapturedAt by remember { mutableStateOf<String?>(null) }
-  var isPinConfirmed by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude != null && selectedAddress.longitude != null) }
+  var isPinConfirmed by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude != null && selectedAddress?.longitude != null) }
 
   val locationPermissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestMultiplePermissions()
