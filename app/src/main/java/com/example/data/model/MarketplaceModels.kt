@@ -97,7 +97,9 @@ data class DeliveryAddress(
   val city: String = "",
   val province: String = "",
   val tag: String = "HOME",
-  val isDefault: Boolean = false
+  val isDefault: Boolean = false,
+  val latitude: Double? = null,
+  val longitude: Double? = null
 ) {
   val fullDisplayAddress: String
     get() = "$addressLine, $area, $city, $province"
