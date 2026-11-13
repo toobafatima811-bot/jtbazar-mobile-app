@@ -986,7 +986,8 @@ fun ProductCard(
   onProductClick: () -> Unit,
   onAddToCart: () -> Unit,
   onToggleWishlist: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  campaignStyle: Boolean = false
 ) {
   val cartItems by MarketplaceRepository.cartItems.collectAsState()
   val hasVariants = product.palettes.isNotEmpty() || product.sizes.isNotEmpty()
@@ -1010,9 +1011,9 @@ fun ProductCard(
   )
 
   Card(
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = JTCardBg),
-    border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+    shape = RoundedCornerShape(if (campaignStyle) 14.dp else 16.dp),
+    colors = CardDefaults.cardColors(containerColor = if (campaignStyle) Color(0xFFFFF3E7) else JTCardBg),
+    border = androidx.compose.foundation.BorderStroke(1.dp, if (campaignStyle) Color(0xFFF4B27E) else JTBorder),
     modifier = modifier
       .fillMaxWidth()
       .wrapContentHeight()
@@ -1049,13 +1050,13 @@ fun ProductCard(
         modifier = Modifier
           .fillMaxWidth()
           .aspectRatio(1.08f)
-          .background(JTSurfaceVariant)
+          .background(if (campaignStyle) Color(0xFFFFF7ED) else JTSurfaceVariant)
       ) {
         AsyncImage(
           model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
           contentDescription = product.title,
-          contentScale = ContentScale.Crop,
-          modifier = Modifier.fillMaxSize()
+          contentScale = if (campaignStyle) ContentScale.Fit else ContentScale.Crop,
+          modifier = Modifier.fillMaxSize().then(if (campaignStyle) Modifier.padding(8.dp) else Modifier)
         )
 
         // Discount tag top left
@@ -1101,7 +1102,8 @@ fun ProductCard(
       Column(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 10.dp, vertical = 8.dp),
+          .background(if (campaignStyle) Color(0xFFFFF3E7) else Color.Transparent)
+          .padding(horizontal = if (campaignStyle) 12.dp else 10.dp, vertical = if (campaignStyle) 10.dp else 8.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
       ) {
         Column {
@@ -1138,7 +1140,7 @@ fun ProductCard(
             text = product.title,
             fontWeight = FontWeight.Bold,
             fontSize = 12.5.sp,
-            color = JTTextPrimary,
+            color = if (campaignStyle) Color(0xFF542C27) else JTTextPrimary,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
             lineHeight = 15.sp,
@@ -1185,7 +1187,7 @@ fun ProductCard(
               fontWeight = FontWeight.ExtraBold,
               fontSize = 12.5.sp,
               lineHeight = 15.sp,
-              color = JTPurplePrimary,
+              color = if (campaignStyle) Color(0xFF9A3412) else JTPurplePrimary,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis
             )
@@ -1226,7 +1228,7 @@ fun ProductCard(
           } else {
             Surface(
               shape = RoundedCornerShape(8.dp),
-              color = if (isInCart) Color(0xFF16A34A) else JTOrange,
+              color = if (isInCart) Color(0xFF16A34A) else if (campaignStyle) Color(0xFFE85D20) else JTOrange,
               modifier = Modifier
                 .height(30.dp)
                 .width(if (hasVariants) 68.dp else 30.dp)
@@ -1364,9 +1366,11 @@ private fun ProductCampaignSection(
   val title = campaign.displayTitle.ifBlank { campaign.name }
   val dealLabel = when (campaign.campaignType.lowercase()) {
     "bogo" -> "Buy ${campaign.buyQuantity}, Get ${campaign.getQuantity}"
-    "bundle" -> "Bundle deal"
-    else -> "${campaign.discountPercent.toInt()}% off"
+    "bundle" -> "Bundle price deal"
+    "flash_sale", "seasonal", "custom" -> "${campaign.discountPercent.toInt()}% off"
+    else -> "Special offer"
   }
+  val campaignTypeLabel = campaign.campaignType.replace('_', ' ').uppercase()
   var remainingSeconds by remember(campaign.id, campaign.endsAt) { mutableLongStateOf(-1L) }
 
   LaunchedEffect(campaign.id, campaign.endsAt) {
@@ -1388,7 +1392,7 @@ private fun ProductCampaignSection(
     ?: "Limited-time deal on selected products. Shop now before the offer ends!"
   val isCompact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 520
 
-  Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+  Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 28.dp)) {
     Box(
       Modifier.fillMaxWidth()
         .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x337A286F), spotColor = Color(0x337A286F))
@@ -1400,7 +1404,7 @@ private fun ProductCampaignSection(
       Box(Modifier.align(Alignment.BottomEnd).offset(x = 25.dp, y = 55.dp).size(150.dp).border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape))
       if (isCompact) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-          CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size)
+          CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size, campaignTypeLabel)
           CampaignCountdownPanel(remainingSeconds)
         }
       } else {
@@ -1410,9 +1414,19 @@ private fun ProductCampaignSection(
         }
       }
     }
-    Spacer(Modifier.height(18.dp))
-    Text("HANDPICKED FOR YOU", color = Color(0xFFC45B22), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp, modifier = Modifier.padding(bottom = 10.dp))
-    activeCampaign.products.chunked(productGridColumns).forEach { rowProducts ->
+    Spacer(Modifier.height(4.dp))
+    Row(
+      Modifier.fillMaxWidth().padding(bottom = 12.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.Bottom
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("HANDPICKED FOR YOU", color = Color(0xFFC45B22), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+        Text("Shop this deal", color = JTTextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+      }
+      if (!isCompact) Text("Limited-time prices · While stocks last", color = JTTextSecondary, fontSize = 10.sp)
+    }
+    activeCampaign.products.chunked(productGridColumns.coerceAtLeast(2)).forEach { rowProducts ->
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         rowProducts.forEach { product ->
           Box(Modifier.weight(1f)) {
@@ -1420,7 +1434,8 @@ private fun ProductCampaignSection(
               product = if (product.badge == null) product.copy(badge = dealLabel) else product,
               onProductClick = { onProductClick(product) },
               onAddToCart = { onAddToCart(product) },
-              onToggleWishlist = { onToggleWishlist(product.id) }
+              onToggleWishlist = { onToggleWishlist(product.id) },
+              campaignStyle = true
             )
           }
         }
@@ -1432,11 +1447,11 @@ private fun ProductCampaignSection(
 }
 
 @Composable
-private fun CampaignBannerCopy(title: String, description: String, dealLabel: String, productCount: Int) {
+private fun CampaignBannerCopy(title: String, description: String, dealLabel: String, productCount: Int, campaignTypeLabel: String) {
   Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
       Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFFFD16B)))
-      Text("FLASH SALE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.2.sp)
+      Text(campaignTypeLabel, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.2.sp)
       Surface(color = Color.White.copy(alpha = 0.15f), shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.28f))) {
         Text("SPECIAL OFFER", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
       }
@@ -1461,7 +1476,11 @@ private fun CampaignCountdownPanel(remainingSeconds: Long, modifier: Modifier = 
     verticalArrangement = Arrangement.spacedBy(9.dp)
   ) {
     Text("OFFER ENDS IN", color = Color.White.copy(alpha = 0.86f), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
-    val days = if (remainingSeconds < 0) 0L else remainingSeconds / 86400L
+    if (remainingSeconds < 0) {
+      Text("Limited-time offer", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+      return@Column
+    }
+    val days = remainingSeconds / 86400L
     val hours = if (remainingSeconds < 0) 0L else (remainingSeconds % 86400L) / 3600L
     val minutes = if (remainingSeconds < 0) 0L else (remainingSeconds % 3600L) / 60L
     val seconds = if (remainingSeconds < 0) 0L else remainingSeconds % 60L
