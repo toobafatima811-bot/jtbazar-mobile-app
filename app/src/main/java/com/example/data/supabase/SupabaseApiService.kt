@@ -60,7 +60,7 @@ object SupabaseApiService {
         val product = products.optJSONObject(productIndex) ?: continue
         val sellerId = product.optString("seller_id")
         val shop = shopsById[sellerId] ?: continue
-        product.put("seller", JSONObject().put("shop_name", shop.optString("shop_name", "JTBazar")))
+        product.put("seller", JSONObject().put("shop_name", shop.optString("shop_name", "")))
       }
       // Product media and variants are optional enrichment. A failure in one
       // enrichment endpoint must not hide the published product catalog.
