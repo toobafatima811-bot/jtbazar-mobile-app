@@ -388,6 +388,7 @@ fun ProductDetailScreen(
                 color = JTAmberDark
               )
             }
+          }
         }
       }
 
