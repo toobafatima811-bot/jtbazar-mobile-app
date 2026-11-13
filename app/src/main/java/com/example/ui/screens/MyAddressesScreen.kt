@@ -1,6 +1,17 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.location.AddressReverseGeocoder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -250,6 +261,55 @@ private fun AddAddressDialog(
   var city by remember { mutableStateOf("") }
   var tag by remember { mutableStateOf("HOME") }
   var isDefault by remember { mutableStateOf(false) }
+  var latitude by remember { mutableStateOf<Double?>(null) }
+  var longitude by remember { mutableStateOf<Double?>(null) }
+  var locating by remember { mutableStateOf(false) }
+  var locationMessage by remember { mutableStateOf<String?>(null) }
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  val locationPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+      permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    if (!granted) {
+      locationMessage = "Location permission is needed to detect your address."
+    } else {
+      try {
+        locating = true
+        LocationServices.getFusedLocationProviderClient(context)
+          .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
+          .addOnSuccessListener { location ->
+            if (location == null) {
+              locating = false
+              locationMessage = "Could not get a fresh GPS fix. Please try again."
+            } else {
+              latitude = location.latitude
+              longitude = location.longitude
+              scope.launch {
+                val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
+                if (resolved != null) {
+                  if (resolved.street.isNotBlank()) street = resolved.street
+                  if (resolved.area.isNotBlank()) area = resolved.area
+                  if (resolved.city.isNotBlank()) city = resolved.city
+                  locationMessage = if (resolved.street.isBlank()) "Location found. Please enter your street and house number." else "Address detected. Please verify your house number."
+                } else {
+                  locationMessage = "GPS captured. Please enter street and area manually."
+                }
+                locating = false
+              }
+            }
+          }
+          .addOnFailureListener {
+            locating = false
+            locationMessage = "Unable to detect location. Please try again."
+          }
+      } catch (_: SecurityException) {
+        locating = false
+        locationMessage = "Location permission is required."
+      }
+    }
+  }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -259,6 +319,21 @@ private fun AddAddressDialog(
         modifier = Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
       ) {
+        OutlinedButton(
+          enabled = !locating,
+          onClick = {
+            val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (fine || coarse) locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+          },
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Icon(Icons.Filled.MyLocation, contentDescription = null)
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(if (locating) "Detecting address..." else "Use Current Location")
+        }
+        locationMessage?.let { Text(it, color = JTTextSecondary, fontSize = 11.sp) }
         OutlinedTextField(
           value = name,
           onValueChange = { name = it },
@@ -325,7 +400,9 @@ private fun AddAddressDialog(
                 area = area.trim(),
                 city = city.trim(),
                 tag = tag,
-                isDefault = isDefault
+                isDefault = isDefault,
+                latitude = latitude,
+                longitude = longitude
               )
             )
           }
