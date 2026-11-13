@@ -219,8 +219,9 @@ object SupabaseAuthService {
         }
       } catch (e: Exception) {
         Log.e(TAG, "Google OAuth callback failed", e)
-        _googleOAuthStatus.value = e.message ?: "Google sign-in failed. Please try again."
-        Result.failure(e)
+        val friendlyError = authFailureMessage(e, "Google sign-in failed. Please try again.")
+        _googleOAuthStatus.value = friendlyError
+        Result.failure(IOException(friendlyError))
       }
     }
 
@@ -316,7 +317,9 @@ object SupabaseAuthService {
             SupabaseClient.okHttpClient.newCall(resendRequest).execute().use { resendResponse ->
               if (!resendResponse.isSuccessful) {
                 val resendError = resendResponse.body?.string().orEmpty()
-                Log.w(TAG, "Signup resend failed (${resendResponse.code}): ${parseErrorMessage(resendError, "Email verification code resend failed")}")
+                val friendlyError = parseErrorMessage(resendError, "Email verification code resend failed")
+                Log.w(TAG, "Signup resend failed (${resendResponse.code}): $friendlyError")
+                throw IOException(friendlyError)
               }
             }
           }
