@@ -1323,34 +1323,53 @@ private fun ProductCampaignSection(
   val dealLabel = when (campaign.campaignType.lowercase()) {
     "bogo" -> "Buy ${campaign.buyQuantity}, Get ${campaign.getQuantity}"
     "bundle" -> "Bundle deal"
-    else -> "${campaign.discountPercent.toInt()}% OFF"
+    else -> "${campaign.discountPercent.toInt()}% off"
   }
-  Column(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp)
-  ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      Column(modifier = Modifier.weight(1f)) {
-        Text(
-          text = campaign.campaignType.replace('_', ' ').uppercase(),
-          color = Color(0xFFC2410C),
-          fontSize = 9.sp,
-          fontWeight = FontWeight.ExtraBold
-        )
-        Text(title, color = Color(0xFF7C2D12), fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (!campaign.description.isNullOrBlank()) {
-          Text(campaign.description, color = Color(0xFF9A3412), fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-      }
-      Column(horizontalAlignment = Alignment.End) {
-        Text(dealLabel, color = Color(0xFF9A3412), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-        CampaignDealCountdown(campaign.endsAt)
+  var remainingSeconds by remember(campaign.id, campaign.endsAt) { mutableLongStateOf(-1L) }
+
+  LaunchedEffect(campaign.id, campaign.endsAt) {
+    val expiry = campaign.endsAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+    if (expiry == null) {
+      remainingSeconds = -1L
+    } else {
+      while (true) {
+        val seconds = ((expiry - System.currentTimeMillis()) / 1000L).coerceAtLeast(0L)
+        remainingSeconds = seconds
+        if (seconds == 0L) break
+        kotlinx.coroutines.delay(1000L)
       }
     }
-    Spacer(Modifier.height(9.dp))
+  }
+  if (remainingSeconds == 0L) return
+
+  val description = campaign.description?.takeIf { it.isNotBlank() }
+    ?: "Limited-time deal on selected products. Shop now before the offer ends!"
+  val isCompact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 520
+
+  Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Box(
+      Modifier.fillMaxWidth()
+        .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x337A286F), spotColor = Color(0x337A286F))
+        .clip(RoundedCornerShape(20.dp))
+        .background(Brush.horizontalGradient(listOf(Color(0xFF43206F), Color(0xFF792B80), Color(0xFFE85A2A)))
+    ) {
+      Box(Modifier.align(Alignment.TopEnd).offset(x = 28.dp, y = (-45).dp).size(170.dp).border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape))
+      Text("%", Modifier.align(Alignment.TopEnd).offset(x = (-92).dp, y = (-18).dp), color = Color.White.copy(alpha = 0.13f), fontSize = 78.sp, fontWeight = FontWeight.Black)
+      Box(Modifier.align(Alignment.BottomEnd).offset(x = 25.dp, y = 55.dp).size(150.dp).border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape))
+      if (isCompact) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+          CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size)
+          CampaignCountdownPanel(remainingSeconds)
+        }
+      } else {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 22.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+          Box(Modifier.weight(1f)) { CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size) }
+          CampaignCountdownPanel(remainingSeconds, Modifier.width(210.dp))
+        }
+      }
+    }
+    Spacer(Modifier.height(18.dp))
+    Text("HANDPICKED FOR YOU", color = Color(0xFFC45B22), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp, modifier = Modifier.padding(bottom = 10.dp))
     activeCampaign.products.chunked(productGridColumns).forEach { rowProducts ->
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         rowProducts.forEach { product ->
@@ -1363,9 +1382,7 @@ private fun ProductCampaignSection(
             )
           }
         }
-        repeat((productGridColumns - rowProducts.size).coerceAtLeast(0)) {
-          Spacer(Modifier.weight(1f))
-        }
+        repeat((productGridColumns - rowProducts.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
       }
       Spacer(Modifier.height(12.dp))
     }
@@ -1373,27 +1390,57 @@ private fun ProductCampaignSection(
 }
 
 @Composable
-private fun CampaignDealCountdown(endsAt: String?) {
-  var remaining by remember(endsAt) { mutableStateOf("") }
-  LaunchedEffect(endsAt) {
-    if (endsAt.isNullOrBlank()) {
-      remaining = "Limited time"
-    } else {
-      while (true) {
-        val seconds = runCatching {
-          ((java.time.Instant.parse(endsAt).toEpochMilli() - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
-        }.getOrDefault(0L)
-        remaining = if (seconds <= 0) "Offer ended" else {
-          val days = seconds / 86400
-          val hours = (seconds % 86400) / 3600
-          val minutes = (seconds % 3600) / 60
-          val secs = seconds % 60
-          "${days}d ${hours}h ${minutes}m ${secs}s"
-        }
-        if (seconds <= 0) break
-        kotlinx.coroutines.delay(1000)
+private fun CampaignBannerCopy(title: String, description: String, dealLabel: String, productCount: Int) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+      Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFFFD16B)))
+      Text("FLASH SALE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.2.sp)
+      Surface(color = Color.White.copy(alpha = 0.15f), shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.28f))) {
+        Text("SPECIAL OFFER", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
       }
     }
+    Text(title, color = Color.White, fontSize = 25.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Text(description, color = Color.White.copy(alpha = 0.88f), fontSize = 12.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Spacer(Modifier.height(2.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+      Text(dealLabel, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+      Text("$productCount deal item${if (productCount == 1) "" else "s"} selected", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+    }
   }
-  Text(remaining, color = Color(0xFF9A3412), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun CampaignCountdownPanel(remainingSeconds: Long, modifier: Modifier = Modifier) {
+  Column(
+    modifier = modifier.clip(RoundedCornerShape(15.dp)).background(Color(0x663D2345))
+      .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(15.dp))
+      .padding(horizontal = 12.dp, vertical = 13.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(9.dp)
+  ) {
+    Text("OFFER ENDS IN", color = Color.White.copy(alpha = 0.86f), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+    val days = if (remainingSeconds < 0) 0L else remainingSeconds / 86400L
+    val hours = if (remainingSeconds < 0) 0L else (remainingSeconds % 86400L) / 3600L
+    val minutes = if (remainingSeconds < 0) 0L else (remainingSeconds % 3600L) / 60L
+    val seconds = if (remainingSeconds < 0) 0L else remainingSeconds % 60L
+    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+      CountdownTimeUnit(days.toString().padStart(2, '0'), "DAYS", Modifier.weight(1f))
+      CountdownTimeUnit(hours.toString().padStart(2, '0'), "HRS", Modifier.weight(1f))
+      CountdownTimeUnit(minutes.toString().padStart(2, '0'), "MIN", Modifier.weight(1f))
+      CountdownTimeUnit(seconds.toString().padStart(2, '0'), "SEC", Modifier.weight(1f))
+    }
+    Text(if (remainingSeconds < 0) "Limited-time offer" else "Don't miss your deal", color = Color.White.copy(alpha = 0.82f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+  }
+}
+
+@Composable
+private fun CountdownTimeUnit(value: String, label: String, modifier: Modifier = Modifier) {
+  Column(
+    modifier = modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.18f))
+      .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(8.dp)).padding(vertical = 8.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+    Text(value, color = Color.White, fontSize = 19.sp, lineHeight = 21.sp, fontWeight = FontWeight.ExtraBold)
+    Text(label, color = Color.White.copy(alpha = 0.88f), fontSize = 7.sp, fontWeight = FontWeight.Bold)
+  }
 }
