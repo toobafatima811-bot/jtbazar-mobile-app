@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Security
@@ -534,7 +535,6 @@ fun AddressSelectionSheet(
             Text("GPS: ${String.format(Locale.US, "%.6f", latitude)} , ${String.format(Locale.US, "%.6f", longitude)}", fontSize = 11.sp, color = JTTextSecondary)
           }
           locationError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
-          OutlinedTextField(value = label, onValueChange = {}, readOnly = true, label = { Text("Location type") }, modifier = Modifier.fillMaxWidth())
           Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("HOME", "OFFICE", "OTHER").forEach { value ->
               FilterChip(selected = label == value, onClick = { label = value }, label = { Text(value, fontSize = 11.sp) })
