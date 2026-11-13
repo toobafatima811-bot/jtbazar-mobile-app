@@ -372,14 +372,16 @@ private fun ShopLocationPickerDialog(
   val startPoint = remember {
     if (initialLatitude != null && initialLongitude != null &&
       initialLatitude in -90.0..90.0 && initialLongitude in -180.0..180.0
-    ) GeoPoint(initialLatitude, initialLongitude) else GeoPoint(30.3753, 69.3451)
+    ) GeoPoint(initialLatitude, initialLongitude) else GeoPoint(0.0, 0.0)
   }
   var selectedPoint by remember { mutableStateOf(startPoint) }
+  var hasSelectedPoint by remember { mutableStateOf(initialLatitude != null && initialLongitude != null && initialLatitude in -90.0..90.0 && initialLongitude in -180.0..180.0 && !(initialLatitude == 0.0 && initialLongitude == 0.0)) }
   var mapView by remember { mutableStateOf<MapView?>(null) }
   var locationMessage by remember { mutableStateOf("Move the map and tap your shop location to place the pin.") }
 
   fun placePin(point: GeoPoint) {
     selectedPoint = point
+    hasSelectedPoint = point.latitude in -90.0..90.0 && point.longitude in -180.0..180.0 && !(point.latitude == 0.0 && point.longitude == 0.0)
     mapView?.let { map ->
       map.overlays.filterIsInstance<Marker>().forEach { map.overlays.remove(it) }
       val marker = Marker(map).apply {
@@ -426,7 +428,7 @@ private fun ShopLocationPickerDialog(
             MapView(ctx).apply {
               setTileSource(TileSourceFactory.MAPNIK)
               setMultiTouchControls(true)
-              controller.setZoom(if (initialLatitude != null && initialLongitude != null) 16.0 else 5.0)
+              controller.setZoom(if (hasSelectedPoint) 16.0 else 2.5)
               controller.setCenter(startPoint)
               val receiver = object : MapEventsReceiver {
                 override fun singleTapConfirmedHelper(point: GeoPoint): Boolean {
@@ -466,7 +468,7 @@ private fun ShopLocationPickerDialog(
         Text("Latitude: %.6f   Longitude: %.6f".format(Locale.US, selectedPoint.latitude, selectedPoint.longitude), style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
-          Button(onClick = { onConfirm(selectedPoint) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Use this location") }
+          Button(onClick = { onConfirm(selectedPoint) }, enabled = hasSelectedPoint, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Use this location") }
         }
       }
     }
