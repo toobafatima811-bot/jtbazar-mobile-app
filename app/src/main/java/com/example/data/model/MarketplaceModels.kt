@@ -144,8 +144,8 @@ data class ShopRecord(
   val address: String = "",
   val latitude: Double = 0.0,
   val longitude: Double = 0.0,
-  val rating: Double = 4.8,
-  val isVerified: Boolean = true,
+  val rating: Double = 0.0,
+  val isVerified: Boolean = false,
   val phone: String = "",
-  val deliveryRadiusKm: Double = 5.0
+  val deliveryRadiusKm: Double = 0.0
 )
