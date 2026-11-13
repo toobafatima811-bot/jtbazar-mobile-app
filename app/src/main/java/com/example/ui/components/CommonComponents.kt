@@ -319,42 +319,50 @@ fun TrustBadgesRow(modifier: Modifier = Modifier) {
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .padding(vertical = 14.dp, horizontal = 16.dp),
-    horizontalArrangement = Arrangement.SpaceBetween,
+      .padding(vertical = 12.dp, horizontal = 8.dp),
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    TrustItem(icon = Icons.Filled.Security, title = "100% Genuine")
-    TrustItem(icon = Icons.Filled.Payment, title = "Cash On Delivery")
-    TrustItem(icon = Icons.Filled.HeadsetMic, title = "24/7 Helpline")
+    TrustItem(icon = Icons.Filled.Security, title = "100% Genuine", modifier = Modifier.weight(1f))
+    TrustItem(icon = Icons.Filled.Payment, title = "Cash On Delivery", modifier = Modifier.weight(1f))
+    TrustItem(icon = Icons.Filled.HeadsetMic, title = "24/7 Helpline", modifier = Modifier.weight(1f))
   }
 }
 
 @Composable
 private fun TrustItem(
   icon: androidx.compose.ui.graphics.vector.ImageVector,
-  title: String
+  title: String,
+  modifier: Modifier = Modifier
 ) {
   Surface(
-    shape = RoundedCornerShape(12.dp),
+    shape = RoundedCornerShape(10.dp),
     color = JTPurpleContainer.copy(alpha = 0.45f),
-    modifier = Modifier.padding(horizontal = 2.dp)
+    modifier = modifier.heightIn(min = 36.dp)
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
-      modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+      horizontalArrangement = Arrangement.Center,
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 3.dp, vertical = 7.dp)
     ) {
       Icon(
         imageVector = icon,
         contentDescription = null,
         tint = JTPurplePrimary,
-        modifier = Modifier.size(15.dp)
+        modifier = Modifier.size(13.dp)
       )
-      Spacer(modifier = Modifier.width(5.dp))
+      Spacer(modifier = Modifier.width(3.dp))
       Text(
         text = title,
-        fontSize = 11.sp,
+        fontSize = 8.5.sp,
+        lineHeight = 10.sp,
         fontWeight = FontWeight.SemiBold,
-        color = JTTextPrimary
+        color = JTTextPrimary,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis
       )
     }
   }
