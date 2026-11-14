@@ -173,6 +173,17 @@ object VendorService {
   suspend fun listSupportTickets(): JSONArray =
     JSONArray(fail(SupabaseClient.get("support_tickets?select=id,subject,message,status,admin_response,created_at,updated_at&order=created_at.desc&limit=100")))
 
+  suspend fun listSupportMessages(ticketId: String): JSONArray =
+    JSONArray(fail(SupabaseClient.get("support_ticket_messages?ticket_id=eq.$ticketId&select=*&order=created_at.asc&limit=500")))
+
+  suspend fun sendSupportMessage(ticketId: String, message: String) {
+    val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
+    require(message.trim().isNotEmpty() && message.trim().length <= 4000) { "Enter a message up to 4,000 characters." }
+    val body = JSONObject().put("ticket_id", ticketId).put("sender_id", user.id)
+      .put("sender_role", "seller").put("message", message.trim())
+    fail(SupabaseClient.post("support_ticket_messages", body.toString(), preferHeader = "return=representation"))
+  }
+
   suspend fun createSupportTicket(subject: String, message: String) {
     val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
     val profile = getOwnApplication() ?: throw IOException("Seller profile was not found.")
