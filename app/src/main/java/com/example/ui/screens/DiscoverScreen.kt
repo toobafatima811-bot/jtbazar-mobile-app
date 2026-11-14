@@ -5,6 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Paint
+import android.graphics.Point
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,6 +67,9 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -307,6 +316,7 @@ private fun NearbyShopsMapView(
   onExploreShopProducts: (ShopRecord) -> Unit
 ) {
   val context = LocalContext.current
+  var mapRevision by remember { mutableIntStateOf(0) }
   val validShops = remember(shops) {
     shops.filter { it.latitude in -90.0..90.0 && it.longitude in -180.0..180.0 &&
       !(it.latitude == 0.0 && it.longitude == 0.0) }
@@ -352,10 +362,15 @@ private fun NearbyShopsMapView(
             controller.setZoom(if (userLat == null && userLng == null) 5.5 else 12.0)
             controller.setCenter(mapCenter)
             tag = mapCenter
+            addMapListener(object : MapListener {
+              override fun onScroll(event: ScrollEvent?): Boolean { mapRevision++; return true }
+              override fun onZoom(event: ZoomEvent?): Boolean { mapRevision++; return true }
+            })
           }
         },
         update = { map ->
-          // Only recenter when the actual selected location changes; preserve user panning.
+          val renderRevision = mapRevision
+          if (renderRevision < 0) map.invalidate()
           if (map.tag != mapCenter) {
             map.controller.setCenter(mapCenter)
             map.tag = mapCenter
@@ -368,8 +383,6 @@ private fun NearbyShopsMapView(
               setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
               map.overlays.add(this)
             }
-          }
-          if (userLat != null && userLng != null) {
             val earthRadiusKm = 6371.0
             val radiusRadians = 10.0 / earthRadiusKm
             val centerLat = Math.toRadians(userLat)
@@ -388,17 +401,56 @@ private fun NearbyShopsMapView(
               map.overlays.add(this)
             }
           }
-          nearbyShops.forEach { (shop, distance) ->
-            Marker(map).apply {
-              position = GeoPoint(shop.latitude, shop.longitude)
-              title = shop.name
-              snippet = distance?.let { String.format(Locale.US, "%.1f km away", it) } ?: shop.city
-              setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-              setOnMarkerClickListener { _, _ ->
-                onSelectShop(shop)
-                true
+
+          // Cluster overlapping shop markers in screen pixels; zooming separates them.
+          val remaining = nearbyShops.map { (shop, distance) ->
+            val point = Point()
+            map.projection.toPixels(GeoPoint(shop.latitude, shop.longitude), point)
+            Triple(shop, distance, point)
+          }.toMutableList()
+          while (remaining.isNotEmpty()) {
+            val seed = remaining.removeAt(0)
+            val group = mutableListOf(seed)
+            var changed = true
+            while (changed) {
+              changed = false
+              val iterator = remaining.iterator()
+              while (iterator.hasNext()) {
+                val candidate = iterator.next()
+                val joins = group.any { member ->
+                  val dx = (candidate.third.x - member.third.x).toDouble()
+                  val dy = (candidate.third.y - member.third.y).toDouble()
+                  dx * dx + dy * dy <= 72.0 * 72.0
+                }
+                if (joins) { group.add(candidate); iterator.remove(); changed = true }
               }
-              map.overlays.add(this)
+            }
+            val center = GeoPoint(group.map { it.first.latitude }.average(), group.map { it.first.longitude }.average())
+            if (group.size == 1) {
+              val (shop, distance, _) = group.first()
+              Marker(map).apply {
+                position = center
+                title = shop.name
+                snippet = distance?.let { String.format(Locale.US, "%.1f km away", it) } ?: shop.city
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                setOnMarkerClickListener { _, _ -> onSelectShop(shop); true }
+                map.overlays.add(this)
+              }
+            } else {
+              val names = group.map { it.first.name }
+              Marker(map).apply {
+                position = center
+                title = "${group.size} nearby shops"
+                snippet = names.take(4).joinToString(" • ") + if (names.size > 4) " • +${names.size - 4} more" else ""
+                icon = createShopClusterIcon(context, group.size)
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                setOnMarkerClickListener { marker, _ ->
+                  map.controller.animateTo(marker.position)
+                  map.controller.setZoom((map.zoomLevelDouble + 2.0).coerceAtMost(19.0))
+                  true
+                }
+                map.overlays.add(this)
+              }
             }
           }
           map.invalidate()
@@ -524,6 +576,26 @@ private fun NearbyShopsMapView(
       }
     }
   }
+}
+
+
+private fun createShopClusterIcon(context: Context, count: Int): BitmapDrawable {
+  val density = context.resources.displayMetrics.density
+  val size = (48f * density).toInt().coerceAtLeast(48)
+  val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+  val canvas = AndroidCanvas(bitmap)
+  val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+  val center = size / 2f
+  canvas.drawCircle(center, center, center - 2f * density, paint)
+  paint.color = android.graphics.Color.rgb(245, 96, 0)
+  canvas.drawCircle(center, center, center - 5f * density, paint)
+  paint.color = android.graphics.Color.WHITE
+  paint.textAlign = Paint.Align.CENTER
+  paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+  paint.textSize = (if (count > 99) 12f else 15f) * density
+  val baseline = center - (paint.ascent() + paint.descent()) / 2f
+  canvas.drawText(if (count > 99) "99+" else count.toString(), center, baseline, paint)
+  return BitmapDrawable(context.resources, bitmap)
 }
 
 // ----------------------------------------------------
