@@ -1,16 +1,19 @@
 package com.example.ui.screens
 
+import android.app.Activity
 import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.location.Geocoder
+import androidx.activity.result.IntentSenderRequest
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import com.example.location.AddressReverseGeocoder
+import com.example.location.LocationFetchResult
+import com.example.location.LocationResolver
+import com.example.location.toReadableFullAddress
 import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -144,6 +147,9 @@ fun DriverCenterScreen(
   var currentAddress by remember { mutableStateOf("") }
   var applicationLat by remember { mutableStateOf<Double?>(null) }
   var applicationLng by remember { mutableStateOf<Double?>(null) }
+  var locatingAddress by remember { mutableStateOf(false) }
+  var addressLocationStatus by remember { mutableStateOf<String?>(null) }
+  var addressLocationError by remember { mutableStateOf<String?>(null) }
   var showApplicationLocationPicker by remember { mutableStateOf(false) }
   var vehicleType by remember { mutableStateOf("Bike") }
   var isVehicleDropdownExpanded by remember { mutableStateOf(false) }
@@ -162,6 +168,89 @@ fun DriverCenterScreen(
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf<String?>(null) }
+
+  suspend fun applyDriverDeviceLocation(location: android.location.Location) {
+    applicationLat = location.latitude
+    applicationLng = location.longitude
+    val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
+    val fullAddr = resolved?.toReadableFullAddress().orEmpty()
+    if (fullAddr.isNotBlank()) {
+      currentAddress = fullAddr
+      addressLocationError = null
+      addressLocationStatus = "Current location & street address filled. Verify or adjust on map if needed."
+    } else {
+      addressLocationError = null
+      addressLocationStatus = "Location coordinates captured. Please enter or verify your street address."
+    }
+  }
+
+  lateinit var startDriverLocationFetch: () -> Unit
+
+  val driverLocationSettingsLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.StartIntentSenderForResult()
+  ) { result ->
+    if (result.resultCode == Activity.RESULT_OK) {
+      startDriverLocationFetch()
+    } else {
+      locatingAddress = false
+      addressLocationError = "Turn on device location / GPS to fill your current address."
+    }
+  }
+
+  startDriverLocationFetch = {
+    locatingAddress = true
+    addressLocationError = null
+    addressLocationStatus = null
+    scope.launch {
+      try {
+        when (val result = LocationResolver.fetchCurrentLocation(context)) {
+          is LocationFetchResult.Success -> {
+            applyDriverDeviceLocation(result.location)
+            locatingAddress = false
+          }
+          is LocationFetchResult.NeedsResolution -> {
+            runCatching {
+              val request = IntentSenderRequest.Builder(result.exception.resolution).build()
+              driverLocationSettingsLauncher.launch(request)
+            }.onFailure {
+              locatingAddress = false
+              addressLocationError = "Turn on device location / GPS and try again."
+            }
+          }
+          is LocationFetchResult.Failure -> {
+            locatingAddress = false
+            addressLocationError = result.message
+          }
+        }
+      } catch (_: Exception) {
+        locatingAddress = false
+        addressLocationError = "Unable to detect current location. Please try again."
+      }
+    }
+  }
+
+  val driverLocationPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+      permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    if (granted) {
+      startDriverLocationFetch()
+    } else {
+      locatingAddress = false
+      addressLocationError = "Location permission denied. Grant permission or pick on map."
+    }
+  }
+
+  fun requestDriverCurrentLocation() {
+    if (LocationResolver.hasLocationPermission(context)) {
+      startDriverLocationFetch()
+    } else {
+      driverLocationPermissionLauncher.launch(
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+      )
+    }
+  }
 
   val isApprovedDriver = application?.optString("status") == "approved"
 
@@ -789,24 +878,89 @@ fun DriverCenterScreen(
                 shape = RoundedCornerShape(10.dp)
               )
 
-              // 3. Current Address + required map pin
+              // 3. Current Address + auto-detect GPS / map pin
               OutlinedTextField(
                 value = currentAddress,
                 onValueChange = { currentAddress = it },
                 label = { Text("Current Address *") },
+                placeholder = { Text("Street, house/shop number, area, city") },
+                minLines = 2,
+                maxLines = 4,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
-                supportingText = { Text(if (applicationLat != null && applicationLng != null) "Map location selected" else "Select your exact location on the map") }
+                supportingText = {
+                  Text(
+                    if (applicationLat != null && applicationLng != null) {
+                      "Location pinned (${String.format(Locale.US, "%.5f", applicationLat)}, ${String.format(Locale.US, "%.5f", applicationLng)})"
+                    } else {
+                      "Tap 'Use Current Location' to auto-fill your street address, or pick on map."
+                    }
+                  )
+                }
               )
+
+              addressLocationStatus?.let { statusMsg ->
+                Surface(
+                  color = Color(0xFFF0FDF4),
+                  shape = RoundedCornerShape(10.dp),
+                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(16.dp))
+                    Text(statusMsg, color = Color(0xFF166534), fontSize = 11.5.sp, fontWeight = FontWeight.Medium)
+                  }
+                }
+              }
+
+              addressLocationError?.let { locErr ->
+                Text(locErr, color = MaterialTheme.colorScheme.error, fontSize = 11.5.sp)
+              }
+
+              Button(
+                onClick = { requestDriverCurrentLocation() },
+                enabled = !locatingAddress && !busy,
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(48.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                  containerColor = Color(0xFFFFF7ED),
+                  contentColor = Color(0xFFC2410C)
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFED7AA))
+              ) {
+                if (locatingAddress) {
+                  CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFFC2410C)
+                  )
+                  Spacer(Modifier.width(8.dp))
+                  Text("Detecting current address…", fontWeight = FontWeight.SemiBold)
+                } else {
+                  Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                  Spacer(Modifier.width(8.dp))
+                  Text("Use Current Location", fontWeight = FontWeight.Bold)
+                }
+              }
+
               OutlinedButton(
                 onClick = { showApplicationLocationPicker = true },
-                modifier = Modifier.fillMaxWidth(),
+                enabled = !locatingAddress && !busy,
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(48.dp),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEA580C))
               ) {
-                Icon(Icons.Filled.Map, contentDescription = null)
+                Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(if (applicationLat != null && applicationLng != null) "Change Map Location" else "Choose Current Location on Map")
+                Text(if (applicationLat != null && applicationLng != null) "Adjust Location on Map" else "Choose Location on Map")
               }
 
               // 4. Vehicle Type Dropdown
@@ -1433,11 +1587,19 @@ fun DriverCenterScreen(
 
   if (showApplicationLocationPicker) {
     DriverApplicationLocationPicker(
+      initialLat = applicationLat,
+      initialLng = applicationLng,
       onDismiss = { showApplicationLocationPicker = false },
       onLocationSelected = { lat, lng, address ->
         applicationLat = lat
         applicationLng = lng
-        if (address.isNotBlank()) currentAddress = address
+        addressLocationError = null
+        if (address.isNotBlank()) {
+          currentAddress = address
+          addressLocationStatus = "Map location selected and street address filled."
+        } else {
+          addressLocationStatus = "Map location pinned. Verify your street address above."
+        }
         showApplicationLocationPicker = false
       }
     )
@@ -1511,41 +1673,79 @@ fun DriverCenterScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DriverApplicationLocationPicker(
+  initialLat: Double? = null,
+  initialLng: Double? = null,
   onDismiss: () -> Unit,
   onLocationSelected: (Double, Double, String) -> Unit
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   var mapView by remember { mutableStateOf<MapView?>(null) }
-  var selectedPoint by remember { mutableStateOf(GeoPoint(0.0, 0.0)) }
+  val hasInitialPoint = initialLat != null && initialLng != null &&
+    initialLat in -90.0..90.0 && initialLng in -180.0..180.0 &&
+    !(initialLat == 0.0 && initialLng == 0.0)
+  var selectedPoint by remember {
+    mutableStateOf(if (hasInitialPoint) GeoPoint(initialLat!!, initialLng!!) else GeoPoint(0.0, 0.0))
+  }
   var isLocating by remember { mutableStateOf(false) }
+  var isResolvingAddress by remember { mutableStateOf(false) }
+  var previewAddress by remember { mutableStateOf("") }
   var locationError by remember { mutableStateOf<String?>(null) }
   var hasLocationPermission by remember {
-    mutableStateOf(
-      ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    )
+    mutableStateOf(LocationResolver.hasLocationPermission(context))
   }
 
-  fun centerOnCurrentLocation() {
-    if (!hasLocationPermission) return
-    isLocating = true
-    LocationServices.getFusedLocationProviderClient(context)
-      .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-      .addOnSuccessListener { location ->
-        isLocating = false
-        if (location != null) {
-          selectedPoint = GeoPoint(location.latitude, location.longitude)
-          mapView?.controller?.animateTo(selectedPoint)
-          locationError = null
-        } else {
-          locationError = "Current location is unavailable. Move the map pin manually."
+  lateinit var centerOnCurrentLocation: () -> Unit
+
+  val locationSettingsLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.StartIntentSenderForResult()
+  ) { result ->
+    if (result.resultCode == Activity.RESULT_OK) {
+      centerOnCurrentLocation()
+    } else {
+      isLocating = false
+      locationError = "Turn on device location / GPS to detect your current location."
+    }
+  }
+
+  centerOnCurrentLocation = {
+    if (hasLocationPermission) {
+      isLocating = true
+      locationError = null
+      scope.launch {
+        try {
+          when (val result = LocationResolver.fetchCurrentLocation(context)) {
+            is LocationFetchResult.Success -> {
+              val point = GeoPoint(result.location.latitude, result.location.longitude)
+              selectedPoint = point
+              mapView?.let { map ->
+                map.controller.setZoom(16.5)
+                map.controller.animateTo(point)
+              }
+              val resolved = AddressReverseGeocoder.resolve(context, point.latitude, point.longitude)
+              previewAddress = resolved?.toReadableFullAddress().orEmpty()
+              isLocating = false
+            }
+            is LocationFetchResult.NeedsResolution -> {
+              runCatching {
+                val request = IntentSenderRequest.Builder(result.exception.resolution).build()
+                locationSettingsLauncher.launch(request)
+              }.onFailure {
+                isLocating = false
+                locationError = "Turn on device location / GPS and try again."
+              }
+            }
+            is LocationFetchResult.Failure -> {
+              isLocating = false
+              locationError = result.message
+            }
+          }
+        } catch (_: Exception) {
+          isLocating = false
+          locationError = "Could not get current location. Move the map pin manually."
         }
       }
-      .addOnFailureListener {
-        isLocating = false
-        locationError = "Could not get current location. Move the map pin manually."
-      }
+    }
   }
 
   val permissionLauncher = rememberLauncherForActivityResult(
@@ -1557,6 +1757,15 @@ private fun DriverApplicationLocationPicker(
     else locationError = "Location permission denied. You can still select a point on the map."
   }
 
+  LaunchedEffect(Unit) {
+    if (!hasInitialPoint && hasLocationPermission) {
+      centerOnCurrentLocation()
+    } else if (hasInitialPoint) {
+      val resolved = AddressReverseGeocoder.resolve(context, selectedPoint.latitude, selectedPoint.longitude)
+      previewAddress = resolved?.toReadableFullAddress().orEmpty()
+    }
+  }
+
   Dialog(onDismissRequest = onDismiss) {
     Surface(
       modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp),
@@ -1565,9 +1774,9 @@ private fun DriverApplicationLocationPicker(
     ) {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(16.dp)) {
         Text("Select Your Current Location", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-        Text("Move the map until the pin is exactly on your location.", fontSize = 12.sp, color = Color(0xFF64748B))
+        Text("Move the map until the pin is on your exact location, or tap Use My Current Location.", fontSize = 12.sp, color = Color(0xFF64748B))
         Box(
-          modifier = Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 220.dp, max = 420.dp).fillMaxHeight(0.48f).clip(RoundedCornerShape(16.dp))
+          modifier = Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(min = 220.dp, max = 380.dp).fillMaxHeight(0.45f).clip(RoundedCornerShape(16.dp))
         ) {
           AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -1578,14 +1787,13 @@ private fun DriverApplicationLocationPicker(
                 setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
                 isTilesScaledToDpi = true
-                controller.setZoom(2.5)
+                controller.setZoom(if (hasInitialPoint) 16.5 else 3.0)
                 controller.setCenter(selectedPoint)
                 mapView = this
               }
             },
             update = { map ->
               mapView = map
-              map.controller.setCenter(selectedPoint)
             }
           )
           Icon(
@@ -1599,7 +1807,30 @@ private fun DriverApplicationLocationPicker(
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
           ) {
-            Text("Pin location", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEA580C), modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            Text(
+              text = if (isLocating) "Finding your location…" else "Pin location",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFFEA580C),
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+          }
+        }
+        if (previewAddress.isNotBlank()) {
+          Surface(
+            color = Color(0xFFF8FAFC),
+            shape = RoundedCornerShape(10.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Text(
+              text = previewAddress,
+              fontSize = 11.5.sp,
+              color = Color(0xFF334155),
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+            )
           }
         }
         OutlinedButton(
@@ -1607,8 +1838,8 @@ private fun DriverApplicationLocationPicker(
             if (hasLocationPermission) centerOnCurrentLocation()
             else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
           },
-          modifier = Modifier.fillMaxWidth(),
-          enabled = !isLocating,
+          modifier = Modifier.fillMaxWidth().height(48.dp),
+          enabled = !isLocating && !isResolvingAddress,
           colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEA580C))
         ) {
           if (isLocating) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -1618,7 +1849,11 @@ private fun DriverApplicationLocationPicker(
         }
         locationError?.let { Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-          OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+          OutlinedButton(
+            onClick = onDismiss,
+            enabled = !isResolvingAddress,
+            modifier = Modifier.weight(1f).height(48.dp)
+          ) { Text("Cancel") }
           Button(
             onClick = {
               val point = mapView?.mapCenter ?: selectedPoint
@@ -1629,18 +1864,26 @@ private fun DriverApplicationLocationPicker(
                 return@Button
               }
               scope.launch {
-                val address = withContext(Dispatchers.IO) {
-                  try {
-                    @Suppress("DEPRECATION")
-                    Geocoder(context, Locale.getDefault()).getFromLocation(lat, lng, 1)?.firstOrNull()?.getAddressLine(0).orEmpty()
-                  } catch (_: Exception) { "" }
-                }
+                isResolvingAddress = true
+                val address = runCatching {
+                  AddressReverseGeocoder.resolve(context, lat, lng)?.toReadableFullAddress().orEmpty()
+                }.getOrDefault("")
+                isResolvingAddress = false
                 onLocationSelected(lat, lng, address)
               }
             },
-            modifier = Modifier.weight(1f),
+            enabled = !isResolvingAddress,
+            modifier = Modifier.weight(1f).height(48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
-          ) { Text("Confirm Location") }
+          ) {
+            if (isResolvingAddress) {
+              CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+              Spacer(Modifier.width(6.dp))
+              Text("Saving…")
+            } else {
+              Text("Confirm Location")
+            }
+          }
         }
       }
     }

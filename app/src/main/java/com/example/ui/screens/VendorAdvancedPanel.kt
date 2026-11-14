@@ -6,6 +6,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -14,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
 import com.example.ui.theme.JTOrange
+import com.example.ui.theme.VendorColors
+import com.example.ui.theme.VendorShapes
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import org.json.JSONArray
@@ -731,9 +735,26 @@ fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
       readOnly = true,
       label = { Text("Vendor type") },
       placeholder = { Text("Select vendor type") },
+      leadingIcon = {
+        Icon(
+          imageVector = Icons.Rounded.Badge,
+          contentDescription = null,
+          tint = VendorColors.TextSecondary,
+          modifier = Modifier.size(20.dp)
+        )
+      },
       trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
       modifier = Modifier.fillMaxWidth().menuAnchor(),
-      singleLine = true
+      singleLine = true,
+      shape = VendorShapes.input,
+      colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = VendorColors.PrimaryOrange,
+        focusedLabelColor = VendorColors.PrimaryOrange,
+        unfocusedBorderColor = VendorColors.BorderSubtle,
+        unfocusedLabelColor = VendorColors.TextSecondary,
+        focusedContainerColor = VendorColors.CardWhite,
+        unfocusedContainerColor = VendorColors.CardWhite
+      )
     )
     ExposedDropdownMenu(
       expanded = expanded,
@@ -755,5 +776,21 @@ fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
 
 @Composable
 private fun VendorAdvancedField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
-  OutlinedTextField(value = value, onValueChange = onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1)
+  OutlinedTextField(
+    value = value,
+    onValueChange = onChange,
+    label = { Text(label) },
+    modifier = Modifier.fillMaxWidth(),
+    minLines = lines,
+    singleLine = lines == 1,
+    shape = VendorShapes.input,
+    colors = OutlinedTextFieldDefaults.colors(
+      focusedBorderColor = VendorColors.PrimaryOrange,
+      focusedLabelColor = VendorColors.PrimaryOrange,
+      unfocusedBorderColor = VendorColors.BorderSubtle,
+      unfocusedLabelColor = VendorColors.TextSecondary,
+      focusedContainerColor = VendorColors.CardWhite,
+      unfocusedContainerColor = VendorColors.CardWhite
+    )
+  )
 }

@@ -8,63 +8,135 @@ import android.print.PrintAttributes
 import android.print.PrintManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import coil.compose.AsyncImage
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.LocalShipping
+import androidx.compose.material.icons.rounded.LocationCity
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.ShoppingBag
+import androidx.compose.material.icons.rounded.Storefront
+import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material.icons.filled.LocalShipping
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
-import com.example.ui.theme.JTOrange
+import com.example.ui.components.AppCard
+import com.example.ui.components.ErrorState
+import com.example.ui.components.PrimaryButton
+import com.example.ui.components.SecondaryButton
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.StatusBadge
+import com.example.ui.components.StatusTone
+import com.example.ui.components.VendorAlertBanner
+import com.example.ui.components.VendorOutlinedTextField
+import com.example.ui.components.VendorStatGridSkeleton
+import com.example.ui.theme.VendorCenterTheme
+import com.example.ui.theme.VendorColors
+import com.example.ui.theme.VendorShapes
+import com.example.ui.theme.VendorSpacing
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VendorCenterScreen(onBack: () -> Unit) {
   val context = LocalContext.current
@@ -73,6 +145,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var application by remember { mutableStateOf<VendorApplication?>(null) }
   var isVendor by remember { mutableStateOf(false) }
   var products by remember { mutableStateOf(JSONArray()) }
+  var productImageUrls by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
   var productDeletionRequests by remember { mutableStateOf(JSONArray()) }
   var deletionTarget by remember { mutableStateOf<JSONObject?>(null) }
   var deletionReason by remember { mutableStateOf("") }
@@ -81,6 +154,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var ordersStatus by remember { mutableStateOf("all") }
   var ordersPage by remember { mutableIntStateOf(0) }
   var ordersTotal by remember { mutableIntStateOf(0) }
+  var ordersLoading by remember { mutableStateOf(false) }
   var loading by remember { mutableStateOf(true) }
   var hasLoadedData by remember { mutableStateOf(false) }
   var saving by remember { mutableStateOf(false) }
@@ -103,14 +177,18 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var frontPath by remember { mutableStateOf<String?>(null) }
   var backPath by remember { mutableStateOf<String?>(null) }
   var shopImageUri by remember { mutableStateOf<Uri?>(null) }
-  var showProductForm by remember { mutableStateOf(false) }
   var editingProduct by remember { mutableStateOf<JSONObject?>(null) }
   var viewingProduct by remember { mutableStateOf<JSONObject?>(null) }
-  var vendorTab by remember { mutableStateOf("overview") }
+
+  var selectedTab by remember { mutableStateOf(VendorBottomTab.OVERVIEW) }
+  var moreSection by remember { mutableStateOf(VendorMoreSection.MENU) }
+  var activeSubScreen by remember { mutableStateOf<String?>(null) } // "product_add", "product_edit", "product_details"
+
+  val isApprovedVendor = isVendor && application?.status == "approved" && application?.vendorLocked != true
 
   fun refresh() {
     scope.launch {
-      loading = !hasLoadedData
+      loading = true
       errorMessage = ""
       try {
         application = VendorService.getOwnApplication()
@@ -126,18 +204,65 @@ fun VendorCenterScreen(onBack: () -> Unit) {
       } catch (e: Exception) {
         val message = vendorLoadErrorMessage(e)
         if (hasLoadedData) actionErrorMessage = message else errorMessage = message
-      } finally { loading = false }
+      } finally {
+        loading = false
+      }
     }
   }
+
   LaunchedEffect(user?.id) { refresh() }
+
+  // Pre-fetch product thumbnail URLs whenever the products array updates
+  LaunchedEffect(products) {
+    val ids = (0 until products.length())
+      .mapNotNull { products.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() } }
+      .distinct()
+    if (ids.isEmpty()) {
+      productImageUrls = emptyMap()
+      return@LaunchedEffect
+    }
+    val loaded = coroutineScope {
+      ids.map { id ->
+        async {
+          val url = runCatching { VendorService.listProductImageUrls(id).firstOrNull().orEmpty() }
+            .getOrDefault("")
+          id to url
+        }
+      }.awaitAll().toMap()
+    }
+    productImageUrls = loaded
+  }
+
+  fun fetchOrders(page: Int, search: String, status: String) {
+    scope.launch {
+      ordersLoading = true
+      actionErrorMessage = ""
+      try {
+        ordersPage = page
+        orders = VendorService.listOrders(page, search, status)
+        ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
+      } catch (e: Exception) {
+        actionErrorMessage = e.message ?: "Orders could not be loaded."
+      } finally {
+        ordersLoading = false
+      }
+    }
+  }
 
   suspend fun upload(uri: Uri, side: String): String {
     val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
       ?: throw IllegalStateException("Selected file could not be read.")
     require(bytes.size <= 10 * 1024 * 1024) { "Each verification file must be 10 MB or smaller." }
-    require(mime in listOf("application/pdf", "image/jpeg", "image/png", "image/webp")) { "Use PDF, JPG, PNG or WebP files." }
-    val ext = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "pdf" }
+    require(mime in listOf("application/pdf", "image/jpeg", "image/png", "image/webp")) {
+      "Use PDF, JPG, PNG or WebP files."
+    }
+    val ext = when (mime) {
+      "image/jpeg" -> "jpg"
+      "image/png" -> "png"
+      "image/webp" -> "webp"
+      else -> "pdf"
+    }
     val path = "${user?.id}/$side-${System.currentTimeMillis()}.$ext"
     return VendorService.uploadPrivateDocument(path, bytes, mime)
   }
@@ -149,397 +274,947 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var pendingDoc by remember { mutableStateOf("verification") }
   val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
     if (uri != null) scope.launch {
-      saving = true; actionErrorMessage = ""; info = ""
+      saving = true
+      actionErrorMessage = ""
+      info = ""
       try {
         val path = upload(uri, pendingDoc)
-        when (pendingDoc) { "verification" -> verificationPath = path; "cnic-front" -> frontPath = path; "cnic-back" -> backPath = path }
+        when (pendingDoc) {
+          "verification" -> verificationPath = path
+          "cnic-front" -> frontPath = path
+          "cnic-back" -> backPath = path
+        }
         info = "Document uploaded securely."
-      } catch (e: Exception) { actionErrorMessage = e.message ?: "Document upload failed." }
-      finally { saving = false }
+      } catch (e: Exception) {
+        actionErrorMessage = e.message ?: "Document upload failed."
+      } finally {
+        saving = false
+      }
     }
   }
 
-  Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFF5F7FC), Color(0xFFEAF0F8), Color(0xFFF7F9FC))))) {
-    Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.68f), RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp)).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-      IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-      Column(Modifier.weight(1f)) {
-        Text("JTBazar Vendor Center", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("Your shop, products and pickup preparation", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+  val handleBackNavigation: () -> Unit = {
+    when {
+      activeSubScreen == "product_edit" -> {
+        editingProduct = null
+        activeSubScreen = if (viewingProduct != null) "product_details" else null
       }
-      Icon(Icons.Default.Storefront, contentDescription = null, tint = JTOrange)
+      activeSubScreen == "product_details" -> {
+        viewingProduct = null
+        activeSubScreen = null
+      }
+      activeSubScreen == "product_add" -> {
+        activeSubScreen = null
+      }
+      isApprovedVendor && selectedTab == VendorBottomTab.MORE && moreSection != VendorMoreSection.MENU -> {
+        moreSection = VendorMoreSection.MENU
+      }
+      else -> onBack()
     }
-    HorizontalDivider()
-    if (loading) {
-      Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = JTOrange) }
-    } else {
-      Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
-        if (actionErrorMessage.isNotBlank()) Text(actionErrorMessage, color = MaterialTheme.colorScheme.error)
-        if (info.isNotBlank()) Text(info, color = Color(0xFF16803C))
-        when {
-          errorMessage.isNotBlank() -> {
-            Text("Connection problem", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
-            Text("No application or shop data was submitted. Check your internet connection and try again.", color = Color.Gray)
-            Button(onClick = { refresh() }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
-              Text("Retry connection")
+  }
+
+  val canHandleSubBack = activeSubScreen != null ||
+    (isApprovedVendor && selectedTab == VendorBottomTab.MORE && moreSection != VendorMoreSection.MENU)
+
+  BackHandler(enabled = canHandleSubBack) {
+    handleBackNavigation()
+  }
+
+  val productUiModels = remember(products, productDeletionRequests, productImageUrls) {
+    mapProductsToUiModels(products, productDeletionRequests, productImageUrls)
+  }
+  val orderGroups = remember(orders) { mapOrdersToUiGroups(orders) }
+
+  val topBarTitle = when {
+    activeSubScreen == "product_add" -> "Add listing"
+    activeSubScreen == "product_edit" -> "Edit product"
+    activeSubScreen == "product_details" -> "Product details"
+    isApprovedVendor && selectedTab == VendorBottomTab.MORE -> when (moreSection) {
+      VendorMoreSection.CASES_SUPPORT -> "Cases & Support"
+      VendorMoreSection.SHOP_SETTINGS -> "Shop Settings"
+      VendorMoreSection.ADVANCED_TOOLS -> "More Tools"
+      VendorMoreSection.MENU -> "Vendor Center"
+    }
+    else -> "Vendor Center"
+  }
+
+  val topBarSubtitle = when {
+    activeSubScreen != null -> application?.shopName?.takeIf { it.isNotBlank() }
+    isApprovedVendor -> application?.shopName?.takeIf { it.isNotBlank() } ?: "Your shop, products & pickup"
+    else -> "Your shop, products & pickup preparation"
+  }
+
+  VendorCenterTheme {
+    Scaffold(
+      containerColor = VendorColors.Background,
+      topBar = {
+        Column(modifier = Modifier.fillMaxWidth()) {
+          TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(
+              containerColor = VendorColors.CardWhite,
+              titleContentColor = VendorColors.TextPrimary,
+              navigationIconContentColor = VendorColors.TextPrimary,
+              actionIconContentColor = VendorColors.TextPrimary
+            ),
+            navigationIcon = {
+              IconButton(
+                onClick = handleBackNavigation,
+                modifier = Modifier
+                  .size(VendorSpacing.touchMin)
+                  .testTag("vendor_top_back_button")
+              ) {
+                Icon(
+                  imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                  contentDescription = "Back"
+                )
+              }
+            },
+            title = {
+              Column {
+                Text(
+                  text = topBarTitle,
+                  style = MaterialTheme.typography.titleLarge,
+                  fontWeight = FontWeight.Bold,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+                if (!topBarSubtitle.isNullOrBlank()) {
+                  Text(
+                    text = topBarSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = VendorColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                }
+              }
+            },
+            actions = {
+              if (activeSubScreen == null) {
+                IconButton(
+                  onClick = { refresh() },
+                  enabled = !loading,
+                  modifier = Modifier
+                    .size(VendorSpacing.touchMin)
+                    .testTag("vendor_top_refresh_button")
+                ) {
+                  if (loading && hasLoadedData) {
+                    CircularProgressIndicator(
+                      modifier = Modifier.size(20.dp),
+                      color = VendorColors.PrimaryOrange,
+                      strokeWidth = 2.dp
+                    )
+                  } else {
+                    Icon(
+                      imageVector = Icons.Rounded.Refresh,
+                      contentDescription = "Refresh Vendor Center",
+                      tint = VendorColors.PrimaryOrange
+                    )
+                  }
+                }
+              }
+            }
+          )
+          HorizontalDivider(color = VendorColors.BorderSubtle)
+        }
+      },
+      bottomBar = {
+        if (isApprovedVendor && activeSubScreen == null) {
+          Column(modifier = Modifier.fillMaxWidth()) {
+            HorizontalDivider(color = VendorColors.BorderSubtle)
+            NavigationBar(
+              containerColor = VendorColors.CardWhite,
+              tonalElevation = 0.dp
+            ) {
+              VendorBottomTab.entries.forEach { tab ->
+                val isSelected = selectedTab == tab
+                val icon: ImageVector = when (tab) {
+                  VendorBottomTab.OVERVIEW -> Icons.Rounded.Home
+                  VendorBottomTab.PRODUCTS -> Icons.Rounded.ShoppingBag
+                  VendorBottomTab.INVENTORY -> Icons.Rounded.Inventory2
+                  VendorBottomTab.ORDERS -> Icons.Rounded.LocalShipping
+                  VendorBottomTab.MORE -> Icons.Rounded.MoreHoriz
+                }
+                NavigationBarItem(
+                  selected = isSelected,
+                  onClick = {
+                    if (tab == VendorBottomTab.MORE && selectedTab == VendorBottomTab.MORE) {
+                      moreSection = VendorMoreSection.MENU
+                    } else {
+                      selectedTab = tab
+                      if (tab != VendorBottomTab.MORE) {
+                        moreSection = VendorMoreSection.MENU
+                      }
+                    }
+                  },
+                  icon = {
+                    Icon(
+                      imageVector = icon,
+                      contentDescription = tab.label,
+                      modifier = Modifier.size(24.dp)
+                    )
+                  },
+                  label = {
+                    Text(
+                      text = tab.label,
+                      style = MaterialTheme.typography.labelSmall,
+                      fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                      maxLines = 1,
+                      softWrap = false,
+                      overflow = TextOverflow.Ellipsis
+                    )
+                  },
+                  colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = VendorColors.PrimaryOrange,
+                    selectedTextColor = VendorColors.PrimaryOrange,
+                    indicatorColor = VendorColors.PrimaryOrangeTint,
+                    unselectedIconColor = VendorColors.TextSecondary,
+                    unselectedTextColor = VendorColors.TextSecondary
+                  ),
+                  modifier = Modifier.testTag("vendor_nav_${tab.routeKey}")
+                )
+              }
             }
           }
-          application?.vendorLocked == true -> {
-            Text("Vendor account restricted", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            StatusPanel(application!!)
-            Text(application?.lockReason ?: "Vendor tools are temporarily unavailable. Contact JTBazar support for details.", color = MaterialTheme.colorScheme.error)
-            OutlinedButton(onClick = { refresh() }) { Text("Refresh status") }
+        }
+      }
+    ) { innerPadding ->
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(innerPadding)
+          .background(VendorColors.Background)
+      ) {
+        when {
+          loading && !hasLoadedData -> {
+            Column(
+              modifier = Modifier
+                .fillMaxSize()
+                .padding(VendorSpacing.md),
+              verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+            ) {
+              VendorStatGridSkeleton()
+            }
           }
-          isVendor && application?.status == "approved" -> {
-            if (vendorTab !in setOf("product_edit", "product_add", "product_details")) VendorDashboardHero(
-              shopName = application?.shopName.orEmpty(),
-              onRefresh = { refresh() },
-              refreshing = loading
-            )
-            if (vendorTab !in setOf("product_edit", "product_add", "product_details")) VendorDashboardTabs(
-              selected = vendorTab,
-              onSelect = { vendorTab = it }
-            )
-            when (vendorTab) {
+
+          errorMessage.isNotBlank() && !hasLoadedData -> {
+            Column(
+              modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(VendorSpacing.md),
+              verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+            ) {
+              ErrorState(
+                title = "Connection problem",
+                message = "$errorMessage\n\nNo application or shop data was submitted. Check your internet connection and try again.",
+                retryLabel = "Retry connection",
+                onRetry = { refresh() }
+              )
+            }
+          }
+
+          application?.vendorLocked == true -> {
+            Column(
+              modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(VendorSpacing.md),
+              verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+            ) {
+              SectionHeader(
+                title = "Vendor account restricted",
+                subtitle = "Seller access is currently paused for this account."
+              )
+              StatusPanel(application!!)
+              VendorAlertBanner(
+                message = application?.lockReason
+                  ?: "Vendor tools are temporarily unavailable. Contact JTBazar support for details.",
+                isError = true
+              )
+              SecondaryButton(
+                text = "Refresh status",
+                icon = Icons.Rounded.Refresh,
+                onClick = { refresh() },
+                modifier = Modifier.fillMaxWidth()
+              )
+            }
+          }
+
+          isApprovedVendor -> {
+            when (activeSubScreen) {
               "product_add" -> VendorListingEditor(
-                onCancel = { vendorTab = "listings" },
+                onCancel = { activeSubScreen = null },
                 onSaved = { successMessage ->
                   info = successMessage
                   try {
                     products = VendorService.listProducts()
                     productDeletionRequests = VendorService.listProductDeletionRequests()
-                  } catch (e: Exception) { actionErrorMessage = e.message ?: "Listing was submitted, but the product list could not refresh." }
-                  vendorTab = "listings"
+                  } catch (e: Exception) {
+                    actionErrorMessage = e.message
+                      ?: "Listing was submitted, but the product list could not refresh."
+                  }
+                  activeSubScreen = null
+                  selectedTab = VendorBottomTab.PRODUCTS
                 }
               )
+
               "product_details" -> {
                 val selected = viewingProduct
-                if (selected != null) VendorProductDetailsScreen(
-                  product = selected,
-                  onBack = { viewingProduct = null; vendorTab = "listings" },
-                  onEdit = { editingProduct = selected; vendorTab = "product_edit" }
-                ) else vendorTab = "listings"
+                if (selected != null) {
+                  VendorProductDetailsScreen(
+                    product = selected,
+                    onBack = {
+                      viewingProduct = null
+                      activeSubScreen = null
+                    },
+                    onEdit = {
+                      editingProduct = selected
+                      activeSubScreen = "product_edit"
+                    }
+                  )
+                } else {
+                  activeSubScreen = null
+                }
               }
-              "cases" -> VendorCasesScreen()
-              "shop_settings" -> VendorShopSettingsScreen(application!!, user?.email.orEmpty()) { refresh() }
+
               "product_edit" -> {
                 val selected = editingProduct
                 if (selected != null) {
                   VendorProductEditScreen(
                     product = selected,
-                    onBack = { editingProduct = null; vendorTab = "product_details" },
+                    onBack = {
+                      editingProduct = null
+                      activeSubScreen = if (viewingProduct != null) "product_details" else null
+                    },
                     onSaved = {
                       products = VendorService.listProducts()
                       editingProduct = null
                       viewingProduct = null
-                      vendorTab = "listings"
+                      activeSubScreen = null
+                      selectedTab = VendorBottomTab.PRODUCTS
                       info = "Product updated and sent for moderation where required."
                     }
                   )
                 } else {
-                  vendorTab = "listings"
+                  activeSubScreen = null
                 }
               }
-              "overview" -> {
-                Text("Your business at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF17243A))
-                Text("A live snapshot of your JTBazar shop activity.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                  VendorMetricCard("Total listings", products.length().toString(), "Products in your shop", Icons.Default.ShoppingBag, Modifier.weight(1f))
-                  VendorMetricCard("Order items", ordersTotal.toString(), "Across your fulfilment", Icons.Default.ReceiptLong, Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                  VendorMetricCard("Current page", orders.length().toString(), "Items to prepare", Icons.Default.LocalShipping, Modifier.weight(1f))
-                  VendorMetricCard("Shop status", "Active", "Approved seller", Icons.Default.TrendingUp, Modifier.weight(1f))
-                }
-                Card(
-                  modifier = Modifier.fillMaxWidth(),
-                  shape = RoundedCornerShape(20.dp),
-                  colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4EC))
-                ) {
-                  Row(Modifier.fillMaxWidth().padding(17.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.size(44.dp).background(Color.White, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                      Icon(Icons.Default.Add, null, tint = JTOrange, modifier = Modifier.size(24.dp))
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                      Text("Grow your shop", color = Color(0xFF17243A), fontWeight = FontWeight.Bold)
-                      Text("Add a new product listing and make it available to JTBazar customers.", color = Color(0xFF66758A), style = MaterialTheme.typography.bodySmall)
-                    }
-                    IconButton(onClick = { vendorTab = "product_add" }) {
-                      Icon(Icons.Default.ChevronRight, contentDescription = "Create listing", tint = JTOrange)
-                    }
-                  }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Text("Recent listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF17243A))
-                  Spacer(Modifier.weight(1f))
-                  TextButton(onClick = { vendorTab = "listings" }) { Text("View all", color = JTOrange) }
-                }
-                if (products.length() == 0) {
-                  VendorEmptyState("No products listed yet", "Your product listings will appear here once you add them.", "Add your first product") {
-                    vendorTab = "product_add"
-                  }
-                } else {
-                  for (i in 0 until minOf(products.length(), 4)) {
-                    val product = products.optJSONObject(i) ?: continue
-                    VendorCompactProductCard(product)
-                  }
-                }
-              }
-              "listings" -> {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.Inventory2, null, tint = JTOrange)
-              Spacer(Modifier.width(8.dp)); Text("Your products", fontWeight = FontWeight.Bold)
-              Spacer(Modifier.weight(1f))
-              TextButton(onClick = { vendorTab = "product_add" }) { Icon(Icons.Default.Add, null); Text("Add product") }
-            }
-            if (products.length() == 0) Text("No products yet. Add your first product.")
-            for (i in 0 until products.length()) {
-              val p = products.optJSONObject(i) ?: continue
-              val id = p.optString("id")
-              val name = p.optString("name", "Product")
-              val hidden = p.optBoolean("vendor_hidden", p.optBoolean("is_hidden", false))
-              val deletionRequest = (0 until productDeletionRequests.length()).mapNotNull { productDeletionRequests.optJSONObject(it) }
-                .filter { it.optString("product_id") == id }.maxByOrNull { it.optString("created_at") }
-              val deletionStatus = deletionRequest?.optString("status").orEmpty().lowercase()
-              var productImageUrl by remember(id) { mutableStateOf("") }
-              LaunchedEffect(id) {
-                try { productImageUrl = VendorService.listProductImageUrls(id).firstOrNull().orEmpty() }
-                catch (_: Exception) { productImageUrl = "" }
-              }
-              Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.72f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (productImageUrl.isNotBlank()) {
-                      AsyncImage(
-                        model = productImageUrl,
-                        contentDescription = name,
-                        modifier = Modifier.size(88.dp).clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                      )
-                    } else {
-                      Box(Modifier.size(88.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Inventory2, null, tint = JTOrange)
-                      }
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                      Text(name, fontWeight = FontWeight.SemiBold)
-                      Text("PKR ${p.optString("price","0")}  •  ${p.optString("publication_status", p.optString("status","draft"))}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                    }
-                  }
-                  val moderation = p.optString("moderation_status", p.optString("status", "pending"))
-                    .takeUnless { it == "null" }?.lowercase() ?: "pending"
-                  val rejected = moderation == "rejected"
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                      when { rejected -> "Rejected"; hidden -> "Hidden"; moderation == "approved" -> "Approved"; else -> "Pending approval" },
-                      color = when { rejected -> Color(0xFFB91C1C); hidden -> Color.Gray; moderation == "approved" -> Color(0xFF16803C); else -> Color(0xFF9A6700) }
-                    )
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { viewingProduct = p; vendorTab = "product_details" }) {
-                      Icon(Icons.Default.Inventory2, contentDescription = "View product details", tint = Color(0xFF64748B))
-                    }
-                    IconButton(onClick = { editingProduct = p; vendorTab = "product_edit" }) {
-                      Icon(Icons.Default.Edit, contentDescription = "Edit product", tint = JTOrange)
-                    }
-                    if (moderation == "approved") {
-                      IconButton(onClick = {
-                        scope.launch { saving = true; actionErrorMessage = ""; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { actionErrorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
-                      }, enabled = !saving) {
-                        Icon(if (hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = if (hidden) "Show product" else "Hide product", tint = Color(0xFF64748B))
-                      }
-                    }
-                    if (deletionStatus == "pending") {
-                      Text("Deletion requested", color = Color(0xFF9A6700), style = MaterialTheme.typography.labelSmall)
-                    } else {
-                      IconButton(onClick = { deletionTarget = p; deletionReason = "" }, enabled = !saving) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = if (deletionStatus == "rejected") "Request deletion again" else "Request product deletion", tint = Color(0xFFB91C1C))
-                      }
-                    }
-                  }
-                  if (rejected) {
-                    val rejection = p.optString("rejection_reason").takeUnless { it == "null" }?.trim().orEmpty()
-                      .ifBlank { p.optString("moderation_note").takeUnless { it == "null" }?.trim().orEmpty() }
-                    if (rejection.isNotBlank()) Text("Admin rejection reason: $rejection", color = Color(0xFFB91C1C), style = MaterialTheme.typography.bodySmall)
-                  }
-                }
-              }
-            }
 
+              else -> {
+                when (selectedTab) {
+                  VendorBottomTab.OVERVIEW -> {
+                    val recentState = when {
+                      loading && !hasLoadedData -> VendorSectionState.Loading
+                      errorMessage.isNotBlank() && productUiModels.isEmpty() ->
+                        VendorSectionState.Error(errorMessage)
+                      productUiModels.isEmpty() -> VendorSectionState.Empty
+                      else -> VendorSectionState.Content(productUiModels.take(4))
+                    }
+                    VendorOverviewContent(
+                      uiState = VendorOverviewUiState(
+                        shopName = application?.shopName.orEmpty(),
+                        isSellerActive = true,
+                        totalListings = products.length(),
+                        orderItemsCount = ordersTotal,
+                        itemsToPrepareCount = orders.length(),
+                        shopStatusLabel = "Active",
+                        recentProductsState = recentState,
+                        isRefreshing = loading
+                      ),
+                      onRefresh = { refresh() },
+                      onAddProduct = { activeSubScreen = "product_add" },
+                      onViewAllProducts = { selectedTab = VendorBottomTab.PRODUCTS },
+                      onOpenProductDetails = { model ->
+                        viewingProduct = model.rawJson
+                        activeSubScreen = "product_details"
+                      }
+                    )
+                  }
+
+                  VendorBottomTab.PRODUCTS -> {
+                    val productsState = when {
+                      loading && !hasLoadedData -> VendorSectionState.Loading
+                      errorMessage.isNotBlank() && productUiModels.isEmpty() ->
+                        VendorSectionState.Error(errorMessage)
+                      productUiModels.isEmpty() -> VendorSectionState.Empty
+                      else -> VendorSectionState.Content(productUiModels)
+                    }
+                    VendorProductsContent(
+                      uiState = VendorProductsUiState(
+                        productsState = productsState,
+                        isMutating = saving,
+                        actionError = actionErrorMessage,
+                        infoMessage = info
+                      ),
+                      onRefresh = { refresh() },
+                      onAddProduct = { activeSubScreen = "product_add" },
+                      onViewDetails = { model ->
+                        viewingProduct = model.rawJson
+                        activeSubScreen = "product_details"
+                      },
+                      onEditProduct = { model ->
+                        editingProduct = model.rawJson
+                        activeSubScreen = "product_edit"
+                      },
+                      onToggleVisibility = { model ->
+                        scope.launch {
+                          saving = true
+                          actionErrorMessage = ""
+                          info = ""
+                          try {
+                            VendorService.setProductVisibility(model.id, !model.isHidden)
+                            products = VendorService.listProducts()
+                            info = if (model.isHidden) {
+                              "Product is now visible to shoppers."
+                            } else {
+                              "Product hidden from shoppers."
+                            }
+                          } catch (e: Exception) {
+                            actionErrorMessage = e.message ?: "Visibility update failed."
+                          } finally {
+                            saving = false
+                          }
+                        }
+                      },
+                      onArchiveProduct = { model ->
+                        when {
+                          model.moderationStatus == "approved" && !model.isHidden -> {
+                            scope.launch {
+                              saving = true
+                              actionErrorMessage = ""
+                              info = ""
+                              try {
+                                VendorService.setProductVisibility(model.id, true)
+                                products = VendorService.listProducts()
+                                info = "Product archived and hidden from your storefront."
+                              } catch (e: Exception) {
+                                actionErrorMessage = e.message ?: "Archive update failed."
+                              } finally {
+                                saving = false
+                              }
+                            }
+                          }
+                          model.isHidden -> {
+                            info = "This product is already archived/hidden from shoppers."
+                          }
+                          else -> {
+                            actionErrorMessage = "Only approved listings can be archived or hidden."
+                          }
+                        }
+                      },
+                      onRequestDeletion = { model ->
+                        deletionTarget = model.rawJson
+                        deletionReason = ""
+                      },
+                      onDismissAlert = {
+                        actionErrorMessage = ""
+                        info = ""
+                      }
+                    )
+                  }
+
+                  VendorBottomTab.INVENTORY -> VendorInventoryPanel()
+
+                  VendorBottomTab.ORDERS -> {
+                    val ordersState = when {
+                      (loading && !hasLoadedData) || ordersLoading -> VendorSectionState.Loading
+                      errorMessage.isNotBlank() && orderGroups.isEmpty() ->
+                        VendorSectionState.Error(errorMessage)
+                      orderGroups.isEmpty() -> VendorSectionState.Empty
+                      else -> VendorSectionState.Content(orderGroups)
+                    }
+                    VendorOrdersContent(
+                      uiState = VendorOrdersUiState(
+                        searchQuery = ordersSearch,
+                        selectedStatus = ordersStatus,
+                        page = ordersPage,
+                        totalOrders = ordersTotal,
+                        ordersState = ordersState,
+                        isBusy = saving || ordersLoading,
+                        actionError = actionErrorMessage,
+                        infoMessage = info
+                      ),
+                      onSearchChange = { ordersSearch = it },
+                      onSearchSubmit = { fetchOrders(0, ordersSearch, ordersStatus) },
+                      onStatusSelect = { status ->
+                        ordersStatus = status
+                        fetchOrders(0, ordersSearch, status)
+                      },
+                      onPrevPage = {
+                        if (ordersPage > 0) fetchOrders(ordersPage - 1, ordersSearch, ordersStatus)
+                      },
+                      onNextPage = {
+                        if ((ordersPage + 1) * 12 < ordersTotal) {
+                          fetchOrders(ordersPage + 1, ordersSearch, ordersStatus)
+                        }
+                      },
+                      onPrintPackingSlip = { group ->
+                        printVendorPackingSlip(context, group.rawItems)
+                      },
+                      onMarkReady = { group ->
+                        scope.launch {
+                          saving = true
+                          actionErrorMessage = ""
+                          info = ""
+                          try {
+                            VendorService.markOrderReady(group.orderId)
+                            info = "Marked ready for JTBazar pickup."
+                            orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus)
+                            ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
+                          } catch (e: Exception) {
+                            actionErrorMessage = e.message ?: "Could not update order."
+                          } finally {
+                            saving = false
+                          }
+                        }
+                      },
+                      onRefresh = { fetchOrders(ordersPage, ordersSearch, ordersStatus) },
+                      onDismissAlert = {
+                        actionErrorMessage = ""
+                        info = ""
+                      }
+                    )
+                  }
+
+                  VendorBottomTab.MORE -> {
+                    when (moreSection) {
+                      VendorMoreSection.MENU -> VendorMoreMenuContent(
+                        shopName = application?.shopName.orEmpty(),
+                        accountEmail = user?.email.orEmpty(),
+                        onOpenCasesSupport = { moreSection = VendorMoreSection.CASES_SUPPORT },
+                        onOpenShopSettings = { moreSection = VendorMoreSection.SHOP_SETTINGS },
+                        onOpenAdvancedTools = { moreSection = VendorMoreSection.ADVANCED_TOOLS }
+                      )
+
+                      VendorMoreSection.CASES_SUPPORT -> VendorCasesScreen()
+
+                      VendorMoreSection.SHOP_SETTINGS -> VendorShopSettingsScreen(
+                        application = application!!,
+                        accountEmail = user?.email.orEmpty()
+                      ) { refresh() }
+
+                      VendorMoreSection.ADVANCED_TOOLS -> {
+                        Column(
+                          modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(VendorSpacing.md),
+                          verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+                        ) {
+                          VendorAdvancedPanel(application!!, products) { refresh() }
+                        }
+                      }
+                    }
+                  }
+                }
               }
-              "inventory" -> VendorInventoryPanel()
-              "fulfilment" -> {
-            Text("Vendor orders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            OutlinedTextField(value = ordersSearch, onValueChange = { ordersSearch = it }, label = { Text("Search order number or product") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-              listOf("all", "pending", "delivered", "not_delivered").forEach { status ->
-                TextButton(onClick = {
-                  ordersStatus = status; ordersPage = 0
+            }
+          }
+
+          application != null -> {
+            Column(
+              modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(VendorSpacing.md),
+              verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+            ) {
+              if (actionErrorMessage.isNotBlank()) {
+                VendorAlertBanner(
+                  message = actionErrorMessage,
+                  isError = true,
+                  onDismiss = { actionErrorMessage = "" }
+                )
+              }
+              if (info.isNotBlank()) {
+                VendorAlertBanner(
+                  message = info,
+                  isError = false,
+                  onDismiss = { info = "" }
+                )
+              }
+              if (application?.status.equals("pending", ignoreCase = true)) {
+                PendingVendorApplicationScreen(
+                  application = application!!,
+                  onRefresh = { refresh() },
+                  refreshing = loading
+                )
+              } else {
+                SectionHeader(
+                  title = "Seller application",
+                  subtitle = "Review your current application status and feedback."
+                )
+                StatusPanel(application!!)
+                if (application?.status == "rejected") {
+                  VendorAlertBanner(
+                    message = "Reason: ${application?.rejectionReason ?: "Please review your application."}",
+                    isError = true
+                  )
+                  AppCard {
+                    VendorApplicationResubmissionPanel(application!!) {
+                      application = it
+                      info = "Application resubmitted."
+                    }
+                  }
+                }
+                SecondaryButton(
+                  text = "Refresh application status",
+                  icon = Icons.Rounded.Refresh,
+                  onClick = { refresh() },
+                  modifier = Modifier.fillMaxWidth()
+                )
+              }
+            }
+          }
+
+          else -> {
+            Column(
+              modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(VendorSpacing.md),
+              verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+            ) {
+              if (actionErrorMessage.isNotBlank()) {
+                VendorAlertBanner(
+                  message = actionErrorMessage,
+                  isError = true,
+                  onDismiss = { actionErrorMessage = "" }
+                )
+              }
+              if (info.isNotBlank()) {
+                VendorAlertBanner(
+                  message = info,
+                  isError = false,
+                  onDismiss = { info = "" }
+                )
+              }
+
+              AppCard(
+                containerColor = VendorColors.NavyHeader,
+                borderColor = VendorColors.NavyHeader
+              ) {
+                Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
+                  StatusBadge(
+                    text = "Seller onboarding",
+                    tone = StatusTone.PRIMARY,
+                    icon = Icons.Rounded.Storefront
+                  )
+                  Text(
+                    text = "Become a JTBazar Vendor",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                  )
+                  Text(
+                    text = "Submit your shop and identity details. All verification files are stored privately for JTBazar review.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = VendorColors.NavyHeaderSubtitle
+                  )
+                }
+              }
+
+              AppCard {
+                Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
+                  SectionHeader(
+                    title = "Shop details",
+                    subtitle = "Storefront name, description and business type"
+                  )
+                  VendorOutlinedTextField(
+                    value = shopName,
+                    onValueChange = { shopName = it },
+                    label = "Shop name *",
+                    leadingIcon = Icons.Rounded.Storefront
+                  )
+                  VendorOutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = "Shop description (at least 10 characters) *",
+                    leadingIcon = Icons.Rounded.Description,
+                    minLines = 3
+                  )
+                  VendorTypeDropdown(
+                    selectedType = vendorType,
+                    onTypeSelected = { vendorType = it }
+                  )
+                }
+              }
+
+              AppCard {
+                Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
+                  SectionHeader(
+                    title = "Owner & addresses",
+                    subtitle = "Legal verification and contact details"
+                  )
+                  VendorOutlinedTextField(
+                    value = ownerName,
+                    onValueChange = { ownerName = it },
+                    label = "Owner full legal name *",
+                    leadingIcon = Icons.Rounded.Person
+                  )
+                  VendorOutlinedTextField(
+                    value = cnic,
+                    onValueChange = { cnic = it.filter(Char::isDigit).take(13) },
+                    label = "CNIC number (13 digits, no dashes) *",
+                    leadingIcon = Icons.Rounded.CreditCard,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                  )
+                  VendorOutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = "Contact phone (03XXXXXXXXX) *",
+                    leadingIcon = Icons.Rounded.Phone,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                  )
+                  VendorOutlinedTextField(
+                    value = currentAddress,
+                    onValueChange = { currentAddress = it },
+                    label = "Current address *",
+                    leadingIcon = Icons.Rounded.LocationOn
+                  )
+                  VendorOutlinedTextField(
+                    value = fullAddress,
+                    onValueChange = { fullAddress = it },
+                    label = "Complete address *",
+                    leadingIcon = Icons.Rounded.Home,
+                    minLines = 2
+                  )
+                  VendorOutlinedTextField(
+                    value = shopLocation,
+                    onValueChange = { shopLocation = it },
+                    label = "Shop location / landmark details *",
+                    leadingIcon = Icons.Rounded.LocationCity,
+                    minLines = 2
+                  )
+                }
+              }
+
+              AppCard {
+                Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
+                  SectionHeader(
+                    title = "Shop location & picture",
+                    subtitle = "Pin your location on the map and add a shop photo"
+                  )
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                  ) {
+                    Text(
+                      text = if (latitude.isNotBlank() && longitude.isNotBlank()) {
+                        "Selected: $latitude, $longitude"
+                      } else {
+                        "Choose your shop location on the map."
+                      },
+                      style = MaterialTheme.typography.bodySmall,
+                      color = VendorColors.TextSecondary,
+                      modifier = Modifier.weight(1f)
+                    )
+                    StatusBadge(
+                      text = if (latitude.isNotBlank() && longitude.isNotBlank()) "Pinned" else "Required",
+                      tone = if (latitude.isNotBlank() && longitude.isNotBlank()) {
+                        StatusTone.SUCCESS
+                      } else {
+                        StatusTone.WARNING
+                      }
+                    )
+                  }
+                  SecondaryButton(
+                    text = if (latitude.isNotBlank() && longitude.isNotBlank()) {
+                      "Change shop location on map"
+                    } else {
+                      "Choose shop location on map"
+                    },
+                    icon = Icons.Rounded.Map,
+                    onClick = { showMapPicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                  )
+
+                  HorizontalDivider(color = VendorColors.Divider)
+
+                  shopImageUri?.let { uri ->
+                    AsyncImage(
+                      model = uri,
+                      contentDescription = "Shop picture preview",
+                      modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(VendorShapes.input),
+                      contentScale = ContentScale.Crop
+                    )
+                  }
+                  SecondaryButton(
+                    text = if (shopImageUri == null) "Choose public shop picture" else "Change selected shop picture",
+                    icon = Icons.Rounded.Image,
+                    onClick = { shopImagePicker.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth()
+                  )
+                }
+              }
+
+              AppCard(borderColor = VendorColors.NavyHeader.copy(alpha = 0.2f)) {
+                Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
+                  ) {
+                    Icon(
+                      imageVector = Icons.Rounded.Lock,
+                      contentDescription = null,
+                      tint = VendorColors.NavyHeader,
+                      modifier = Modifier.size(20.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = "Verification documents",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = VendorColors.TextPrimary
+                      )
+                      Text(
+                        text = "Stored privately for JTBazar admin review only.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = VendorColors.TextSecondary
+                      )
+                    }
+                  }
+                  DocumentButton(
+                    label = "Identity / business verification document",
+                    uploaded = verificationPath != null
+                  ) {
+                    pendingDoc = "verification"
+                    documentPicker.launch("*/*")
+                  }
+                  DocumentButton(
+                    label = "CNIC front image",
+                    uploaded = frontPath != null
+                  ) {
+                    pendingDoc = "cnic-front"
+                    documentPicker.launch("image/*")
+                  }
+                  DocumentButton(
+                    label = "CNIC back image",
+                    uploaded = backPath != null
+                  ) {
+                    pendingDoc = "cnic-back"
+                    documentPicker.launch("image/*")
+                  }
+                }
+              }
+
+              PrimaryButton(
+                text = if (saving) "Submitting..." else "Submit vendor application",
+                icon = Icons.Rounded.Send,
+                loading = saving,
+                enabled = !saving,
+                onClick = {
                   scope.launch {
                     saving = true
-                    try { orders = VendorService.listOrders(0, ordersSearch, status); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 }
-                    catch (e: Exception) { actionErrorMessage = e.message ?: "Orders could not be filtered." }
-                    finally { saving = false }
+                    actionErrorMessage = ""
+                    info = ""
+                    try {
+                      val u = user ?: error("Please sign in again.")
+                      val normalizedPhone = normalizePakistaniPhone(phone)
+                      require(shopName.trim().length in 2..160) {
+                        "Shop name must be between 2 and 160 characters."
+                      }
+                      require(description.trim().length in 10..2000) {
+                        "Shop description must be between 10 and 2,000 characters."
+                      }
+                      require(ownerName.trim().length >= 3) { "Enter the owner's full legal name." }
+                      require(cnic.matches(Regex("^[0-9]{13}$"))) {
+                        "Enter a 13-digit CNIC number without dashes."
+                      }
+                      require(normalizedPhone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) {
+                        "Enter a valid Pakistani phone number, e.g. 03001234567."
+                      }
+                      require(
+                        currentAddress.trim().length >= 3 &&
+                          fullAddress.trim().length >= 10 &&
+                          shopLocation.trim().length >= 10
+                      ) {
+                        "Complete your current address, full address and shop landmark (at least 10 characters)."
+                      }
+                      val lat = latitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
+                      val lng = longitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
+                      require(
+                        lat in -90.0..90.0 &&
+                          lng in -180.0..180.0 &&
+                          !(lat == 0.0 && lng == 0.0)
+                      ) {
+                        "Map coordinates are invalid. Select your actual shop location."
+                      }
+                      require(
+                        !verificationPath.isNullOrBlank() &&
+                          !frontPath.isNullOrBlank() &&
+                          !backPath.isNullOrBlank()
+                      ) {
+                        "Upload all three verification documents before submitting."
+                      }
+                      require(u.email?.isNotBlank() == true) {
+                        "Your account email is missing. Sign in again."
+                      }
+                      val slugBase = shopName.lowercase(Locale.ROOT)
+                        .replace(Regex("[^a-z0-9]+"), "-")
+                        .trim('-')
+                        .take(120)
+                        .trim('-')
+                        .ifBlank { "shop" }
+                      val slug = "$slugBase-${java.util.UUID.randomUUID().toString().take(8)}"
+                      val uploadedShopImage = shopImageUri?.let { uri ->
+                        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                          ?: error("Shop picture could not be read.")
+                        VendorService.uploadShopImage(bytes, mime)
+                      }
+                      val body = JSONObject()
+                        .put("user_id", u.id)
+                        .put("shop_name", shopName.trim())
+                        .put("slug", slug)
+                        .put("description", description.trim().take(2000))
+                        .put("current_address", currentAddress.trim())
+                        .put("complete_address", fullAddress.trim())
+                        .put("shop_image_url", uploadedShopImage ?: JSONObject.NULL)
+                        .put("shop_location_label", currentAddress.trim().take(120))
+                        .put("contact_email", u.email)
+                        .put("phone", normalizedPhone)
+                        .put("document_path", verificationPath)
+                        .put("cnic_front_path", frontPath)
+                        .put("cnic_back_path", backPath)
+                        .put("vendor_type", vendorType.trim())
+                        .put("owner_full_name", ownerName.trim())
+                        .put("cnic_number", cnic)
+                        .put("shop_location_text", shopLocation.trim())
+                        .put("shop_lat", lat)
+                        .put("shop_lng", lng)
+                        .put("show_shop_on_map", true)
+                      application = VendorService.submitApplication(body)
+                      info = "Application submitted successfully. JTBazar admin review is pending."
+                    } catch (e: Exception) {
+                      actionErrorMessage = e.message ?: "Application could not be submitted."
+                    } finally {
+                      saving = false
+                    }
                   }
-                }) { Text(if (ordersStatus == status) "• ${status.replace('_', ' ')}" else status.replace('_', ' ')) }
-              }
-            }
-            Button(enabled = !saving, onClick = {
-              scope.launch {
-                saving = true
-                try { ordersPage = 0; orders = VendorService.listOrders(0, ordersSearch, ordersStatus); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 }
-                catch (e: Exception) { actionErrorMessage = e.message ?: "Orders could not be searched." }
-                finally { saving = false }
-              }
-            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Search orders") }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-              Text("Page ${ordersPage + 1} • ${ordersTotal} orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-              Row {
-                TextButton(enabled = !saving && ordersPage > 0, onClick = {
-                  scope.launch { saving = true; try { ordersPage--; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus) } catch (e: Exception) { actionErrorMessage = e.message ?: "Previous page failed." } finally { saving = false } }
-                }) { Text("Previous") }
-                TextButton(enabled = !saving && (ordersPage + 1) * 12 < ordersTotal, onClick = {
-                  scope.launch { saving = true; try { ordersPage++; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus) } catch (e: Exception) { actionErrorMessage = e.message ?: "Next page failed." } finally { saving = false } }
-                }) { Text("Next") }
-              }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Icon(Icons.Default.LocalShipping, null, tint = JTOrange); Spacer(Modifier.width(8.dp))
-              Text("Pickup preparation", fontWeight = FontWeight.Bold)
-            }
-            Text("Customer contact, payment, delivery and order fulfilment remain managed by JTBazar. You only prepare your own items for pickup.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            if (orders.length() == 0) Text("No vendor order items yet.")
-            val groupedOrders = (0 until orders.length()).mapNotNull { orders.optJSONObject(it) }
-              .groupBy { it.optString("order_id") }
-            groupedOrders.forEach { (orderId, orderItems) ->
-              val first = orderItems.first()
-              val status = first.optString("vendor_fulfillment_status", first.optString("status", "processing"))
-              Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                  Text("Order ${first.optString("order_number","")}", fontWeight = FontWeight.Bold)
-                  Text("${orderItems.size} product item(s) • ${first.optString("created_at", "")}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                  orderItems.forEach { item ->
-                    Text("• ${item.optString("product_name_snapshot", item.optString("product_name","Order item"))}  × ${item.optString("quantity","1")}", fontWeight = FontWeight.SemiBold)
-                    Text("SKU: ${item.optString("sku_snapshot", "—")} • Variant: ${item.optJSONObject("variant_snapshot")?.let { v -> "${v.optString("label", v.optString("option_label"))}: ${v.optString("value", v.optString("option_value"))}" } ?: "—"}", style = MaterialTheme.typography.bodySmall)
-                  }
-                  Text("Status: $status", style = MaterialTheme.typography.bodySmall)
-                  OutlinedButton(enabled = orderId.isNotBlank(), onClick = { printVendorPackingSlip(context, orderItems) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Print product packing slip")
-                  }
-                  Button(enabled = !saving && orderId.isNotBlank() && status != "ready_for_pickup", onClick = {
-                    scope.launch { saving = true; try { VendorService.markOrderReady(orderId); info = "Marked ready for JTBazar pickup."; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 } catch (e: Exception) { actionErrorMessage = e.message ?: "Could not update order." } finally { saving = false } }
-                  }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Ready for pickup") }
-                }
-              }
-            }
-
-              }
-              else -> VendorAdvancedPanel(application!!, products) { refresh() }
-            }
-
-            OutlinedButton(onClick = { refresh() }) { Text("Refresh dashboard") }
-          }
-          application != null -> {
-            if (application?.status.equals("pending", ignoreCase = true)) {
-              PendingVendorApplicationScreen(
-                application = application!!,
-                onRefresh = { refresh() },
-                refreshing = loading
+                },
+                modifier = Modifier.fillMaxWidth()
               )
-            } else {
-              Text("Seller application", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-              StatusPanel(application!!)
-              if (application?.status == "rejected") Text("Reason: ${application?.rejectionReason ?: "Please review your application."}", color = MaterialTheme.colorScheme.error)
-              if (application?.status == "rejected") VendorApplicationResubmissionPanel(application!!) { application = it; info = "Application resubmitted." }
-              OutlinedButton(onClick = { refresh() }) { Text("Refresh application status") }
-            }
-          }
-          else -> {
-            Text("Become a JTBazar Vendor", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Submit your shop and identity details. All verification files are stored privately for JTBazar review.", color = Color.Gray)
-            VendorField("Shop name", shopName) { shopName = it }
-            VendorField("Shop description (at least 10 characters)", description, minLines = 3) { description = it }
-            VendorField("Owner full legal name", ownerName) { ownerName = it }
-            VendorTypeDropdown(selectedType = vendorType, onTypeSelected = { vendorType = it })
-            VendorField("CNIC number (13 digits, no dashes)", cnic) { cnic = it.filter(Char::isDigit).take(13) }
-            VendorField("Contact phone (03XXXXXXXXX)", phone) { phone = it }
-            VendorField("Current address", currentAddress) { currentAddress = it }
-            VendorField("Complete address", fullAddress, minLines = 2) { fullAddress = it }
-            VendorField("Shop location / landmark details", shopLocation, minLines = 2) { shopLocation = it }
-            Text("Shop location on map", fontWeight = FontWeight.SemiBold)
-            Text(
-              if (latitude.isNotBlank() && longitude.isNotBlank()) "Selected: $latitude, $longitude" else "Choose your shop location on the map. You can use your current location or move the map pin.",
-              color = Color.Gray,
-              style = MaterialTheme.typography.bodySmall
-            )
-            OutlinedButton(onClick = { showMapPicker = true }, modifier = Modifier.fillMaxWidth()) {
-              Icon(Icons.Default.Storefront, contentDescription = null)
-              Spacer(Modifier.width(8.dp))
-              Text(if (latitude.isNotBlank() && longitude.isNotBlank()) "Change shop location on map" else "Choose shop location on map")
-            }
-            Text("Public shop picture", fontWeight = FontWeight.Bold)
-            OutlinedButton(onClick = { shopImagePicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-              Text(if (shopImageUri == null) "Choose shop picture" else "Change selected shop picture")
-            }
-            shopImageUri?.let { uri ->
-              AsyncImage(
-                model = uri,
-                contentDescription = "Shop picture preview",
-                modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
+
+              Text(
+                text = "Your application will remain pending until JTBazar admin approves it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = VendorColors.TextSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
               )
             }
-            Text("Verification documents", fontWeight = FontWeight.Bold)
-            DocumentButton("Identity / business verification document", verificationPath != null) { pendingDoc = "verification"; documentPicker.launch("*/*") }
-            DocumentButton("CNIC front image", frontPath != null) { pendingDoc = "cnic-front"; documentPicker.launch("image/*") }
-            DocumentButton("CNIC back image", backPath != null) { pendingDoc = "cnic-back"; documentPicker.launch("image/*") }
-            Button(enabled = !saving, onClick = {
-              scope.launch {
-                saving = true; actionErrorMessage = ""; info = ""
-                try {
-                  val u = user ?: error("Please sign in again.")
-                  val normalizedPhone = normalizePakistaniPhone(phone)
-                  require(shopName.trim().length in 2..160) { "Shop name must be between 2 and 160 characters." }
-                  require(description.trim().length in 10..2000) { "Shop description must be between 10 and 2,000 characters." }
-                  require(ownerName.trim().length >= 3) { "Enter the owner's full legal name." }
-                  require(cnic.matches(Regex("^[0-9]{13}$"))) { "Enter a 13-digit CNIC number without dashes." }
-                  require(normalizedPhone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani phone number, e.g. 03001234567." }
-                  require(currentAddress.trim().length >= 3 && fullAddress.trim().length >= 10 && shopLocation.trim().length >= 10) { "Complete your current address, full address and shop landmark (at least 10 characters)." }
-                  val lat = latitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
-                  val lng = longitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
-                  require(lat in -90.0..90.0 && lng in -180.0..180.0 && !(lat == 0.0 && lng == 0.0)) { "Map coordinates are invalid. Select your actual shop location." }
-                  require(!verificationPath.isNullOrBlank() && !frontPath.isNullOrBlank() && !backPath.isNullOrBlank()) { "Upload all three verification documents before submitting." }
-                  require(u.email?.isNotBlank() == true) { "Your account email is missing. Sign in again." }
-                  val slugBase = shopName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-').take(120).trim('-').ifBlank { "shop" }
-                  val slug = "$slugBase-${java.util.UUID.randomUUID().toString().take(8)}"
-                  val uploadedShopImage = shopImageUri?.let { uri ->
-                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Shop picture could not be read.")
-                    VendorService.uploadShopImage(bytes, mime)
-                  }
-                  val body = JSONObject().put("user_id", u.id).put("shop_name", shopName.trim()).put("slug", slug)
-                    .put("description", description.trim().take(2000)).put("current_address", currentAddress.trim()).put("complete_address", fullAddress.trim())
-                    .put("shop_image_url", uploadedShopImage ?: JSONObject.NULL)
-                    .put("shop_location_label", currentAddress.trim().take(120)).put("contact_email", u.email).put("phone", normalizedPhone)
-                    .put("document_path", verificationPath).put("cnic_front_path", frontPath).put("cnic_back_path", backPath)
-                    .put("vendor_type", vendorType.trim()).put("owner_full_name", ownerName.trim()).put("cnic_number", cnic)
-                    .put("shop_location_text", shopLocation.trim()).put("shop_lat", lat).put("shop_lng", lng).put("show_shop_on_map", true)
-                  application = VendorService.submitApplication(body)
-                  info = "Application submitted successfully. JTBazar admin review is pending."
-                } catch (e: Exception) { actionErrorMessage = e.message ?: "Application could not be submitted." }
-                finally { saving = false }
-              }
-            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
-              if (saving) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White) else Text("Submit vendor application")
-            }
-            Text("Your application will remain pending until JTBazar admin approves it.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
           }
         }
       }
     }
   }
+
   if (showMapPicker) {
     ShopLocationPickerDialog(
       initialLatitude = latitude.toDoubleOrNull(),
@@ -557,24 +1232,45 @@ fun VendorCenterScreen(onBack: () -> Unit) {
     val target = deletionTarget!!
     AlertDialog(
       onDismissRequest = { if (!saving) deletionTarget = null },
-      title = { Text("Request product deletion") },
+      containerColor = VendorColors.CardWhite,
+      shape = VendorShapes.card,
+      title = {
+        Text(
+          text = "Request product deletion",
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+          color = VendorColors.TextPrimary
+        )
+      },
       text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("This sends a request to JTBazar for review. The product will not be deleted immediately.")
-          Text(target.optString("name", "Product"), fontWeight = FontWeight.SemiBold)
-          OutlinedTextField(
+        Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
+          Text(
+            text = "This sends a request to JTBazar for review. The product will not be deleted immediately.",
+            style = MaterialTheme.typography.bodySmall,
+            color = VendorColors.TextSecondary
+          )
+          Text(
+            text = target.optString("name", "Product"),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = VendorColors.TextPrimary
+          )
+          VendorOutlinedTextField(
             value = deletionReason,
             onValueChange = { deletionReason = it },
-            label = { Text("Reason for deletion") },
-            modifier = Modifier.fillMaxWidth(),
+            label = "Reason for deletion *",
+            leadingIcon = Icons.Rounded.Description,
             minLines = 3,
             enabled = !saving
           )
         }
       },
       confirmButton = {
-        TextButton(
+        PrimaryButton(
+          text = if (saving) "Submitting..." else "Submit request",
+          loading = saving,
           enabled = !saving && deletionReason.trim().length >= 3,
+          containerColor = VendorColors.DangerRed,
           onClick = {
             scope.launch {
               saving = true
@@ -592,10 +1288,16 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               }
             }
           }
-        ) { Text(if (saving) "Submitting…" else "Submit request", color = Color(0xFFB91C1C)) }
+        )
       },
       dismissButton = {
-        TextButton(onClick = { deletionTarget = null }, enabled = !saving) { Text("Cancel") }
+        TextButton(
+          onClick = { deletionTarget = null },
+          enabled = !saving,
+          modifier = Modifier.height(VendorSpacing.touchMin)
+        ) {
+          Text("Cancel", color = VendorColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+        }
       }
     )
   }
@@ -616,13 +1318,23 @@ fun ShopLocationPickerDialog(
     ) GeoPoint(initialLatitude, initialLongitude) else GeoPoint(0.0, 0.0)
   }
   var selectedPoint by remember { mutableStateOf(startPoint) }
-  var hasSelectedPoint by remember { mutableStateOf(initialLatitude != null && initialLongitude != null && initialLatitude in -90.0..90.0 && initialLongitude in -180.0..180.0 && !(initialLatitude == 0.0 && initialLongitude == 0.0)) }
+  var hasSelectedPoint by remember {
+    mutableStateOf(
+      initialLatitude != null && initialLongitude != null &&
+        initialLatitude in -90.0..90.0 && initialLongitude in -180.0..180.0 &&
+        !(initialLatitude == 0.0 && initialLongitude == 0.0)
+    )
+  }
   var mapView by remember { mutableStateOf<MapView?>(null) }
-  var locationMessage by remember { mutableStateOf("Move the map and tap your shop location to place the pin.") }
+  var locationMessage by remember {
+    mutableStateOf("Move the map and tap your shop location to place the pin.")
+  }
 
   fun placePin(point: GeoPoint) {
     selectedPoint = point
-    hasSelectedPoint = point.latitude in -90.0..90.0 && point.longitude in -180.0..180.0 && !(point.latitude == 0.0 && point.longitude == 0.0)
+    hasSelectedPoint = point.latitude in -90.0..90.0 &&
+      point.longitude in -180.0..180.0 &&
+      !(point.latitude == 0.0 && point.longitude == 0.0)
     mapView?.let { map ->
       map.overlays.filterIsInstance<Marker>().forEach { map.overlays.remove(it) }
       val marker = Marker(map).apply {
@@ -643,27 +1355,58 @@ fun ShopLocationPickerDialog(
       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     if (granted) {
       try {
-        fusedLocation.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token)
+        fusedLocation.getCurrentLocation(
+          Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+          CancellationTokenSource().token
+        )
           .addOnSuccessListener { location: Location? ->
             if (location != null) {
               placePin(GeoPoint(location.latitude, location.longitude))
               locationMessage = "Current device location selected. Adjust the pin if needed."
-            } else locationMessage = "Current location unavailable. Move the map and tap your shop location."
+            } else {
+              locationMessage = "Current location unavailable. Move the map and tap your shop location."
+            }
           }
-          .addOnFailureListener { locationMessage = it.message ?: "Could not get current location." }
+          .addOnFailureListener {
+            locationMessage = it.message ?: "Could not get current location."
+          }
       } catch (_: SecurityException) {
         locationMessage = "Location permission is required to use current location."
       }
-    } else locationMessage = "Location permission denied. You can still select a location manually on the map."
+    } else {
+      locationMessage = "Location permission denied. You can still select a location manually on the map."
+    }
   }
 
   Dialog(onDismissRequest = onDismiss) {
-    Surface(shape = RoundedCornerShape(18.dp), color = Color.White, modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp)) {
-      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Choose shop location", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("Drag the map and tap the exact shop location. The pin will be saved automatically.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+    Surface(
+      shape = VendorShapes.card,
+      color = VendorColors.CardWhite,
+      modifier = Modifier
+        .fillMaxWidth()
+        .heightIn(max = 680.dp)
+    ) {
+      Column(
+        modifier = Modifier.padding(VendorSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+      ) {
+        Text(
+          text = "Choose shop location",
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+          color = VendorColors.TextPrimary
+        )
+        Text(
+          text = "Drag the map and tap the exact shop location. The pin will be saved automatically.",
+          color = VendorColors.TextSecondary,
+          style = MaterialTheme.typography.bodySmall
+        )
         AndroidView(
-          modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 420.dp).aspectRatio(1.05f),
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 220.dp, max = 380.dp)
+            .aspectRatio(1.05f)
+            .clip(VendorShapes.input),
           factory = { ctx ->
             Configuration.getInstance().userAgentValue = ctx.packageName
             MapView(ctx).apply {
@@ -677,6 +1420,7 @@ fun ShopLocationPickerDialog(
                   locationMessage = "Location pin selected."
                   return true
                 }
+
                 override fun longPressHelper(point: GeoPoint): Boolean = false
               }
               overlays.add(MapEventsOverlay(receiver))
@@ -686,185 +1430,97 @@ fun ShopLocationPickerDialog(
           },
           update = { map -> mapView = map }
         )
-        Text(locationMessage, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-        OutlinedButton(
+        Text(
+          text = locationMessage,
+          color = VendorColors.TextSecondary,
+          style = MaterialTheme.typography.bodySmall
+        )
+        SecondaryButton(
+          text = "Use my current location",
+          icon = Icons.Rounded.MyLocation,
           onClick = {
-            val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val fine = ContextCompat.checkSelfPermission(
+              context,
+              Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(
+              context,
+              Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
             if (fine || coarse) {
               try {
-                fusedLocation.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token)
+                fusedLocation.getCurrentLocation(
+                  Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                  CancellationTokenSource().token
+                )
                   .addOnSuccessListener { location ->
                     if (location != null) {
                       placePin(GeoPoint(location.latitude, location.longitude))
                       locationMessage = "Current device location selected. Adjust the pin if needed."
-                    } else locationMessage = "Current location unavailable. Move the map and tap your shop location."
+                    } else {
+                      locationMessage = "Current location unavailable. Move the map and tap your shop location."
+                    }
                   }
-                  .addOnFailureListener { locationMessage = it.message ?: "Could not get current location." }
-              } catch (_: SecurityException) { locationMessage = "Location permission is required." }
-            } else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                  .addOnFailureListener {
+                    locationMessage = it.message ?: "Could not get current location."
+                  }
+              } catch (_: SecurityException) {
+                locationMessage = "Location permission is required."
+              }
+            } else {
+              locationPermission.launch(
+                arrayOf(
+                  Manifest.permission.ACCESS_FINE_LOCATION,
+                  Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+              )
+            }
           },
           modifier = Modifier.fillMaxWidth()
-        ) { Text("Use my current location") }
-        
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
-          Button(onClick = { onConfirm(selectedPoint) }, enabled = hasSelectedPoint, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Use this location") }
+        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
+        ) {
+          SecondaryButton(
+            text = "Cancel",
+            onClick = onDismiss,
+            modifier = Modifier.weight(1f)
+          )
+          PrimaryButton(
+            text = "Use location",
+            enabled = hasSelectedPoint,
+            onClick = { onConfirm(selectedPoint) },
+            modifier = Modifier.weight(1f)
+          )
         }
       }
     }
   }
   DisposableEffect(Unit) {
-    onDispose { mapView?.onDetach(); mapView = null }
+    onDispose {
+      mapView?.onDetach()
+      mapView = null
+    }
   }
 }
 
-@Composable
-private fun VendorField(label: String, value: String, minLines: Int = 1, onChange: (String) -> Unit) {
-  OutlinedTextField(value = value, onValueChange = onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = minLines, singleLine = minLines == 1)
-}
 @Composable
 private fun DocumentButton(label: String, uploaded: Boolean, onClick: () -> Unit) {
-  OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(if (uploaded) "✓ $label uploaded" else "Upload $label") }
-}
-
-@Composable
-private fun VendorDashboardHero(shopName: String, onRefresh: () -> Unit, refreshing: Boolean) {
-  Card(
+  Row(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(24.dp),
-    colors = CardDefaults.cardColors(containerColor = Color(0xFF243B5A)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
   ) {
-    Box(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF17243A), Color(0xFF29486B), Color(0xFF17243A))), RoundedCornerShape(24.dp))) {
-      Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Surface(color = Color(0x33FFFFFF), shape = RoundedCornerShape(50)) {
-            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-              Box(Modifier.size(7.dp).background(Color(0xFF58D68D), RoundedCornerShape(50)))
-              Spacer(Modifier.width(7.dp))
-              Text("SELLER ACCOUNT ACTIVE", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-            }
-          }
-          Spacer(Modifier.weight(1f))
-          IconButton(onClick = onRefresh, enabled = !refreshing) {
-            if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-            else Icon(Icons.Default.Refresh, contentDescription = "Refresh dashboard", tint = Color.White)
-          }
-        }
-        Text("Welcome to your shop", color = Color(0xFFFFC49E), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-        Text(shopName.ifBlank { "Vendor Dashboard" }, color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-        Text("Manage products, prepare orders and keep your business moving.", color = Color(0xFFD5DDEA), style = MaterialTheme.typography.bodyMedium)
-      }
-    }
+    SecondaryButton(
+      text = if (uploaded) "$label uploaded" else "Upload $label",
+      icon = if (uploaded) Icons.Rounded.CheckCircle else Icons.Rounded.UploadFile,
+      contentColor = if (uploaded) VendorColors.SuccessGreen else VendorColors.TextPrimary,
+      borderColor = if (uploaded) VendorColors.SuccessGreen.copy(alpha = 0.35f) else VendorColors.BorderSubtle,
+      onClick = onClick,
+      modifier = Modifier.fillMaxWidth()
+    )
   }
-}
-
-@Composable
-private fun VendorDashboardTabs(selected: String, onSelect: (String) -> Unit) {
-  val tabs = listOf(
-    "overview" to ("Overview" to Icons.Default.Storefront),
-    "listings" to ("Products" to Icons.Default.ShoppingBag),
-    "inventory" to ("Inventory" to Icons.Default.Inventory2),
-    "fulfilment" to ("Orders" to Icons.Default.LocalShipping),
-    "cases" to ("Cases" to Icons.Default.ReceiptLong),
-    "shop_settings" to ("Shop settings" to Icons.Default.Storefront),
-    "tools" to ("More tools" to Icons.Default.TrendingUp)
-  )
-  ScrollableTabRow(
-    selectedTabIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0),
-    edgePadding = 0.dp,
-    containerColor = Color.White,
-    contentColor = JTOrange,
-    indicator = {},
-    divider = {}
-  ) {
-    tabs.forEach { item ->
-      val active = selected == item.first
-      Surface(
-        onClick = { onSelect(item.first) },
-        shape = RoundedCornerShape(14.dp),
-        color = if (active) Color(0xFFFFEEE4) else Color(0xFFF5F7FA),
-        modifier = Modifier.padding(end = 8.dp)
-      ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-          Icon(item.second.second, null, tint = if (active) JTOrange else Color(0xFF718096), modifier = Modifier.size(17.dp))
-          Text(item.second.first, color = if (active) JTOrange else Color(0xFF526176), fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, style = MaterialTheme.typography.labelLarge)
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun VendorMetricCard(title: String, value: String, detail: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
-  Card(
-    modifier = modifier,
-    shape = RoundedCornerShape(18.dp),
-    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.76f)),
-    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)),
-    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-  ) {
-    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-      Box(Modifier.size(36.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-        Icon(icon, null, tint = JTOrange, modifier = Modifier.size(19.dp))
-      }
-      Text(value, color = Color(0xFF17243A), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-      Text(title, color = Color(0xFF26354A), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-      Text(detail, color = Color(0xFF8290A2), style = MaterialTheme.typography.labelSmall)
-    }
-  }
-}
-
-@Composable
-private fun VendorEmptyState(title: String, description: String, action: String, onAction: () -> Unit) {
-  Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F9FC))) {
-    Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      Icon(Icons.Default.Inventory2, null, tint = Color(0xFF9AA7B8), modifier = Modifier.size(34.dp))
-      Text(title, color = Color(0xFF25344A), fontWeight = FontWeight.Bold)
-      Text(description, color = Color(0xFF718096), style = MaterialTheme.typography.bodySmall)
-      TextButton(onClick = onAction) { Text(action, color = JTOrange, fontWeight = FontWeight.Bold) }
-    }
-  }
-}
-
-@Composable
-private fun VendorCompactProductCard(product: JSONObject) {
-  val id = product.optString("id")
-  var thumbUrl by remember(id) { mutableStateOf("") }
-  LaunchedEffect(id) {
-    if (id.isNotBlank()) {
-      runCatching { VendorService.listProductImageUrls(id).firstOrNull().orEmpty() }
-        .onSuccess { thumbUrl = it }
-    }
-  }
-  Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.76f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
-    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-      if (thumbUrl.isNotBlank()) {
-        AsyncImage(
-          model = thumbUrl,
-          contentDescription = product.optString("name", "Product"),
-          modifier = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)),
-          contentScale = ContentScale.Crop
-        )
-      } else {
-        Box(Modifier.size(46.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-          Icon(Icons.Default.Inventory2, null, tint = JTOrange)
-        }
-      }
-      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(product.optString("name", "Product"), color = Color(0xFF25344A), fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Text("PKR ${product.optString("price", "0")}", color = Color(0xFF718096), style = MaterialTheme.typography.bodySmall)
-      }
-      Surface(color = Color(0xFFEAF8F0), shape = RoundedCornerShape(50)) {
-        Text(product.optString("publication_status", product.optString("status", "draft")).replace('_', ' '), modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color(0xFF187548), style = MaterialTheme.typography.labelSmall)
-      }
-    }
-  }
-}
-
-@Composable
-private fun SummaryTile(label: String, value: String, modifier: Modifier = Modifier) {
-  Card(modifier) { Column(Modifier.padding(16.dp)) { Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Text(label, color = Color.Gray) } }
 }
 
 @Composable
@@ -873,9 +1529,6 @@ private fun PendingVendorApplicationScreen(
   onRefresh: () -> Unit,
   refreshing: Boolean
 ) {
-  val navy = Color(0xFF14233D)
-  val muted = Color(0xFF68778D)
-  val orange = Color(0xFFF36B16)
   val submittedDate = remember(application.createdAt) {
     runCatching {
       java.time.Instant.parse(application.createdAt)
@@ -887,130 +1540,245 @@ private fun PendingVendorApplicationScreen(
 
   Column(
     modifier = Modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(16.dp)
+    verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
   ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-      Text("Seller application", color = orange, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-      Text(application.shopName, color = navy, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-      Text("Your application is in process. Our marketplace team is verifying your shop details.", color = muted, style = MaterialTheme.typography.bodyMedium)
+    AppCard(
+      containerColor = VendorColors.NavyHeader,
+      borderColor = VendorColors.NavyHeader
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
+        StatusBadge(
+          text = "Pending review",
+          tone = StatusTone.WARNING,
+          icon = Icons.Rounded.Schedule
+        )
+        Text(
+          text = application.shopName,
+          style = MaterialTheme.typography.headlineSmall,
+          fontWeight = FontWeight.Bold,
+          color = Color.White
+        )
+        Text(
+          text = "Your application is under verification by the JTBazar marketplace team.",
+          style = MaterialTheme.typography.bodySmall,
+          color = VendorColors.NavyHeaderSubtitle
+        )
+      }
     }
 
-    Card(
-      modifier = Modifier.fillMaxWidth(),
-      shape = RoundedCornerShape(22.dp),
-      colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8F3)),
-      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFE2D1))
+    AppCard(
+      containerColor = VendorColors.PrimaryOrangeSoft,
+      borderColor = VendorColors.PrimaryOrangeBorder
     ) {
       Column(
-        modifier = Modifier.fillMaxWidth().padding(20.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
       ) {
         Box(
-          modifier = Modifier.size(76.dp).background(Color(0xFFFFE8D9), RoundedCornerShape(24.dp)),
+          modifier = Modifier
+            .size(56.dp)
+            .clip(VendorShapes.iconBox)
+            .background(VendorColors.PrimaryOrangeTint),
           contentAlignment = Alignment.Center
         ) {
-          Text("◷", color = orange, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+          Icon(
+            imageVector = Icons.Rounded.Schedule,
+            contentDescription = null,
+            tint = VendorColors.PrimaryOrange,
+            modifier = Modifier.size(28.dp)
+          )
         }
-        Surface(color = Color(0xFFFFEAD7), shape = RoundedCornerShape(50)) {
-          Text("PENDING REVIEW", modifier = Modifier.padding(horizontal = 13.dp, vertical = 6.dp), color = Color(0xFF9A4B0C), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-        }
-        Text("Application Under Review", color = navy, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(
-          "Thank you for applying to become a JTBazar seller. Your application has been received and is currently being verified by our marketplace team.",
-          color = muted,
-          style = MaterialTheme.typography.bodyMedium
+          text = "Application Under Review",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+          color = VendorColors.TextPrimary
+        )
+        Text(
+          text = "Thank you for applying to become a JTBazar seller. We are currently reviewing your documents.",
+          style = MaterialTheme.typography.bodySmall,
+          color = VendorColors.TextSecondary,
+          textAlign = TextAlign.Center
         )
       }
     }
 
-    Card(
-      modifier = Modifier.fillMaxWidth(),
-      shape = RoundedCornerShape(20.dp),
-      colors = CardDefaults.cardColors(containerColor = Color.White),
-      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))
-    ) {
-      Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Text("Application progress", color = navy, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        VendorProgressStep("✓", "Application received", "Your shop details have been submitted successfully.", true, Color(0xFF16803C), navy, muted)
-        VendorProgressStep("◷", "Verification in progress", "Our marketplace team is reviewing your shop information.", true, orange, navy, muted)
-        VendorProgressStep("▣", "Seller access", "We’ll email you when your seller dashboard is ready.", false, muted, navy, muted)
-      }
-    }
-
-    Card(
-      modifier = Modifier.fillMaxWidth(),
-      shape = RoundedCornerShape(16.dp),
-      colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F7FC))
-    ) {
-      Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.Top) {
-        Text("ⓘ", color = Color(0xFF35679C), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    AppCard {
+      Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
         Text(
-          "If we need any additional information or your application is not approved, we will notify you by email.",
-          color = Color(0xFF42566F),
-          style = MaterialTheme.typography.bodyMedium
+          text = "Application progress",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+          color = VendorColors.TextPrimary
+        )
+        VendorProgressStep(
+          icon = Icons.Rounded.CheckCircle,
+          title = "Application received",
+          description = "Your shop details have been submitted successfully.",
+          active = true,
+          iconTint = VendorColors.SuccessGreen,
+          iconBg = VendorColors.SuccessGreenBg
+        )
+        VendorProgressStep(
+          icon = Icons.Rounded.Schedule,
+          title = "Verification in progress",
+          description = "Our marketplace team is reviewing your shop information.",
+          active = true,
+          iconTint = VendorColors.PrimaryOrange,
+          iconBg = VendorColors.PrimaryOrangeTint
+        )
+        VendorProgressStep(
+          icon = Icons.Rounded.VerifiedUser,
+          title = "Seller access",
+          description = "We'll notify you by email when your seller dashboard is ready.",
+          active = false,
+          iconTint = VendorColors.TextSecondary,
+          iconBg = VendorColors.NeutralBadgeBg
         )
       }
     }
 
-    Row(
-      modifier = Modifier.fillMaxWidth().background(Color(0xFFF8F9FB), RoundedCornerShape(12.dp)).padding(14.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      Text("Submitted", color = muted, style = MaterialTheme.typography.bodyMedium)
-      Text(submittedDate, color = navy, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+    AppCard {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm),
+        verticalAlignment = Alignment.Top
+      ) {
+        Icon(
+          imageVector = Icons.Rounded.Info,
+          contentDescription = null,
+          tint = VendorColors.NavyHeader,
+          modifier = Modifier.size(20.dp)
+        )
+        Text(
+          text = "If we need any additional information or your application is not approved, we will notify you by email.",
+          style = MaterialTheme.typography.bodySmall,
+          color = VendorColors.TextSecondary,
+          modifier = Modifier.weight(1f)
+        )
+      }
     }
 
-    Button(
-      onClick = onRefresh,
+    AppCard(contentPadding = PaddingValues(horizontal = VendorSpacing.md, vertical = VendorSpacing.sm)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = "Submitted",
+          style = MaterialTheme.typography.bodySmall,
+          color = VendorColors.TextSecondary
+        )
+        Text(
+          text = submittedDate,
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+          color = VendorColors.TextPrimary
+        )
+      }
+    }
+
+    PrimaryButton(
+      text = "Refresh application status",
+      icon = Icons.Rounded.Refresh,
+      loading = refreshing,
       enabled = !refreshing,
-      modifier = Modifier.fillMaxWidth(),
-      colors = ButtonDefaults.buttonColors(containerColor = orange),
-      shape = RoundedCornerShape(12.dp)
-    ) {
-      if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-      else Text("Refresh application status", fontWeight = FontWeight.Bold)
-    }
+      onClick = onRefresh,
+      modifier = Modifier.fillMaxWidth()
+    )
     Text(
-      "Your seller tools will become available here once your application is approved.",
-      modifier = Modifier.fillMaxWidth(),
-      color = muted,
-      style = MaterialTheme.typography.bodySmall
+      text = "Your seller tools will become available here once your application is approved.",
+      style = MaterialTheme.typography.bodySmall,
+      color = VendorColors.TextSecondary,
+      textAlign = TextAlign.Center,
+      modifier = Modifier.fillMaxWidth()
     )
   }
 }
 
 @Composable
 private fun VendorProgressStep(
-  symbol: String,
+  icon: ImageVector,
   title: String,
   description: String,
   active: Boolean,
-  symbolColor: Color,
-  titleColor: Color,
-  mutedColor: Color
+  iconTint: Color,
+  iconBg: Color
 ) {
-  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm),
+    verticalAlignment = Alignment.Top
+  ) {
     Box(
-      modifier = Modifier.size(34.dp).background(if (active) Color(0xFFFFF0E7) else Color(0xFFF0F2F5), RoundedCornerShape(50)),
+      modifier = Modifier
+        .size(36.dp)
+        .clip(CircleShape)
+        .background(iconBg),
       contentAlignment = Alignment.Center
     ) {
-      Text(symbol, color = symbolColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = iconTint,
+        modifier = Modifier.size(20.dp)
+      )
     }
-    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-      Text(title, color = titleColor, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
-      Text(description, color = mutedColor, style = MaterialTheme.typography.bodySmall)
+    Column(
+      modifier = Modifier.weight(1f),
+      verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+      Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold,
+        color = VendorColors.TextPrimary
+      )
+      Text(
+        text = description,
+        style = MaterialTheme.typography.bodySmall,
+        color = VendorColors.TextSecondary
+      )
     }
   }
 }
 
 @Composable
 private fun StatusPanel(app: VendorApplication) {
-  val color = when (app.status.lowercase()) { "approved" -> Color(0xFF16803C); "rejected" -> Color(0xFFB91C1C); else -> Color(0xFFB7791F) }
-  Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(app.shopName, fontWeight = FontWeight.Bold); Text("Application status: ${app.status.uppercase()}", color = color, fontWeight = FontWeight.Bold) } }
+  val (tone, icon) = when (app.status.lowercase()) {
+    "approved" -> StatusTone.SUCCESS to Icons.Rounded.CheckCircle
+    "rejected" -> StatusTone.DANGER to Icons.Rounded.ErrorOutline
+    else -> StatusTone.WARNING to Icons.Rounded.Schedule
+  }
+  AppCard {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = app.shopName,
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+          color = VendorColors.TextPrimary
+        )
+        Text(
+          text = "Application status",
+          style = MaterialTheme.typography.bodySmall,
+          color = VendorColors.TextSecondary
+        )
+      }
+      StatusBadge(
+        text = app.status.uppercase(),
+        tone = tone,
+        icon = icon
+      )
+    }
+  }
 }
-
 
 private fun normalizePakistaniPhone(input: String): String {
   var value = input.trim().replace(Regex("[\\s()\\-]"), "")
@@ -1027,7 +1795,9 @@ private fun vendorLoadErrorMessage(error: Throwable): String {
     .joinToString(" ")
     .lowercase()
   return when {
-    details.contains("unable to resolve host") || details.contains("unknownhostexception") || details.contains("no address associated with hostname") ->
+    details.contains("unable to resolve host") ||
+      details.contains("unknownhostexception") ||
+      details.contains("no address associated with hostname") ->
       "JTBazar server ka address abhi resolve nahi ho raha. Ye DNS ya internet network ka masla ho sakta hai. Wi-Fi/mobile data check karein aur dobara koshish karein."
     details.contains("timeout") || details.contains("timed out") ->
       "JTBazar server se response nahi mila. Internet connection check karke dobara koshish karein."
@@ -1037,10 +1807,14 @@ private fun vendorLoadErrorMessage(error: Throwable): String {
   }
 }
 
-
 private fun printVendorPackingSlip(context: android.content.Context, items: List<JSONObject>) {
   val first = items.firstOrNull() ?: return
-  fun esc(value: String) = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+  fun esc(value: String) = value
+    .replace("&", "&amp;")
+    .replace("<", "&lt;")
+    .replace(">", "&gt;")
+    .replace("\"", "&quot;")
+
   val rows = items.joinToString("") { item ->
     val variant = item.optJSONObject("variant_snapshot")?.let { v ->
       "${v.optString("label", v.optString("option_label"))}: ${v.optString("value", v.optString("option_value"))}"
@@ -1061,7 +1835,9 @@ private fun printVendorPackingSlip(context: android.content.Context, items: List
   webView.settings.javaScriptEnabled = false
   webView.webViewClient = object : WebViewClient() {
     override fun onPageFinished(view: WebView, url: String?) {
-      val adapter = view.createPrintDocumentAdapter("JTBazar-Packing-Slip-${first.optString("order_number", "order")}")
+      val adapter = view.createPrintDocumentAdapter(
+        "JTBazar-Packing-Slip-${first.optString("order_number", "order")}"
+      )
       printManager.print("JTBazar product packing slip", adapter, PrintAttributes.Builder().build())
     }
   }

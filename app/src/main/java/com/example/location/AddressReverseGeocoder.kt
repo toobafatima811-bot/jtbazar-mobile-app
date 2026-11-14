@@ -20,8 +20,19 @@ data class ReverseGeocodedAddress(
   val area: String = "",
   val city: String = "",
   val province: String = "",
-  val postalCode: String? = null
+  val postalCode: String? = null,
+  val fullAddress: String = ""
 )
+
+fun ReverseGeocodedAddress.toReadableFullAddress(): String {
+  val explicit = fullAddress.trim()
+  if (explicit.isNotBlank()) return explicit
+  return listOf(street, area, city, province, postalCode.orEmpty())
+    .map { it.trim() }
+    .filter { it.isNotBlank() }
+    .distinct()
+    .joinToString(", ")
+}
 
 object AddressReverseGeocoder {
   private val nominatimClient by lazy {
@@ -71,22 +82,35 @@ object AddressReverseGeocoder {
       }
     }
     address ?: return null
+    val addressLine = address.getAddressLine(0)?.trim().orEmpty()
     val street = listOfNotNull(
       address.subThoroughfare?.takeIf { it.isNotBlank() },
       address.thoroughfare?.takeIf { it.isNotBlank() }
     ).joinToString(" ").ifBlank {
-      address.getAddressLine(0).orEmpty()
+      addressLine
+    }
+    val area = address.subLocality?.takeIf { it.isNotBlank() }
+      ?: address.locality?.takeIf { it.isNotBlank() }
+      ?: address.subAdminArea.orEmpty()
+    val city = address.locality?.takeIf { it.isNotBlank() }
+      ?: address.subAdminArea?.takeIf { it.isNotBlank() }
+      ?: address.adminArea.orEmpty()
+    val province = address.adminArea.orEmpty()
+    val postalCode = address.postalCode?.takeIf { it.isNotBlank() }
+    val combinedFull = addressLine.ifBlank {
+      listOf(street, area, city, province, postalCode.orEmpty())
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .joinToString(", ")
     }
     return ReverseGeocodedAddress(
       street = street,
-      area = address.subLocality?.takeIf { it.isNotBlank() }
-        ?: address.locality?.takeIf { it.isNotBlank() }
-        ?: address.subAdminArea.orEmpty(),
-      city = address.locality?.takeIf { it.isNotBlank() }
-        ?: address.subAdminArea?.takeIf { it.isNotBlank() }
-        ?: address.adminArea.orEmpty(),
-      province = address.adminArea.orEmpty(),
-      postalCode = address.postalCode?.takeIf { it.isNotBlank() }
+      area = area,
+      city = city,
+      province = province,
+      postalCode = postalCode,
+      fullAddress = combinedFull
     )
   }
 
@@ -112,9 +136,13 @@ object AddressReverseGeocoder {
       if (body.isBlank()) return null
       val json = JSONObject(body)
       val addr = json.optJSONObject("address") ?: JSONObject()
+      val roadName = addr.optString("road")
+        .ifBlank { addr.optString("pedestrian") }
+        .ifBlank { addr.optString("residential") }
+        .ifBlank { addr.optString("footway") }
       val street = listOf(
         addr.optString("house_number"),
-        addr.optString("road").ifBlank { addr.optString("pedestrian") }
+        roadName
       ).filter { it.isNotBlank() }.joinToString(" ")
         .ifBlank { json.optString("name") }
         .ifBlank { json.optString("display_name").split(",").take(2).joinToString(",").trim() }
@@ -129,13 +157,21 @@ object AddressReverseGeocoder {
         .ifBlank { addr.optString("state_district") }
       val province = addr.optString("state")
       val postcode = addr.optString("postcode").ifBlank { null }
-      if (street.isBlank() && area.isBlank() && city.isBlank()) return null
+      val displayName = json.optString("display_name").trim()
+      if (street.isBlank() && area.isBlank() && city.isBlank() && displayName.isBlank()) return null
+      val combinedFull = listOf(street, area, city, province, postcode.orEmpty())
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .joinToString(", ")
+        .ifBlank { displayName }
       ReverseGeocodedAddress(
         street = street,
         area = area.ifBlank { city },
         city = city.ifBlank { area },
         province = province,
-        postalCode = postcode
+        postalCode = postcode,
+        fullAddress = combinedFull
       )
     }
   }.getOrNull()
