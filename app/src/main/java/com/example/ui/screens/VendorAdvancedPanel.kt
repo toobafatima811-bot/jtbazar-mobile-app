@@ -314,17 +314,15 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                 Checkbox(checked = editDailyItem, onCheckedChange = { editDailyItem = it })
                 Text("Manage as a daily dish / daily food item")
               }
-              if (editDailyItem) {
-                var dailyStatusExpanded by remember(id) { mutableStateOf(false) }
-                val dailyStatuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
-                ExposedDropdownMenuBox(expanded = dailyStatusExpanded, onExpandedChange = { dailyStatusExpanded = !dailyStatusExpanded }) {
-                  OutlinedTextField(value = dailyStatuses.firstOrNull { it.first == editDailyStatus }?.second ?: "Available today", onValueChange = {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dailyStatusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
-                  ExposedDropdownMenu(expanded = dailyStatusExpanded, onDismissRequest = { dailyStatusExpanded = false }) {
-                    dailyStatuses.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { editDailyStatus = value; dailyStatusExpanded = false }) }
-                  }
+              var dailyStatusExpanded by remember(id) { mutableStateOf(false) }
+              val dailyStatuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
+              ExposedDropdownMenuBox(expanded = dailyStatusExpanded, onExpandedChange = { dailyStatusExpanded = !dailyStatusExpanded }) {
+                OutlinedTextField(value = dailyStatuses.firstOrNull { it.first == editDailyStatus }?.second ?: "Available today", onValueChange = {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dailyStatusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+                ExposedDropdownMenu(expanded = dailyStatusExpanded, onDismissRequest = { dailyStatusExpanded = false }) {
+                  dailyStatuses.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { editDailyStatus = value; dailyStatusExpanded = false }) }
                 }
-                VendorAdvancedField("Today's available quantity", editDailyQuantity) { editDailyQuantity = it.filter(Char::isDigit) }
               }
+              VendorAdvancedField("Today's available quantity", editDailyQuantity) { editDailyQuantity = it.filter(Char::isDigit) }
             }
             Button(enabled = !saving, onClick = {
               scope.launch {
