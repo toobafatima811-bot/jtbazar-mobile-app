@@ -12,6 +12,8 @@ import android.graphics.Point
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.widget.Toast
+import android.widget.VideoView
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -55,6 +57,8 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.Product
+import com.example.data.supabase.SupabaseApiService
+import com.example.data.supabase.SupabaseProductVideoDto
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.JTBazarTopBar
@@ -95,6 +99,10 @@ fun DiscoverScreen(
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
   val shops by MarketplaceRepository.shops.collectAsState()
+  var productVideos by remember { mutableStateOf<List<SupabaseProductVideoDto>>(emptyList()) }
+  LaunchedEffect(Unit) {
+    SupabaseApiService.fetchProductVideos().onSuccess { productVideos = it }
+  }
 
   var selectedTab by remember { mutableStateOf(DiscoverTab.PRODUCTS_FEED) }
 
@@ -274,6 +282,7 @@ fun DiscoverScreen(
         DiscoverTab.PRODUCTS_FEED -> {
           ProductsFeedReelsView(
             products = products,
+            videos = productVideos,
             onProductClick = onProductClick,
             onAddToCart = { prod ->
               MarketplaceRepository.addToCart(prod, 1)
@@ -602,14 +611,36 @@ private fun createShopClusterIcon(context: Context, count: Int): BitmapDrawable 
 // TAB B: PRODUCTS FEED — INSTAGRAM REELS STYLE
 // ----------------------------------------------------
 @Composable
+private data class ProductFeedEntry(val product: Product, val videoUrl: String?, val createdAt: String)
+
 private fun ProductsFeedReelsView(
   products: List<Product>,
+  videos: List<SupabaseProductVideoDto>,
   onProductClick: (Product) -> Unit,
   onAddToCart: (Product) -> Unit,
   onToggleWishlist: (Product) -> Unit,
   onShare: (Product) -> Unit
 ) {
-  if (products.isEmpty()) {
+  val feedEntries = remember(products, videos) {
+    val videosByProduct = videos.groupBy { it.productId }
+    val videoProductIds = videosByProduct.keys
+    val entries = buildList {
+      products.filterNot { it.id in videoProductIds }.forEach { add(ProductFeedEntry(it, null, it.createdAt)) }
+      videos.forEach { video ->
+        products.firstOrNull { it.id == video.productId }?.let { product ->
+          add(ProductFeedEntry(product, video.videoUrl, video.createdAt))
+        }
+      }
+    }
+    val sessionSeed = products.size.toLong() * 31L + videos.size.toLong() * 17L
+    entries.sortedWith(
+      compareByDescending<ProductFeedEntry> { runCatching { java.time.Instant.parse(it.createdAt).toEpochMilli() }.getOrDefault(0L) }
+        .thenByDescending { it.product.reviewCount }
+        .thenByDescending { it.product.rating }
+        .thenBy { (it.product.id.hashCode().toLong() xor sessionSeed).absoluteValue }
+    )
+  }
+  if (feedEntries.isEmpty()) {
     Box(
       modifier = Modifier
         .fillMaxSize()
@@ -626,29 +657,58 @@ private fun ProductsFeedReelsView(
       }
     }
   } else {
-    val pagerState = rememberPagerState(pageCount = { products.size })
+    val pagerState = rememberPagerState(pageCount = { feedEntries.size })
 
     VerticalPager(
       state = pagerState,
       modifier = Modifier.fillMaxSize()
     ) { page ->
-      val product = products[page]
+      val entry = feedEntries[page]
+      val product = entry.product
 
       Box(
         modifier = Modifier
           .fillMaxSize()
           .background(Color(0xFFF5F5F5))
       ) {
-        // Fit the whole product image within the available feed area.
-        // Coil also loads the bundled placeholder resource when no remote image exists.
-        AsyncImage(
-          model = product.imageUrl?.takeIf { it.isNotBlank() } ?: R.drawable.ic_launcher_background,
-          contentDescription = product.title,
-          contentScale = ContentScale.Fit,
-          modifier = Modifier
-            .fillMaxSize()
-            .align(Alignment.Center)
-        )
+        if (entry.videoUrl != null) {
+          AndroidView(
+            modifier = Modifier.fillMaxSize().align(Alignment.Center),
+            factory = { ctx ->
+              VideoView(ctx).apply {
+                setVideoURI(Uri.parse(entry.videoUrl))
+                setOnPreparedListener { player ->
+                  player.isLooping = true
+                  player.setVolume(0f, 0f)
+                  if (page == pagerState.currentPage) start()
+                }
+              }
+            },
+            update = { player ->
+              if (page == pagerState.currentPage) {
+                if (!player.isPlaying) player.start()
+              } else if (player.isPlaying) player.pause()
+            }
+          )
+          Surface(
+            color = Color.Black.copy(alpha = 0.55f),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(14.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+              Icon(Icons.Filled.PlayCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+              Spacer(Modifier.width(5.dp))
+              Text("Product video", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+          }
+        } else {
+          AsyncImage(
+            model = product.imageUrl?.takeIf { it.isNotBlank() } ?: R.drawable.ic_launcher_background,
+            contentDescription = product.title,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().align(Alignment.Center)
+          )
+        }
 
         // Bottom Gradient Overlay for text contrast
         Box(
