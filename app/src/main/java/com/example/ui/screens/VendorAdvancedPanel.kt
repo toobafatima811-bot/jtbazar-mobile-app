@@ -222,6 +222,29 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
           var editDimensions by remember(id) { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
           var editSeoTitle by remember(id) { mutableStateOf(product.optString("seo_title", "").takeUnless { it == "null" }.orEmpty()) }
           var editSeoDescription by remember(id) { mutableStateOf(product.optString("seo_description", "").takeUnless { it == "null" }.orEmpty()) }
+          var editFoodUnit by remember(id) { mutableStateOf(product.optString("food_selling_unit", "kg").ifBlank { "kg" }) }
+          var editFoodUnitPrice by remember(id) { mutableStateOf(product.optString("food_unit_price", product.optString("vendor_base_price", product.optString("price", ""))).takeUnless { it == "null" }.orEmpty()) }
+          var editFoodStep by remember(id) { mutableStateOf(product.optInt("food_quantity_increment", 250).toString()) }
+          var editFoodMinimum by remember(id) { mutableStateOf(product.optInt("food_minimum_quantity", 1).toString()) }
+          var editDailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
+          var editDailyStatus by remember(id) { mutableStateOf(product.optString("daily_status", "available")) }
+          var editDailyQuantity by remember(id) { mutableStateOf(product.optInt("daily_available_quantity", 0).toString()) }
+          val editIsFoodCategory = run {
+            var categoryId: String? = editCategory.takeIf { it.isNotBlank() }
+            var isFood = false
+            val visited = mutableSetOf<String>()
+            while (categoryId != null && visited.add(categoryId)) {
+              val currentCategory = (0 until productCategories.length()).mapNotNull { productCategories.optJSONObject(it) }
+                .firstOrNull { it.optString("id") == categoryId }
+              if (currentCategory == null) break
+              if (currentCategory.optBoolean("is_food_category") || currentCategory.optString("slug") == "food-groceries") {
+                isFood = true
+                break
+              }
+              categoryId = currentCategory.optString("parent_id").takeIf { it.isNotBlank() && it != "null" }
+            }
+            isFood || product.optString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
+          }
           Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
           Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
           TextButton(onClick = { editing = !editing }) { Text(if (editing) "Close product editor" else "Edit product details") }
@@ -246,6 +269,10 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                   val category = productCategories.optJSONObject(categoryIndex) ?: continue
                   DropdownMenuItem(text = { Text(category.optString("name")) }, onClick = {
                     editCategory = category.optString("id")
+                    if (category.optBoolean("is_food_category") || category.optString("slug") == "food-groceries") {
+                      if (editFoodUnit.isBlank()) editFoodUnit = "kg"
+                      if (editFoodStep.isBlank()) editFoodStep = if (editFoodUnit == "kg" || editFoodUnit == "l") "250" else "1"
+                    }
                     categoryExpanded = false
                   })
                 }
@@ -263,6 +290,42 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             VendorAdvancedField("Dimensions (JSON object)", editDimensions, 3) { editDimensions = it }
             VendorAdvancedField("SEO title", editSeoTitle) { editSeoTitle = it }
             VendorAdvancedField("SEO description", editSeoDescription, 2) { editSeoDescription = it }
+            if (editIsFoodCategory) {
+              HorizontalDivider()
+              Text("Food & groceries", style = MaterialTheme.typography.titleMedium)
+              Text("Food selling unit", style = MaterialTheme.typography.titleSmall)
+              var foodUnitExpanded by remember(id) { mutableStateOf(false) }
+              val foodUnits = listOf("kg" to "Kilogram (kg)", "g" to "Gram (g)", "l" to "Litre (L)", "ml" to "Millilitre (ml)", "piece" to "Piece", "dozen" to "Dozen", "pack" to "Pack")
+              ExposedDropdownMenuBox(expanded = foodUnitExpanded, onExpandedChange = { foodUnitExpanded = !foodUnitExpanded }) {
+                OutlinedTextField(value = foodUnits.firstOrNull { it.first == editFoodUnit }?.second ?: "Kilogram (kg)", onValueChange = {}, readOnly = true, label = { Text("Selling unit") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(foodUnitExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+                ExposedDropdownMenu(expanded = foodUnitExpanded, onDismissRequest = { foodUnitExpanded = false }) {
+                  foodUnits.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = {
+                    editFoodUnit = value
+                    editFoodStep = if (value == "kg" || value == "l") "250" else if (value == "g" || value == "ml") "100" else "1"
+                    foodUnitExpanded = false
+                  }) }
+                }
+              }
+              VendorAdvancedField("Price per ${editFoodUnit} (PKR)", editFoodUnitPrice) { editFoodUnitPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
+              VendorAdvancedField("Customer quantity step (${if (editFoodUnit == "kg") "grams" else if (editFoodUnit == "l") "ml" else "units"})", editFoodStep) { editFoodStep = it.filter(Char::isDigit) }
+              Text("For kg/litre the step is grams/ml; for dozen, piece and pack it is units.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+              VendorAdvancedField("Minimum purchase steps", editFoodMinimum) { editFoodMinimum = it.filter(Char::isDigit) }
+              Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(checked = editDailyItem, onCheckedChange = { editDailyItem = it })
+                Text("Manage as a daily dish / daily food item")
+              }
+              if (editDailyItem) {
+                var dailyStatusExpanded by remember(id) { mutableStateOf(false) }
+                val dailyStatuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
+                ExposedDropdownMenuBox(expanded = dailyStatusExpanded, onExpandedChange = { dailyStatusExpanded = !dailyStatusExpanded }) {
+                  OutlinedTextField(value = dailyStatuses.firstOrNull { it.first == editDailyStatus }?.second ?: "Available today", onValueChange = {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dailyStatusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+                  ExposedDropdownMenu(expanded = dailyStatusExpanded, onDismissRequest = { dailyStatusExpanded = false }) {
+                    dailyStatuses.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { editDailyStatus = value; dailyStatusExpanded = false }) }
+                  }
+                }
+                VendorAdvancedField("Today's available quantity", editDailyQuantity) { editDailyQuantity = it.filter(Char::isDigit) }
+              }
+            }
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true
@@ -287,7 +350,15 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     .put("p_seo_title", editSeoTitle.trim().ifBlank { JSONObject.NULL })
                     .put("p_seo_description", editSeoDescription.trim().ifBlank { JSONObject.NULL })
                   VendorService.updateProductFull(id, payload)
-                  message = "Product details saved. Manage stock separately in Inventory with an adjustment reason."
+                  if (editIsFoodCategory) {
+                    val unitPrice = editFoodUnitPrice.toDoubleOrNull() ?: error("Enter a valid food unit price.")
+                    val step = editFoodStep.toIntOrNull() ?: error("Enter a valid customer quantity step.")
+                    val minimum = editFoodMinimum.toIntOrNull() ?: error("Enter valid minimum purchase steps.")
+                    val dailyQty = editDailyQuantity.toIntOrNull() ?: error("Enter a valid daily available quantity.")
+                    if (step < 1 || minimum < 1 || dailyQty < 0 || unitPrice < 0) error("Check food unit price and quantity values.")
+                    VendorService.updateFoodProductDetails(id, editFoodUnit, unitPrice, step, minimum, editDailyItem, editDailyStatus, dailyQty)
+                  }
+                  message = "Product details saved. Food selling unit and daily availability updated when applicable."
                   editing = false
                   onRefresh()
                 } catch (e: Exception) { errorMessage = e.message ?: "Product update failed." }
