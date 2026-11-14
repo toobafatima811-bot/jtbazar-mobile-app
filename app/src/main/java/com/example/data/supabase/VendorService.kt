@@ -203,6 +203,19 @@ object VendorService {
     fail(SupabaseClient.rpc("vendor_set_product_inventory", params.toString()))
   }
 
+  suspend fun updateProductFull(productId: String, payload: JSONObject) {
+    require(payload.optString("p_name").trim().length >= 2) { "Product name must be at least 2 characters." }
+    require(payload.optString("p_slug").matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid product URL slug." }
+    require(payload.optDouble("p_price", -1.0) > 0) { "Selling price must be greater than zero." }
+    val supplierCost = if (payload.isNull("p_supplier_cost")) 0.0 else payload.optDouble("p_supplier_cost", 0.0)
+    val fulfilment = payload.optDouble("p_fulfillment_expense", 0.0)
+    val profit = payload.optDouble("p_minimum_profit", 0.0)
+    require(payload.optDouble("p_price") >= supplierCost + fulfilment + profit) {
+      "Selling price must cover supplier cost, fulfilment expense and minimum profit."
+    }
+    fail(SupabaseClient.rpc("vendor_update_product", payload.put("p_product_id", productId).toString()))
+  }
+
   suspend fun updateProduct(productId: String, name: String, description: String, price: Int, stock: Int) {
     require(name.trim().length >= 2 && price > 0 && stock >= 0) { "Check product name, price and stock." }
     val current = JSONArray(fail(SupabaseClient.rpc("vendor_list_products")))
