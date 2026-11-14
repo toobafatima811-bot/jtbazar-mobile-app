@@ -153,7 +153,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
     }
   }
 
-  Column(Modifier.fillMaxSize().background(Color.White)) {
+  Column(Modifier.fillMaxSize().background(Color(0xFFF5F7FB))) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
       IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
       Column(Modifier.weight(1f)) {
@@ -271,7 +271,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 }
                 if (products.length() == 0) {
                   VendorEmptyState("No products listed yet", "Your product listings will appear here once you add them.", "Add your first product") {
-                    vendorTab = "listings"; showProductForm = true
+                    vendorTab = "product_add"
                   }
                 } else {
                   for (i in 0 until minOf(products.length(), 4)) {
@@ -301,7 +301,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 try { productImageUrl = VendorService.listProductImageUrls(id).firstOrNull().orEmpty() }
                 catch (_: Exception) { productImageUrl = "" }
               }
-              Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+              Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.96f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (productImageUrl.isNotBlank()) {
