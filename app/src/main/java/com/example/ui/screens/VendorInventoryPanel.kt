@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
@@ -46,12 +48,12 @@ fun VendorInventoryPanel() {
   }
   LaunchedEffect(Unit) { refresh() }
 
-  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-      Text("Inventory management", style = MaterialTheme.typography.titleLarge)
+      Text("Stock & inventory", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF17243A), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
       TextButton(onClick = { refresh() }) { Text("Refresh") }
     }
-    Text("Update stock for each product or variant. Changes are recorded in inventory history.", style = MaterialTheme.typography.bodySmall)
+    Text("Manage live product and variant quantities. Every adjustment is recorded in inventory history.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (info.isNotBlank()) Text(info, color = MaterialTheme.colorScheme.primary)
     if (loading) CircularProgressIndicator(color = JTOrange)
@@ -62,10 +64,10 @@ fun VendorInventoryPanel() {
         val first = productRows.first()
         val product = first.optJSONObject("products")
         val productName = product?.optString("name", "Product") ?: "Product"
-        Card(Modifier.fillMaxWidth()) {
-          Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(productName, style = MaterialTheme.typography.titleMedium)
-            Text("${productRows.size} inventory item(s)", style = MaterialTheme.typography.bodySmall)
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.96f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))) {
+          Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(productName, style = MaterialTheme.typography.titleLarge, color = Color(0xFF17243A), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text("${productRows.size} stock option(s)", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
             productRows.forEach { row ->
               val productId = row.optString("product_id")
               val variantRaw = row.optString("variant_id")
@@ -74,8 +76,8 @@ fun VendorInventoryPanel() {
               val variant = row.optJSONObject("product_variants")
               val label = if (variant != null) "${variant.optString("option_label")}: ${variant.optString("option_value")}" else "Base product stock"
               HorizontalDivider()
-              Text(label, style = MaterialTheme.typography.titleSmall)
-              Text("Current stock: ${row.optInt("quantity")} • Low stock threshold: ${row.optInt("low_stock_threshold")}", style = MaterialTheme.typography.bodySmall)
+              Text(label, style = MaterialTheme.typography.titleSmall, color = Color(0xFF26354A), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+              Text("Available: ${row.optInt("quantity")}  •  Low stock alert: ${row.optInt("low_stock_threshold")}", style = MaterialTheme.typography.bodyMedium, color = if (row.optInt("quantity") <= row.optInt("low_stock_threshold")) Color(0xFFB45309) else Color(0xFF187548), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
               Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 OutlinedButton(enabled = savingId != key, onClick = {
                   quantities = quantities.toMutableMap().also { it[key] = row.optInt("quantity").toString() }
