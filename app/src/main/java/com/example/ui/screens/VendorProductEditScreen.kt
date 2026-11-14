@@ -83,7 +83,9 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
     while (currentId != null && visited.add(currentId)) {
       val row = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
         .firstOrNull { it.optSafeString("id") == currentId } ?: return false
-      if (row.optBoolean("is_food_category") || row.optSafeString("slug") == "food-groceries") return true
+      if (row.optBoolean("is_food_category") || row.optSafeString("is_food_category").equals("true", true) ||
+        row.optSafeString("slug").lowercase() in setOf("food-groceries", "food-and-groceries", "food-grocery") ||
+        row.optSafeString("name").trim().lowercase() in setOf("food & groceries", "food and groceries", "home & kitchen")) return true
       currentId = row.optSafeString("parent_id").takeIf { it.isNotBlank() && it != "null" }
     }
     return false
