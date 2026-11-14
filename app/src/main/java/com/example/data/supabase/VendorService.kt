@@ -203,6 +203,15 @@ object VendorService {
     fail(SupabaseClient.rpc("vendor_set_product_inventory", params.toString()))
   }
 
+  suspend fun setFoodProductDetails(productId: String, sellingUnit: String, unitPrice: Double, quantityIncrement: Int, minimumQuantity: Int) {
+    require(sellingUnit in setOf("kg", "g", "l", "ml", "piece", "dozen", "pack")) { "Select a valid food selling unit." }
+    require(unitPrice >= 0 && quantityIncrement >= 1 && minimumQuantity >= 1) { "Enter valid food unit pricing and quantities." }
+    fail(SupabaseClient.rpc("vendor_set_food_product_details", JSONObject()
+      .put("p_product_id", productId).put("p_selling_unit", sellingUnit)
+      .put("p_unit_price", unitPrice).put("p_quantity_increment", quantityIncrement)
+      .put("p_minimum_quantity", minimumQuantity).toString()))
+  }
+
   suspend fun updateProductFull(productId: String, payload: JSONObject) {
     require(payload.optString("p_name").trim().length >= 2) { "Product name must be at least 2 characters." }
     require(payload.optString("p_slug").matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid product URL slug." }
