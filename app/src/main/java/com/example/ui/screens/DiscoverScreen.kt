@@ -621,7 +621,8 @@ private fun ProductsFeedReelsView(
   onToggleWishlist: (Product) -> Unit,
   onShare: (Product) -> Unit
 ) {
-  val feedEntries = remember(products, videos) {
+  val feedSessionSeed = remember { kotlin.random.Random.nextLong() }
+  val feedEntries = remember(products, videos, feedSessionSeed) {
     val videosByProduct = videos.groupBy { it.productId }
     val videoProductIds = videosByProduct.keys
     val entries = buildList {
@@ -632,7 +633,7 @@ private fun ProductsFeedReelsView(
         }
       }
     }
-    val sessionSeed = products.size.toLong() * 31L + videos.size.toLong() * 17L
+    val sessionSeed = feedSessionSeed
     entries.sortedWith(
       compareByDescending<ProductFeedEntry> { runCatching { java.time.Instant.parse(it.createdAt).toEpochMilli() }.getOrDefault(0L) }
         .thenByDescending { it.product.reviewCount }
