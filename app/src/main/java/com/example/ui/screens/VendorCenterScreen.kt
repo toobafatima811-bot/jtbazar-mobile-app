@@ -99,6 +99,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var shopImageUri by remember { mutableStateOf<Uri?>(null) }
   var showProductForm by remember { mutableStateOf(false) }
   var editingProduct by remember { mutableStateOf<JSONObject?>(null) }
+  var viewingProduct by remember { mutableStateOf<JSONObject?>(null) }
   var vendorTab by remember { mutableStateOf("overview") }
 
   fun refresh() {
@@ -190,11 +191,30 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               onRefresh = { refresh() },
               refreshing = loading
             )
-            if (vendorTab != "product_edit") VendorDashboardTabs(
+            if (vendorTab !in setOf("product_edit", "product_add", "product_details")) VendorDashboardTabs(
               selected = vendorTab,
               onSelect = { vendorTab = it }
             )
             when (vendorTab) {
+              "product_add" -> VendorListingEditor(
+                onCancel = { vendorTab = "listings" },
+                onSaved = { successMessage ->
+                  info = successMessage
+                  try {
+                    products = VendorService.listProducts()
+                    productDeletionRequests = VendorService.listProductDeletionRequests()
+                  } catch (e: Exception) { actionErrorMessage = e.message ?: "Listing was submitted, but the product list could not refresh." }
+                  vendorTab = "listings"
+                }
+              )
+              "product_details" -> {
+                val selected = viewingProduct
+                if (selected != null) VendorProductDetailsScreen(
+                  product = selected,
+                  onBack = { viewingProduct = null; vendorTab = "listings" },
+                  onEdit = { editingProduct = selected; vendorTab = "product_edit" }
+                ) else vendorTab = "listings"
+              }
               "cases" -> VendorCasesScreen()
               "shop_settings" -> VendorShopSettingsScreen(application!!, user?.email.orEmpty()) { refresh() }
               "product_edit" -> {
@@ -202,10 +222,11 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 if (selected != null) {
                   VendorProductEditScreen(
                     product = selected,
-                    onBack = { editingProduct = null; vendorTab = "listings" },
+                    onBack = { editingProduct = null; vendorTab = "product_details" },
                     onSaved = {
                       products = VendorService.listProducts()
                       editingProduct = null
+                      viewingProduct = null
                       vendorTab = "listings"
                       info = "Product updated and sent for moderation where required."
                     }
