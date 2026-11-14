@@ -500,6 +500,7 @@ object MarketplaceRepository {
               sellerId = dto.sellerId,
               title = dto.title,
               vendor = dto.vendor,
+              createdAt = dto.createdAt,
               category = dto.category,
               categoryId = dto.categoryId,
               price = dto.price,
