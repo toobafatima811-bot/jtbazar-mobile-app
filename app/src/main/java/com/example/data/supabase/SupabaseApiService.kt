@@ -18,6 +18,20 @@ object SupabaseApiService {
   // PRODUCTS
   // ----------------------------------------------------
 
+  suspend fun fetchProductVideos(limit: Int = 100): Result<List<SupabaseProductVideoDto>> = withContext(Dispatchers.IO) {
+    try {
+      SupabaseClient.get("product_videos?select=id,product_id,video_url,duration_seconds,created_at&is_active=eq.true&order=created_at.desc&limit=${limit.coerceIn(1, 100)}")
+        .mapCatching { json ->
+          val rows = JSONArray(json)
+          (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val url = row.optString("video_url").takeIf { it.startsWith("https://") } ?: return@mapNotNull null
+            SupabaseProductVideoDto(row.optString("id"), row.optString("product_id"), url, row.optInt("duration_seconds"), row.optString("created_at"))
+          }
+        }
+    } catch (e: Exception) { Result.failure(e) }
+  }
+
   suspend fun fetchProducts(category: String? = null, isFeatured: Boolean? = null, limit: Int = 50): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
     try {
       // Match the website catalog service: fetch public product rows first, then
@@ -174,7 +188,7 @@ object SupabaseApiService {
       }
       val foodUnit = obj.optString("food_selling_unit").takeIf { it.isNotBlank() && it != "null" }
       val dailyStatus = obj.optString("daily_status").takeIf { it.isNotBlank() && it != "null" }
-      SupabaseProductDto(id=id,sellerId=obj.optString("seller_id").takeIf { it.isNotBlank() && it != "null" },title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"",category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=obj.optBoolean("is_new_arrival",false),availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
+      SupabaseProductDto(id=id,sellerId=obj.optString("seller_id").takeIf { it.isNotBlank() && it != "null" },title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"",createdAt=obj.optString("created_at",""),category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=obj.optBoolean("is_new_arrival",false),availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
     }
   }
 
