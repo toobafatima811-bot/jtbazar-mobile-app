@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
-private fun JSONObject.optCleanString(key: String, fallback: String = ""): String =
+private fun JSONObject.vendorEditCleanString(key: String, fallback: String = ""): String =
   optString(key, fallback).takeUnless { it == "null" } ?: fallback
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,41 +30,41 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   BackHandler { onBack() }
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  val id = product.optCleanString("id")
+  val id = product.vendorEditCleanString("id")
   var categories by remember { mutableStateOf(JSONArray()) }
   var existingImageUrls by remember(id) { mutableStateOf<List<String>>(emptyList()) }
   var newImages by remember(id) { mutableStateOf<List<Uri>>(emptyList()) }
-  var name by remember(id) { mutableStateOf(product.optCleanString("name")) }
-  var slug by remember(id) { mutableStateOf(product.optCleanString("slug")) }
-  var sku by remember(id) { mutableStateOf(product.optCleanString("sku")) }
-  var category by remember(id) { mutableStateOf(product.optCleanString("category_id")) }
-  var shortDescription by remember(id) { mutableStateOf(product.optCleanString("short_description")) }
-  var description by remember(id) { mutableStateOf(product.optCleanString("description")) }
+  var name by remember(id) { mutableStateOf(product.vendorEditCleanString("name")) }
+  var slug by remember(id) { mutableStateOf(product.vendorEditCleanString("slug")) }
+  var sku by remember(id) { mutableStateOf(product.vendorEditCleanString("sku")) }
+  var category by remember(id) { mutableStateOf(product.vendorEditCleanString("category_id")) }
+  var shortDescription by remember(id) { mutableStateOf(product.vendorEditCleanString("short_description")) }
+  var description by remember(id) { mutableStateOf(product.vendorEditCleanString("description")) }
   var price by remember(id) {
     mutableStateOf(
-      product.optCleanString("vendor_base_price").ifBlank { product.optCleanString("price") }
+      product.vendorEditCleanString("vendor_base_price").ifBlank { product.vendorEditCleanString("price") }
     )
   }
-  var discount by remember(id) { mutableStateOf(product.optCleanString("discount_percent", "0").ifBlank { "0" }) }
-  var supplierCost by remember(id) { mutableStateOf(product.optCleanString("supplier_cost")) }
-  var fulfilment by remember(id) { mutableStateOf(product.optCleanString("fulfillment_expense", "0").ifBlank { "0" }) }
-  var minimumProfit by remember(id) { mutableStateOf(product.optCleanString("minimum_profit", "0").ifBlank { "0" }) }
-  var weight by remember(id) { mutableStateOf(product.optCleanString("weight_grams")) }
+  var discount by remember(id) { mutableStateOf(product.vendorEditCleanString("discount_percent", "0").ifBlank { "0" }) }
+  var supplierCost by remember(id) { mutableStateOf(product.vendorEditCleanString("supplier_cost")) }
+  var fulfilment by remember(id) { mutableStateOf(product.vendorEditCleanString("fulfillment_expense", "0").ifBlank { "0" }) }
+  var minimumProfit by remember(id) { mutableStateOf(product.vendorEditCleanString("minimum_profit", "0").ifBlank { "0" }) }
+  var weight by remember(id) { mutableStateOf(product.vendorEditCleanString("weight_grams")) }
   var specs by remember(id) { mutableStateOf((product.optJSONArray("specifications") ?: JSONArray()).toString(2)) }
   var dimensions by remember(id) { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
-  var seoTitle by remember(id) { mutableStateOf(product.optCleanString("seo_title")) }
-  var seoDescription by remember(id) { mutableStateOf(product.optCleanString("seo_description")) }
-  var foodUnit by remember(id) { mutableStateOf(product.optCleanString("food_selling_unit", "kg").ifBlank { "kg" }) }
+  var seoTitle by remember(id) { mutableStateOf(product.vendorEditCleanString("seo_title")) }
+  var seoDescription by remember(id) { mutableStateOf(product.vendorEditCleanString("seo_description")) }
+  var foodUnit by remember(id) { mutableStateOf(product.vendorEditCleanString("food_selling_unit", "kg").ifBlank { "kg" }) }
   var foodUnitPrice by remember(id) { mutableStateOf(run {
-    val savedCustomerUnitPrice = product.optCleanString("food_unit_price").toDoubleOrNull()
-    val commission = product.optCleanString("commission_percent", "0").toDoubleOrNull() ?: 0.0
+    val savedCustomerUnitPrice = product.vendorEditCleanString("food_unit_price").toDoubleOrNull()
+    val commission = product.vendorEditCleanString("commission_percent", "0").toDoubleOrNull() ?: 0.0
     if (savedCustomerUnitPrice != null && commission >= 0) (savedCustomerUnitPrice / (1.0 + commission / 100.0)).toString() else price
   }) }
-  var foodStep by remember(id) { mutableStateOf(product.optCleanString("food_quantity_increment", "250").ifBlank { "250" }) }
-  var foodMinimum by remember(id) { mutableStateOf(product.optCleanString("food_minimum_quantity", "1").ifBlank { "1" }) }
+  var foodStep by remember(id) { mutableStateOf(product.vendorEditCleanString("food_quantity_increment", "250").ifBlank { "250" }) }
+  var foodMinimum by remember(id) { mutableStateOf(product.vendorEditCleanString("food_minimum_quantity", "1").ifBlank { "1" }) }
   var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
-  var dailyStatus by remember(id) { mutableStateOf(product.optCleanString("daily_status", "available").ifBlank { "available" }) }
-  var dailyQuantity by remember(id) { mutableStateOf(product.optCleanString("daily_available_quantity", "0").ifBlank { "0" }) }
+  var dailyStatus by remember(id) { mutableStateOf(product.vendorEditCleanString("daily_status", "available").ifBlank { "available" }) }
+  var dailyQuantity by remember(id) { mutableStateOf(product.vendorEditCleanString("daily_available_quantity", "0").ifBlank { "0" }) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
@@ -90,7 +90,7 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
     }
     return false
   }
-  val showFoodFields = isFoodCategory(category) || product.optCleanString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
+  val showFoodFields = isFoodCategory(category) || product.vendorEditCleanString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
     val remaining = (8 - existingImageUrls.size - newImages.size).coerceAtLeast(0)
     newImages = (newImages + selected.take(remaining)).distinct().take((8 - existingImageUrls.size).coerceAtLeast(0))
