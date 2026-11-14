@@ -76,7 +76,15 @@ object VendorService {
       .put("p_search", search.trim().takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
       .put("p_status", status.takeIf { it in setOf("pending", "delivered", "not_delivered") } ?: JSONObject.NULL).toString())))
   suspend fun markOrderReady(orderId: String, note: String = "") {
-    val raw = fail(SupabaseClient.rpc("vendor_mark_order_ready", JSONObject().put("p_order_id", orderId).put("p_vendor_note", note.ifBlank { JSONObject.NULL }).toString()))
+    val raw = try {
+      fail(SupabaseClient.rpc("vendor_mark_order_ready", JSONObject().put("p_order_id", orderId).put("p_vendor_note", note.ifBlank { JSONObject.NULL }).toString()))
+    } catch (e: Exception) {
+      val details = generateSequence(e as Throwable?) { it.cause }.mapNotNull { it.message }.joinToString(" ").lowercase()
+      if (details.contains("only customer-confirmed orders")) {
+        throw IOException("Customer ne abhi order confirm nahi kiya. Confirmation ke baad hi item Ready for pickup ho sakta hai.")
+      }
+      throw e
+    }
     if (raw == "null" || raw == "false" || raw.isBlank()) throw IOException("Order could not be marked ready.")
   }
   suspend fun setProductVisibility(productId: String, hidden: Boolean) {
@@ -191,10 +199,10 @@ object VendorService {
       ?: throw IOException("Product not found.")
     val params = JSONObject().put("p_product_id", productId).put("p_category_id", product.optString("category_id").takeIf { it.isNotBlank() } ?: JSONObject.NULL)
       .put("p_name", name.trim()).put("p_slug", product.optString("slug")).put("p_sku", product.optString("sku").takeIf { it.isNotBlank() } ?: JSONObject.NULL)
-      .put("p_short_description", description.take(180)).put("p_description", description).put("p_price", price)
+      .put("p_short_description", description.take(180)).put("p_description", description).put("p_price", product.opt("vendor_base_price") ?: price)
       .put("p_supplier_cost", product.opt("supplier_cost") ?: JSONObject.NULL).put("p_fulfillment_expense", product.optInt("fulfillment_expense",0))
       .put("p_minimum_profit", product.optInt("minimum_profit",0)).put("p_discount_percent", product.optInt("discount_percent",0))
-      .put("p_weight_grams", product.opt("weight_grams") ?: JSONObject.NULL).put("p_specifications", product.optJSONObject("specifications") ?: JSONObject())
+      .put("p_weight_grams", product.opt("weight_grams") ?: JSONObject.NULL).put("p_specifications", product.optJSONArray("specifications") ?: JSONArray())
       .put("p_dimensions", product.optJSONObject("dimensions") ?: JSONObject()).put("p_seo_title", product.opt("seo_title") ?: JSONObject.NULL)
       .put("p_seo_description", product.opt("seo_description") ?: JSONObject.NULL)
     fail(SupabaseClient.rpc("vendor_update_product", params.toString()))
