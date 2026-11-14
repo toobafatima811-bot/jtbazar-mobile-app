@@ -189,7 +189,16 @@ object SupabaseClient {
           requestBuilder.header("Accept", "application/json")
         }
 
-        chain.proceed(requestBuilder.build())
+        val request = requestBuilder.build()
+        // Keep the app-wide progress state active during write/submit operations.
+        // Background GET polling must not block the entire UI with a full-screen loader.
+        val shouldShowOperationLoader = request.method !in setOf("GET", "HEAD")
+        if (shouldShowOperationLoader) GlobalLoadingState.show()
+        try {
+          chain.proceed(request)
+        } finally {
+          if (shouldShowOperationLoader) GlobalLoadingState.hide()
+        }
       }
       .authenticator { _, response ->
         val path = response.request.url.encodedPath
