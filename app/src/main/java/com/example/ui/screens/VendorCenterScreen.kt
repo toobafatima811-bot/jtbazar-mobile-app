@@ -63,6 +63,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var loading by remember { mutableStateOf(true) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
+  var actionErrorMessage by remember { mutableStateOf("") }
   var info by remember { mutableStateOf("") }
   var shopName by remember { mutableStateOf("") }
   var description by remember { mutableStateOf("") }
@@ -114,12 +115,12 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var pendingDoc by remember { mutableStateOf("verification") }
   val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
     if (uri != null) scope.launch {
-      saving = true; errorMessage = ""; info = ""
+      saving = true; actionErrorMessage = ""; info = ""
       try {
         val path = upload(uri, pendingDoc)
         when (pendingDoc) { "verification" -> verificationPath = path; "cnic-front" -> frontPath = path; "cnic-back" -> backPath = path }
         info = "Document uploaded securely."
-      } catch (e: Exception) { errorMessage = e.message ?: "Document upload failed." }
+      } catch (e: Exception) { actionErrorMessage = e.message ?: "Document upload failed." }
       finally { saving = false }
     }
   }
@@ -139,6 +140,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
     } else {
       Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
+        if (actionErrorMessage.isNotBlank()) Text(actionErrorMessage, color = MaterialTheme.colorScheme.error)
         if (info.isNotBlank()) Text(info, color = Color(0xFF16803C))
         when {
           errorMessage.isNotBlank() -> {
@@ -311,30 +313,32 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             DocumentButton("CNIC back image", backPath != null) { pendingDoc = "cnic-back"; documentPicker.launch("image/*") }
             Button(enabled = !saving, onClick = {
               scope.launch {
-                saving = true; errorMessage = ""; info = ""
+                saving = true; actionErrorMessage = ""; info = ""
                 try {
                   val u = user ?: error("Please sign in again.")
-                  require(shopName.trim().length >= 2) { "Enter a valid shop name." }
-                  require(description.trim().length >= 10) { "Shop description must be at least 10 characters." }
+                  val normalizedPhone = normalizePakistaniPhone(phone)
+                  require(shopName.trim().length in 2..160) { "Shop name must be between 2 and 160 characters." }
+                  require(description.trim().length in 10..2000) { "Shop description must be between 10 and 2,000 characters." }
                   require(ownerName.trim().length >= 3) { "Enter the owner's full legal name." }
-                  require(cnic.length == 13) { "Enter a 13-digit CNIC number." }
-                  require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani phone number." }
-                  require(currentAddress.trim().length >= 3 && fullAddress.trim().length >= 10 && shopLocation.trim().length >= 10) { "Complete all shop address fields." }
+                  require(cnic.matches(Regex("^[0-9]{13}$"))) { "Enter a 13-digit CNIC number without dashes." }
+                  require(normalizedPhone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani phone number, e.g. 03001234567." }
+                  require(currentAddress.trim().length >= 3 && fullAddress.trim().length >= 10 && shopLocation.trim().length >= 10) { "Complete your current address, full address and shop landmark (at least 10 characters)." }
                   val lat = latitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
                   val lng = longitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
-                  require(lat in -90.0..90.0 && lng in -180.0..180.0) { "Map coordinates are invalid." }
-                  require(verificationPath != null && frontPath != null && backPath != null) { "Upload all three verification documents." }
-                  require(u.email?.isNotBlank() == true) { "Your account email is missing." }
-                  val slug = shopName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-') + "-" + System.currentTimeMillis().toString().takeLast(5)
+                  require(lat in -90.0..90.0 && lng in -180.0..180.0 && !(lat == 0.0 && lng == 0.0)) { "Map coordinates are invalid. Select your actual shop location." }
+                  require(!verificationPath.isNullOrBlank() && !frontPath.isNullOrBlank() && !backPath.isNullOrBlank()) { "Upload all three verification documents before submitting." }
+                  require(u.email?.isNotBlank() == true) { "Your account email is missing. Sign in again." }
+                  val slugBase = shopName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-').take(120).trim('-').ifBlank { "shop" }
+                  val slug = "$slugBase-${java.util.UUID.randomUUID().toString().take(8)}"
                   val body = JSONObject().put("user_id", u.id).put("shop_name", shopName.trim()).put("slug", slug)
-                    .put("description", description.trim()).put("current_address", currentAddress.trim()).put("complete_address", fullAddress.trim())
-                    .put("shop_location_label", currentAddress.trim()).put("contact_email", u.email).put("phone", phone.trim())
+                    .put("description", description.trim().take(2000)).put("current_address", currentAddress.trim()).put("complete_address", fullAddress.trim())
+                    .put("shop_location_label", currentAddress.trim().take(120)).put("contact_email", u.email).put("phone", normalizedPhone)
                     .put("document_path", verificationPath).put("cnic_front_path", frontPath).put("cnic_back_path", backPath)
                     .put("vendor_type", vendorType.trim()).put("owner_full_name", ownerName.trim()).put("cnic_number", cnic)
                     .put("shop_location_text", shopLocation.trim()).put("shop_lat", lat).put("shop_lng", lng).put("show_shop_on_map", true)
                   application = VendorService.submitApplication(body)
                   info = "Application submitted successfully. JTBazar admin review is pending."
-                } catch (e: Exception) { errorMessage = e.message ?: "Application could not be submitted." }
+                } catch (e: Exception) { actionErrorMessage = e.message ?: "Application could not be submitted." }
                 finally { saving = false }
               }
             }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
@@ -496,6 +500,15 @@ private fun StatusPanel(app: VendorApplication) {
   Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(app.shopName, fontWeight = FontWeight.Bold); Text("Application status: ${app.status.uppercase()}", color = color, fontWeight = FontWeight.Bold) } }
 }
 
+
+private fun normalizePakistaniPhone(input: String): String {
+  var value = input.trim().replace(Regex("[\\s()\\-]"), "")
+  if (value.startsWith("0092")) value = "+92" + value.removePrefix("0092")
+  if (value.startsWith("92") && !value.startsWith("+92")) value = "+$value"
+  if (value.startsWith("+920")) value = "+92" + value.removePrefix("+920")
+  if (value.matches(Regex("^3[0-9]{9}$"))) value = "0$value"
+  return value
+}
 
 private fun vendorLoadErrorMessage(error: Throwable): String {
   val details = generateSequence(error) { it.cause }
