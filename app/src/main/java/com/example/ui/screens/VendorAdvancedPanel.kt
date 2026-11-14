@@ -192,29 +192,75 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
           var editing by remember(id) { mutableStateOf(false) }
           var editName by remember(id) { mutableStateOf(product.optString("name", "")) }
+          var editSlug by remember(id) { mutableStateOf(product.optString("slug", "")) }
+          var editSku by remember(id) { mutableStateOf(product.optString("sku", "")) }
+          var editCategory by remember(id) { mutableStateOf(product.optString("category_id", "")) }
+          var editShortDescription by remember(id) { mutableStateOf(product.optString("short_description", "")) }
           var editDescription by remember(id) { mutableStateOf(product.optString("description", "")) }
-          var editPrice by remember(id) { mutableStateOf(product.optString("price", "")) }
+          var editPrice by remember(id) { mutableStateOf(product.optString("vendor_base_price", product.optString("price", ""))) }
+          var editDiscount by remember(id) { mutableStateOf(product.optString("discount_percent", "0")) }
+          var editSupplierCost by remember(id) { mutableStateOf(if (product.isNull("supplier_cost")) "" else product.optString("supplier_cost")) }
+          var editFulfilment by remember(id) { mutableStateOf(product.optString("fulfillment_expense", "0")) }
+          var editMinimumProfit by remember(id) { mutableStateOf(product.optString("minimum_profit", "0")) }
+          var editWeight by remember(id) { mutableStateOf(if (product.isNull("weight_grams")) "" else product.optString("weight_grams")) }
+          var editSpecifications by remember(id) { mutableStateOf((product.optJSONArray("specifications") ?: JSONArray()).toString(2)) }
+          var editDimensions by remember(id) { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
+          var editSeoTitle by remember(id) { mutableStateOf(product.optString("seo_title", "")) }
+          var editSeoDescription by remember(id) { mutableStateOf(product.optString("seo_description", "")) }
           var editStock by remember(id) { mutableStateOf(product.optString("stock_quantity", product.optString("quantity", "0"))) }
           Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
           Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
           TextButton(onClick = { editing = !editing }) { Text(if (editing) "Close product editor" else "Edit product details") }
           if (editing) {
             VendorAdvancedField("Product name", editName) { editName = it }
-            VendorAdvancedField("Product description", editDescription, 3) { editDescription = it }
-            VendorAdvancedField("Price (PKR)", editPrice) { editPrice = it.filter(Char::isDigit) }
+            VendorAdvancedField("Product URL slug", editSlug) { editSlug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
+            VendorAdvancedField("Product SKU", editSku) { editSku = it }
+            VendorAdvancedField("Category ID", editCategory) { editCategory = it }
+            VendorAdvancedField("Short description", editShortDescription, 2) { editShortDescription = it }
+            VendorAdvancedField("Full description", editDescription, 4) { editDescription = it }
+            VendorAdvancedField("Vendor base price (PKR)", editPrice) { editPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField("Discount (%)", editDiscount) { editDiscount = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField("Supplier cost (private PKR)", editSupplierCost) { editSupplierCost = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField("Fulfilment expense (PKR)", editFulfilment) { editFulfilment = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField("Minimum profit (PKR)", editMinimumProfit) { editMinimumProfit = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField("Shipping weight (grams)", editWeight) { editWeight = it.filter(Char::isDigit) }
+            VendorAdvancedField("Specifications (JSON array)", editSpecifications, 3) { editSpecifications = it }
+            VendorAdvancedField("Dimensions (JSON object)", editDimensions, 3) { editDimensions = it }
+            VendorAdvancedField("SEO title", editSeoTitle) { editSeoTitle = it }
+            VendorAdvancedField("SEO description", editSeoDescription, 2) { editSeoDescription = it }
             VendorAdvancedField("Stock quantity", editStock) { editStock = it.filter(Char::isDigit) }
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true
                 try {
-                  VendorService.updateProduct(id, editName, editDescription, editPrice.toIntOrNull() ?: error("Enter a valid price."), editStock.toIntOrNull() ?: error("Enter valid stock."))
-                  message = "Product updated. Any changes requiring review follow JTBazar's publishing rules."
+                  val price = editPrice.toDoubleOrNull() ?: error("Enter a valid vendor base price.")
+                  val discount = editDiscount.toDoubleOrNull() ?: error("Enter a valid discount.")
+                  require(discount in 0.0..100.0) { "Discount must be between 0 and 100%." }
+                  val specs = JSONArray(editSpecifications)
+                  val dimensions = JSONObject(editDimensions)
+                  val payload = JSONObject()
+                    .put("p_category_id", editCategory.ifBlank { JSONObject.NULL })
+                    .put("p_name", editName.trim()).put("p_slug", editSlug.trim())
+                    .put("p_sku", editSku.trim().ifBlank { JSONObject.NULL })
+                    .put("p_short_description", editShortDescription.trim())
+                    .put("p_description", editDescription.trim()).put("p_price", price)
+                    .put("p_supplier_cost", editSupplierCost.toDoubleOrNull() ?: JSONObject.NULL)
+                    .put("p_fulfillment_expense", editFulfilment.toDoubleOrNull() ?: error("Enter valid fulfilment expense."))
+                    .put("p_minimum_profit", editMinimumProfit.toDoubleOrNull() ?: error("Enter valid minimum profit."))
+                    .put("p_discount_percent", discount)
+                    .put("p_weight_grams", editWeight.toIntOrNull() ?: JSONObject.NULL)
+                    .put("p_specifications", specs).put("p_dimensions", dimensions)
+                    .put("p_seo_title", editSeoTitle.trim().ifBlank { JSONObject.NULL })
+                    .put("p_seo_description", editSeoDescription.trim().ifBlank { JSONObject.NULL })
+                  VendorService.updateProductFull(id, payload)
+                  VendorService.setInventory(id, editStock.toIntOrNull() ?: error("Enter valid stock quantity."))
+                  message = "Product details saved. JTBazar moderation rules still apply."
                   editing = false
                   onRefresh()
                 } catch (e: Exception) { errorMessage = e.message ?: "Product update failed." }
                 finally { saving = false }
               }
-            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save product changes") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save all product changes") }
           }
           var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
           var dailyQuantity by remember(id) { mutableStateOf(product.optInt("daily_available_quantity", 0).toString()) }
