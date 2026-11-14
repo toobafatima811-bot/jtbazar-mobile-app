@@ -12,6 +12,8 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.background
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -280,10 +282,26 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               val id = p.optString("id")
               val name = p.optString("name", "Product")
               val hidden = p.optBoolean("vendor_hidden", p.optBoolean("is_hidden", false))
+              var productImageUrl by remember(id) { mutableStateOf("") }
+              LaunchedEffect(id) {
+                try { productImageUrl = VendorService.listProductImageUrls(id).firstOrNull().orEmpty() }
+                catch (_: Exception) { productImageUrl = "" }
+              }
               Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                  Text(name, fontWeight = FontWeight.SemiBold)
-                  Text("PKR ${p.optString("price","0")}  •  ${p.optString("publication_status", p.optString("status","draft"))}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (productImageUrl.isNotBlank()) {
+                      AsyncImage(model = productImageUrl, contentDescription = name, modifier = Modifier.size(88.dp), contentScale = ContentScale.Crop)
+                    } else {
+                      Box(Modifier.size(88.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Inventory2, null, tint = JTOrange)
+                      }
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                      Text(name, fontWeight = FontWeight.SemiBold)
+                      Text("PKR ${p.optString("price","0")}  •  ${p.optString("publication_status", p.optString("status","draft"))}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                  }
                   val moderation = p.optString("moderation_status", p.optString("status", "pending")).lowercase()
                   val rejected = moderation == "rejected"
                   Row(verticalAlignment = Alignment.CenterVertically) {
