@@ -259,7 +259,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                       Text("Grow your shop", color = Color(0xFF17243A), fontWeight = FontWeight.Bold)
                       Text("Add a new product listing and make it available to JTBazar customers.", color = Color(0xFF66758A), style = MaterialTheme.typography.bodySmall)
                     }
-                    IconButton(onClick = { vendorTab = "listings"; showProductForm = true }) {
+                    IconButton(onClick = { vendorTab = "product_add" }) {
                       Icon(Icons.Default.ChevronRight, contentDescription = "Create listing", tint = JTOrange)
                     }
                   }
@@ -285,20 +285,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               Icon(Icons.Default.Inventory2, null, tint = JTOrange)
               Spacer(Modifier.width(8.dp)); Text("Your products", fontWeight = FontWeight.Bold)
               Spacer(Modifier.weight(1f))
-              TextButton(onClick = { showProductForm = !showProductForm }) { Icon(Icons.Default.Add, null); Text("Add product") }
-            }
-            if (showProductForm) {
-              VendorListingEditor(
-                onCancel = { showProductForm = false },
-                onSaved = { successMessage ->
-                  showProductForm = false
-                  info = successMessage
-                  try {
-                    products = VendorService.listProducts()
-                    productDeletionRequests = VendorService.listProductDeletionRequests()
-                  } catch (e: Exception) { actionErrorMessage = e.message ?: "Listing was submitted, but the product list could not refresh." }
-                }
-              )
+              TextButton(onClick = { vendorTab = "product_add" }) { Icon(Icons.Default.Add, null); Text("Add product") }
             }
             if (products.length() == 0) Text("No products yet. Add your first product.")
             for (i in 0 until products.length()) {
