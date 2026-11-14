@@ -34,7 +34,7 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   var seoTitle by remember { mutableStateOf(product.optString("seo_title")) }
   var seoDescription by remember { mutableStateOf(product.optString("seo_description")) }
   var saving by remember { mutableStateOf(false) }
-  var error by remember { mutableStateOf("") }
+  var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
 
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -59,11 +59,11 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
     EditProductField("Dimensions (JSON object)", dimensions, 3) { dimensions = it }
     EditProductField("SEO title", seoTitle) { seoTitle = it }
     EditProductField("SEO description", seoDescription, 2) { seoDescription = it }
-    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+    if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
     Button(enabled = !saving, onClick = {
       scope.launch {
-        saving = true; error = ""; message = ""
+        saving = true; errorMessage = ""; message = ""
         try {
           val basePrice = price.toDoubleOrNull() ?: error("Enter a valid price.")
           val discountValue = discount.toDoubleOrNull() ?: error("Enter a valid discount.")
@@ -85,7 +85,7 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
           VendorService.updateProductFull(id, payload)
           message = "Product details saved."
           onSaved()
-        } catch (e: Exception) { error = e.message ?: "Product could not be updated." }
+        } catch (e: Exception) { errorMessage = e.message ?: "Product could not be updated." }
         finally { saving = false }
       }
     }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
