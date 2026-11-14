@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
 import android.net.Uri
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -310,15 +314,26 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             }
             Text("Customer contact, payment, delivery and order fulfilment remain managed by JTBazar. You only prepare your own items for pickup.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             if (orders.length() == 0) Text("No vendor order items yet.")
-            for (i in 0 until orders.length()) {
-              val o = orders.optJSONObject(i) ?: continue
-              val orderId = o.optString("order_id")
+            val groupedOrders = (0 until orders.length()).mapNotNull { orders.optJSONObject(it) }
+              .groupBy { it.optString("order_id") }
+            groupedOrders.forEach { (orderId, orderItems) ->
+              val first = orderItems.first()
+              val status = first.optString("vendor_fulfillment_status", first.optString("status", "processing"))
               Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                  Text(o.optString("product_name_snapshot", o.optString("product_name","Order item")), fontWeight = FontWeight.SemiBold)
-                  Text("Order ${o.optString("order_number","")}  •  Qty: ${o.optString("quantity","1")}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                  Text("Status: ${o.optString("vendor_fulfillment_status", o.optString("status","processing"))}", style = MaterialTheme.typography.bodySmall)
-                  Button(enabled = !saving && orderId.isNotBlank() && o.optString("vendor_fulfillment_status", o.optString("status")) != "ready_for_pickup", onClick = {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                  Text("Order ${first.optString("order_number","")}", fontWeight = FontWeight.Bold)
+                  Text("${orderItems.size} product item(s) • ${first.optString("created_at", "")}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                  orderItems.forEach { item ->
+                    Text("• ${item.optString("product_name_snapshot", item.optString("product_name","Order item"))}  × ${item.optString("quantity","1")}", fontWeight = FontWeight.SemiBold)
+                    Text("SKU: ${item.optString("sku_snapshot", "—")} • Variant: ${item.optJSONObject("variant_snapshot")?.let { v -> "${v.optString("label", v.optString("option_label"))}: ${v.optString("value", v.optString("option_value"))}" } ?: "—"}", style = MaterialTheme.typography.bodySmall)
+                  }
+                  Text("Status: $status", style = MaterialTheme.typography.bodySmall)
+                  OutlinedButton(enabled = orderId.isNotBlank(), onClick = { printVendorPackingSlip(context, orderItems) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.ReceiptLong, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Print product packing slip")
+                  }
+                  Button(enabled = !saving && orderId.isNotBlank() && status != "ready_for_pickup", onClick = {
                     scope.launch { saving = true; try { VendorService.markOrderReady(orderId); info = "Marked ready for JTBazar pickup."; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 } catch (e: Exception) { actionErrorMessage = e.message ?: "Could not update order." } finally { saving = false } }
                   }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Ready for pickup") }
                 }
@@ -840,4 +855,35 @@ private fun vendorLoadErrorMessage(error: Throwable): String {
       "Internet connection available nahi lag raha. Network check karke dobara koshish karein."
     else -> "Vendor information load nahi ho saki. Dobara koshish karein."
   }
+}
+
+
+private fun printVendorPackingSlip(context: android.content.Context, items: List<JSONObject>) {
+  val first = items.firstOrNull() ?: return
+  fun esc(value: String) = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+  val rows = items.joinToString("") { item ->
+    val variant = item.optJSONObject("variant_snapshot")?.let { v ->
+      "${v.optString("label", v.optString("option_label"))}: ${v.optString("value", v.optString("option_value"))}"
+    } ?: "—"
+    "<tr><td>${esc(item.optString("product_name_snapshot", item.optString("product_name", "Product")))}</td><td>${esc(item.optString("sku_snapshot", "—"))}</td><td>${esc(variant)}</td><td>${esc(item.optString("quantity", "1"))}</td></tr>"
+  }
+  val html = """<!doctype html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;padding:24px;color:#222}header{display:flex;justify-content:space-between;border-bottom:2px solid #222;padding-bottom:14px}
+    h1{margin:6px 0;font-size:24px}small{color:#555}table{width:100%;border-collapse:collapse;margin-top:24px}
+    th,td{text-align:left;border:1px solid #bbb;padding:10px;font-size:13px}th{background:#f1f1f1}
+    footer{margin-top:28px;font-size:11px;color:#555}
+  </style></head><body><header><div><small>Product packing slip</small><h1>JTBazar</h1></div>
+  <div><strong>${esc(first.optString("order_number", ""))}</strong><br><small>${esc(first.optString("order_created_at", first.optString("created_at", "")))}</small></div></header>
+  <table><thead><tr><th>Product</th><th>SKU</th><th>Variant</th><th>Qty</th></tr></thead><tbody>$rows</tbody></table>
+  <footer>Product and quantity summary only. Customer contact and delivery details are managed by the marketplace team.</footer></body></html>"""
+  val printManager = context.getSystemService(android.content.Context.PRINT_SERVICE) as PrintManager
+  val webView = WebView(context)
+  webView.settings.javaScriptEnabled = false
+  webView.webViewClient = object : WebViewClient() {
+    override fun onPageFinished(view: WebView, url: String?) {
+      val adapter = view.createPrintDocumentAdapter("JTBazar-Packing-Slip-${first.optString("order_number", "order")}")
+      printManager.print("JTBazar product packing slip", adapter, PrintAttributes.Builder().build())
+    }
+  }
+  webView.loadDataWithBaseURL(null, html, "text/HTML", "UTF-8", null)
 }
