@@ -3,6 +3,7 @@ package com.example.data.supabase
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.UUID
 
 data class VendorApplication(
   val id: String,
@@ -90,7 +91,7 @@ object VendorService {
     require(bytes.size <= 5 * 1024 * 1024) { "Shop images must be 5 MB or smaller." }
     require(mime in listOf("image/jpeg", "image/png", "image/webp", "image/avif")) { "Choose JPG, PNG, WebP or AVIF." }
     val ext = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
-    val path = "${user.id}/${System.currentTimeMillis()}.$ext"
+    val path = "${user.id}/${System.currentTimeMillis()}-${UUID.randomUUID()}.$ext"
     return SupabaseClient.uploadPublicFile("shop-images", path, bytes, mime).getOrThrow()
   }
 
@@ -99,7 +100,7 @@ object VendorService {
     require(bytes.size <= 10 * 1024 * 1024) { "Product images must be 10 MB or smaller." }
     require(mime in listOf("image/jpeg", "image/png", "image/webp", "image/avif")) { "Choose JPG, PNG, WebP or AVIF." }
     val ext = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
-    val path = "${user.id}/$productId/${System.currentTimeMillis()}.$ext"
+    val path = "${user.id}/$productId/${System.currentTimeMillis()}-${UUID.randomUUID()}.$ext"
     val url = SupabaseClient.uploadPublicFile("product-images", path, bytes, mime).getOrThrow()
     val countRaw = fail(SupabaseClient.get("product_images?product_id=eq.$productId&select=sort_order&order=sort_order.desc&limit=1"))
     val countRows = JSONArray(countRaw)
