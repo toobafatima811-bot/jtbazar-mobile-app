@@ -31,11 +31,64 @@ fun VendorInventoryPanel() {
       try {
         rows = VendorService.listInventory()
         val next = mutableMapOf<String, String>()
-        for (i in 0 until rows.length()) {
-          val row = rows.optJSONObject(i) ?: continue
-          val key = row.optString("product_id") + ":" + row.optString("variant_id").takeUnless { it == "null" }.orEmpty()
-          next[key] = row.optInt("quantity").toString()
+        val groupedRows = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
+        .groupBy { it.optString("product_id") }
+      groupedRows.values.forEach { productRows ->
+        val first = productRows.first()
+        val product = first.optJSONObject("products")
+        val productName = product?.optString("name", "Product") ?: "Product"
+        Card(Modifier.fillMaxWidth()) {
+          Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(productName, style = MaterialTheme.typography.titleMedium)
+            Text("${productRows.size} inventory item(s)", style = MaterialTheme.typography.bodySmall)
+            productRows.forEach { row ->
+              val productId = row.optString("product_id")
+              val variantRaw = row.optString("variant_id")
+              val variantId = variantRaw.takeUnless { it.isBlank() || it == "null" }
+              val key = "$productId:${variantId.orEmpty()}"
+              val variant = row.optJSONObject("product_variants")
+              val label = if (variant != null) "${variant.optString("option_label")}: ${variant.optString("option_value")}" else "Base product stock"
+              Divider()
+              Text(label, style = MaterialTheme.typography.titleSmall)
+              Text("Current stock: ${row.optInt("quantity")} • Low stock threshold: ${row.optInt("low_stock_threshold")}", style = MaterialTheme.typography.bodySmall)
+              OutlinedTextField(
+                value = adjustmentReasons[key].orEmpty(),
+                onValueChange = { value -> adjustmentReasons = adjustmentReasons.toMutableMap().also { it[key] = value.take(240) } },
+                label = { Text("Adjustment reason / note *") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+              )
+              Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                  value = quantities[key] ?: row.optInt("quantity").toString(),
+                  onValueChange = { value -> quantities = quantities.toMutableMap().also { it[key] = value.filter(Char::isDigit).take(9) } },
+                  label = { Text("New quantity") },
+                  modifier = Modifier.weight(1f),
+                  singleLine = true
+                )
+                Button(enabled = savingId != key && !loading, onClick = {
+                  val quantity = quantities[key]?.toIntOrNull()
+                  if (quantity == null) { errorMessage = "Enter a valid stock quantity."; return@Button }
+                  val reason = adjustmentReasons[key]?.trim().orEmpty()
+                  if (reason.length < 3) { errorMessage = "Add a reason for this stock adjustment."; return@Button }
+                  scope.launch {
+                    savingId = key; errorMessage = ""; info = ""
+                    try {
+                      VendorService.setVariantInventory(productId, variantId, quantity, reason)
+                      adjustmentReasons = adjustmentReasons.toMutableMap().also { it.remove(key) }
+                      info = "Stock updated for $label."
+                      refresh()
+                    } catch (e: Exception) { errorMessage = e.message ?: "Stock update failed." }
+                    finally { savingId = null }
+                  }
+                }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
+                  Text(if (savingId == key) "Saving" else "Save")
+                }
+              }
+            }
+          }
         }
+      }
         quantities = next
       } catch (e: Exception) {
         errorMessage = e.message ?: "Inventory could not be loaded."
