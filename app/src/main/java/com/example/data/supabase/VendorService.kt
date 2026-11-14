@@ -124,17 +124,34 @@ object VendorService {
 
   suspend fun uploadProductImage(productId: String, bytes: ByteArray, mime: String, altText: String = ""): String {
     val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
+    require(productId.isNotBlank()) { "Product ID is missing; image cannot be attached." }
+    require(bytes.isNotEmpty()) { "The selected image is empty. Choose the image again." }
     require(bytes.size <= 10 * 1024 * 1024) { "Product images must be 10 MB or smaller." }
-    require(mime in listOf("image/jpeg", "image/png", "image/webp", "image/avif")) { "Choose JPG, PNG, WebP or AVIF." }
-    val ext = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
+    val normalizedMime = when (mime.lowercase().substringBefore(';').trim()) {
+      "image/jpg", "image/pjpeg" -> "image/jpeg"
+      "image/jpeg", "image/png", "image/webp", "image/avif" -> mime.lowercase().substringBefore(';').trim()
+      else -> throw IOException("Unsupported image type ($mime). Choose JPG, PNG, WebP or AVIF.")
+    }
+    val ext = when (normalizedMime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
     val path = "${user.id}/$productId/${System.currentTimeMillis()}-${UUID.randomUUID()}.$ext"
-    val url = SupabaseClient.uploadPublicFile("product-images", path, bytes, mime).getOrThrow()
-    val countRaw = fail(SupabaseClient.get("product_images?product_id=eq.$productId&select=sort_order&order=sort_order.desc&limit=1"))
-    val countRows = JSONArray(countRaw)
+    val url = try {
+      SupabaseClient.uploadPublicFile("product-images", path, bytes, normalizedMime).getOrThrow()
+    } catch (e: Exception) {
+      throw IOException("Image upload to Supabase Storage failed (${e.message ?: "unknown storage error"}). Product was created, but its image was not uploaded.", e)
+    }
+    val countRows = try {
+      JSONArray(fail(SupabaseClient.get("product_images?product_id=eq.$productId&select=sort_order&order=sort_order.desc&limit=1")))
+    } catch (e: Exception) {
+      throw IOException("Image file uploaded, but JTBazar could not read the product image list: ${e.message}", e)
+    }
     val sort = if (countRows.length() > 0) countRows.getJSONObject(0).optInt("sort_order", -1) + 1 else 0
     val body = JSONObject().put("product_id", productId).put("storage_path", path)
       .put("alt_text", altText.take(200)).put("sort_order", sort).put("is_primary", sort == 0)
-    fail(SupabaseClient.post("product_images", body.toString(), preferHeader = "return=representation"))
+    try {
+      fail(SupabaseClient.post("product_images", body.toString(), preferHeader = "return=representation"))
+    } catch (e: Exception) {
+      throw IOException("Image uploaded to Storage, but Supabase could not attach it to the product (product_images): ${e.message}", e)
+    }
     return url
   }
 
