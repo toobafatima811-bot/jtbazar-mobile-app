@@ -26,7 +26,8 @@ data class VendorApplication(
   val shopImageUrl: String = "",
   val showShopOnMap: Boolean = false,
   val shopIsOpen: Boolean = true,
-  val minimumOrderValue: Int = 0
+  val minimumOrderValue: Int = 0,
+  val createdAt: String = ""
 )
 
 object VendorService {
@@ -35,7 +36,7 @@ object VendorService {
 
   suspend fun getOwnApplication(): VendorApplication? {
     val user = SupabaseClient.currentUser.value ?: return null
-    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason&limit=1"))
+    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason,created_at&limit=1"))
     val rows = JSONArray(raw)
     if (rows.length() == 0) return null
     val o = rows.getJSONObject(0)
@@ -43,7 +44,7 @@ object VendorService {
       text(o,"slug"), text(o,"description"), text(o,"phone"), text(o,"current_address"), text(o,"complete_address"), text(o,"contact_email"),
       text(o,"vendor_type","individual_seller"), text(o,"owner_full_name"), text(o,"cnic_number"), text(o,"shop_location_text"),
       if (o.isNull("shop_lat")) null else o.optDouble("shop_lat"), if (o.isNull("shop_lng")) null else o.optDouble("shop_lng"),
-      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), o.optInt("minimum_order_value", 0))
+      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), o.optInt("minimum_order_value", 0), text(o,"created_at"))
   }
 
   suspend fun isVendor(): Boolean {
@@ -64,7 +65,7 @@ object VendorService {
     val rows = JSONArray(raw)
     if (rows.length() == 0) throw IOException("Application was not returned after submission.")
     val o = rows.getJSONObject(0)
-    return VendorApplication(text(o,"id"), text(o,"status","pending"), text(o,"shop_name"))
+    return VendorApplication(text(o,"id"), text(o,"status","pending"), text(o,"shop_name"), createdAt = text(o,"created_at"))
   }
 
   suspend fun listProducts(): JSONArray = JSONArray(fail(SupabaseClient.rpc("vendor_list_products")))
@@ -119,7 +120,7 @@ object VendorService {
     val raw = fail(SupabaseClient.rpc("seller_resubmit_application"))
     val row = if (raw.trim().startsWith("[")) JSONArray(raw).optJSONObject(0) else JSONObject(raw)
     row ?: throw IOException("Application could not be resubmitted.")
-    return VendorApplication(text(row,"id"), text(row,"status","pending"), text(row,"shop_name"), text(row,"rejection_reason").ifBlank { null })
+    return VendorApplication(text(row,"id"), text(row,"status","pending"), text(row,"shop_name"), text(row,"rejection_reason").ifBlank { null }, createdAt = text(row,"created_at"))
   }
 
   suspend fun saveVariants(productId: String, variants: JSONArray) {
