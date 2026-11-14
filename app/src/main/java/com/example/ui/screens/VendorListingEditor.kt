@@ -150,12 +150,19 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
         saving = true; errorMessage = ""; message = ""
         try {
           require(name.trim().length >= 2) { "Enter a product name." }
-          require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid slug." }
+          val productSlug = slug.ifBlank { "product-${System.currentTimeMillis()}" }
+          require(productSlug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid slug." }
           require(categoryId.isNotBlank()) { "Select a category." }
           val basePrice = fieldNumber(price, "selling price")
           require(basePrice > 0) { "Selling price must be greater than zero." }
           val discountValue = fieldNumber(discount, "discount")
           require(discountValue <= 100) { "Discount cannot exceed 100%." }
+          val supplierCostValue = supplierCost.trim().takeIf { it.isNotEmpty() }?.let { fieldNumber(it, "supplier cost") }
+          val fulfilmentValue = fieldNumber(fulfilment, "fulfilment expense")
+          val minimumProfitValue = fieldNumber(minimumProfit, "minimum profit")
+          require(basePrice >= (supplierCostValue ?: 0.0) + fulfilmentValue + minimumProfitValue) {
+            "Selling price must cover supplier cost, fulfilment expense and minimum profit."
+          }
           val variantJson = JSONArray()
           val seen = mutableSetOf<String>()
           variants.forEach { v ->
@@ -171,10 +178,10 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
           val specs = JSONArray(specifications)
           val dims = JSONObject(dimensions)
           val id = VendorService.createProduct(
-            name.trim(), slug, description, basePrice.toInt(),
+            name.trim(), productSlug, description, basePrice.toInt(),
             if (trackInventory) fieldNumber(initialStock, "initial stock", false).toInt() else 0,
-            categoryId, sku.trim().ifBlank { null }, shortDescription, supplierCost.toDoubleOrNull(),
-            fieldNumber(fulfilment, "fulfilment expense"), fieldNumber(minimumProfit, "minimum profit"),
+            categoryId, sku.trim().ifBlank { null }, shortDescription, supplierCostValue,
+            fulfilmentValue, minimumProfitValue,
             discountValue, weight.toIntOrNull(), specs, dims, seoTitle.trim().ifBlank { null },
             seoDescription.trim().ifBlank { null }, trackInventory
           )
