@@ -4,12 +4,14 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
 import android.net.Uri
+import android.graphics.BitmapFactory
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -34,6 +36,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -90,6 +94,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var verificationPath by remember { mutableStateOf<String?>(null) }
   var frontPath by remember { mutableStateOf<String?>(null) }
   var backPath by remember { mutableStateOf<String?>(null) }
+  var shopImageUri by remember { mutableStateOf<Uri?>(null) }
   var showProductForm by remember { mutableStateOf(false) }
   var vendorTab by remember { mutableStateOf("overview") }
 
@@ -124,6 +129,10 @@ fun VendorCenterScreen(onBack: () -> Unit) {
     val ext = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "pdf" }
     val path = "${user?.id}/$side-${System.currentTimeMillis()}.$ext"
     return VendorService.uploadPrivateDocument(path, bytes, mime)
+  }
+
+  val shopImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    shopImageUri = uri
   }
 
   var pendingDoc by remember { mutableStateOf("verification") }
@@ -384,6 +393,14 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               Spacer(Modifier.width(8.dp))
               Text(if (latitude.isNotBlank() && longitude.isNotBlank()) "Change shop location on map" else "Choose shop location on map")
             }
+            Text("Public shop picture", fontWeight = FontWeight.Bold)
+            OutlinedButton(onClick = { shopImagePicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
+              Text(if (shopImageUri == null) "Choose shop picture" else "Change selected shop picture")
+            }
+            shopImageUri?.let { uri ->
+              val bitmap = remember(uri) { runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull() }
+              bitmap?.let { Image(bitmap = it, contentDescription = "Shop picture preview", modifier = Modifier.fillMaxWidth().height(180.dp), contentScale = ContentScale.Crop) }
+            }
             Text("Verification documents", fontWeight = FontWeight.Bold)
             DocumentButton("Identity / business verification document", verificationPath != null) { pendingDoc = "verification"; documentPicker.launch("*/*") }
             DocumentButton("CNIC front image", frontPath != null) { pendingDoc = "cnic-front"; documentPicker.launch("image/*") }
@@ -407,8 +424,14 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                   require(u.email?.isNotBlank() == true) { "Your account email is missing. Sign in again." }
                   val slugBase = shopName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-').take(120).trim('-').ifBlank { "shop" }
                   val slug = "$slugBase-${java.util.UUID.randomUUID().toString().take(8)}"
+                  val uploadedShopImage = shopImageUri?.let { uri ->
+                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Shop picture could not be read.")
+                    VendorService.uploadShopImage(bytes, mime)
+                  }
                   val body = JSONObject().put("user_id", u.id).put("shop_name", shopName.trim()).put("slug", slug)
                     .put("description", description.trim().take(2000)).put("current_address", currentAddress.trim()).put("complete_address", fullAddress.trim())
+                    .put("shop_image_url", uploadedShopImage ?: JSONObject.NULL)
                     .put("shop_location_label", currentAddress.trim().take(120)).put("contact_email", u.email).put("phone", normalizedPhone)
                     .put("document_path", verificationPath).put("cnic_front_path", frontPath).put("cnic_back_path", backPath)
                     .put("vendor_type", vendorType.trim()).put("owner_full_name", ownerName.trim()).put("cnic_number", cnic)
