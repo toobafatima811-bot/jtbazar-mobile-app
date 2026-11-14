@@ -781,6 +781,35 @@ private fun CheckoutView(
 
     Text("Delivery Details", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
 
+    // Keep the save-address choice prominent near the start of checkout.
+    Card(
+      modifier = Modifier.fillMaxWidth().testTag("checkout_save_address_card"),
+      shape = RoundedCornerShape(12.dp),
+      colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7F2)),
+      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD7C2))
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth().clickable { onSaveAddressToAccountChange(!saveAddressToAccount) }.padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Checkbox(
+          checked = saveAddressToAccount,
+          onCheckedChange = onSaveAddressToAccountChange,
+          colors = CheckboxDefaults.colors(checkedColor = JTOrange)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+          Text("Save this address for next time", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+          Text(
+            if (SupabaseClient.isAuthenticated) "This address will be added to your saved addresses when you place the order."
+            else "Sign in to your JTBazar account to save this address for future orders.",
+            fontSize = 11.sp,
+            color = JTTextSecondary
+          )
+        }
+      }
+    }
+
     // Required fields: Full Name, Mobile, City, Street Address
     OutlinedTextField(
       value = recipientName,
@@ -913,20 +942,6 @@ private fun CheckoutView(
           }
         }
       }
-    }
-
-    // Save Address Checkbox
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      modifier = Modifier.clickable { onSaveAddressToAccountChange(!saveAddressToAccount) }
-    ) {
-      Checkbox(
-        checked = saveAddressToAccount,
-        onCheckedChange = onSaveAddressToAccountChange,
-        colors = CheckboxDefaults.colors(checkedColor = JTOrange)
-      )
-      Spacer(modifier = Modifier.width(6.dp))
-      Text("Save this address to my account for future orders", fontSize = 12.sp, color = JTTextPrimary)
     }
 
     // Payment Method: Cash on Delivery (COD)
