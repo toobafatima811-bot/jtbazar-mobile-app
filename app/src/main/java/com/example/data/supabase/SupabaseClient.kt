@@ -358,12 +358,22 @@ object SupabaseClient {
     }
   }
 
-  suspend fun uploadPublicFile(bucket: String, path: String, bytes: ByteArray, mimeType: String): Result<String> = withContext(Dispatchers.IO) {
+  suspend fun uploadPublicFile(
+    bucket: String,
+    path: String,
+    bytes: ByteArray,
+    mimeType: String,
+    upsert: Boolean = true
+  ): Result<String> = withContext(Dispatchers.IO) {
     try {
       val encodedPath = path.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
       val url = "${SupabaseConfig.storageUrl}/object/$bucket/$encodedPath"
       val body = bytes.toRequestBody(mimeType.toMediaType())
-      val request = Request.Builder().url(url).post(body).header("x-upsert", "true").build()
+      val requestBuilder = Request.Builder().url(url).post(body)
+      // Product image paths include a fresh UUID. Avoid Storage upsert because vendor
+      // policies intentionally grant INSERT but not UPDATE/SELECT on product-images.
+      if (upsert) requestBuilder.header("x-upsert", "true")
+      val request = requestBuilder.build()
       okHttpClient.newCall(request).execute().use { response ->
         val responseBody = response.body?.string() ?: ""
         if (response.isSuccessful) Result.success("${SupabaseConfig.storageUrl}/object/public/$bucket/$encodedPath")
@@ -374,7 +384,6 @@ object SupabaseClient {
       Result.failure(e)
     }
   }
-
   suspend fun uploadPrivateFile(bucket: String, path: String, bytes: ByteArray, mimeType: String): Result<String> = withContext(Dispatchers.IO) {
     try {
       val encodedPath = path.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
