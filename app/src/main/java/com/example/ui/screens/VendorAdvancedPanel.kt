@@ -330,7 +330,8 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
               scope.launch {
                 saving = true
                 try {
-                  val price = editPrice.toDoubleOrNull() ?: error("Enter a valid vendor base price.")
+                  val priceInput = if (editIsFoodCategory) editFoodUnitPrice else editPrice
+                  val price = priceInput.toDoubleOrNull() ?: error(if (editIsFoodCategory) "Enter a valid food unit price." else "Enter a valid vendor base price.")
                   val discount = editDiscount.toDoubleOrNull() ?: error("Enter a valid discount.")
                   require(discount in 0.0..100.0) { "Discount must be between 0 and 100%." }
                   val specs = JSONArray(editSpecifications)
