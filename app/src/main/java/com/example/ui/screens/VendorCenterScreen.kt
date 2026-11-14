@@ -277,12 +277,19 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { refresh() }) { Text("Refresh dashboard") }
           }
           application != null -> {
-            Text("Seller application", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            StatusPanel(application!!)
-            Text("Your application is connected to the JTBazar website. Once approved, vendor tools will unlock here.", color = Color.Gray)
-            if (application?.status == "rejected") Text("Reason: ${application?.rejectionReason ?: "Please review your application."}", color = MaterialTheme.colorScheme.error)
-            if (application?.status == "rejected") VendorApplicationResubmissionPanel(application!!) { application = it; info = "Application resubmitted." }
-            OutlinedButton(onClick = { refresh() }) { Text("Refresh application status") }
+            if (application?.status.equals("pending", ignoreCase = true)) {
+              PendingVendorApplicationScreen(
+                application = application!!,
+                onRefresh = { refresh() },
+                refreshing = loading
+              )
+            } else {
+              Text("Seller application", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+              StatusPanel(application!!)
+              if (application?.status == "rejected") Text("Reason: ${application?.rejectionReason ?: "Please review your application."}", color = MaterialTheme.colorScheme.error)
+              if (application?.status == "rejected") VendorApplicationResubmissionPanel(application!!) { application = it; info = "Application resubmitted." }
+              OutlinedButton(onClick = { refresh() }) { Text("Refresh application status") }
+            }
           }
           else -> {
             Text("Become a JTBazar Vendor", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -494,6 +501,145 @@ private fun DocumentButton(label: String, uploaded: Boolean, onClick: () -> Unit
 private fun SummaryTile(label: String, value: String, modifier: Modifier = Modifier) {
   Card(modifier) { Column(Modifier.padding(16.dp)) { Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Text(label, color = Color.Gray) } }
 }
+
+@Composable
+private fun PendingVendorApplicationScreen(
+  application: VendorApplication,
+  onRefresh: () -> Unit,
+  refreshing: Boolean
+) {
+  val navy = Color(0xFF14233D)
+  val muted = Color(0xFF68778D)
+  val orange = Color(0xFFF36B16)
+  val submittedDate = remember(application.createdAt) {
+    runCatching {
+      java.time.Instant.parse(application.createdAt)
+        .atZone(java.time.ZoneId.systemDefault())
+        .toLocalDate()
+        .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH))
+    }.getOrElse { "Recently" }
+  }
+
+  Column(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(16.dp)
+  ) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Text("Seller application", color = orange, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+      Text(application.shopName, color = navy, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+      Text("Your application is in process. Our marketplace team is verifying your shop details.", color = muted, style = MaterialTheme.typography.bodyMedium)
+    }
+
+    Card(
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(22.dp),
+      colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8F3)),
+      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFE2D1))
+    ) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        Box(
+          modifier = Modifier.size(76.dp).background(Color(0xFFFFE8D9), RoundedCornerShape(24.dp)),
+          contentAlignment = Alignment.Center
+        ) {
+          Text("◷", color = orange, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        }
+        Surface(color = Color(0xFFFFEAD7), shape = RoundedCornerShape(50)) {
+          Text("PENDING REVIEW", modifier = Modifier.padding(horizontal = 13.dp, vertical = 6.dp), color = Color(0xFF9A4B0C), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        }
+        Text("Application Under Review", color = navy, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(
+          "Thank you for applying to become a JTBazar seller. Your application has been received and is currently being verified by our marketplace team.",
+          color = muted,
+          style = MaterialTheme.typography.bodyMedium
+        )
+      }
+    }
+
+    Card(
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(20.dp),
+      colors = CardDefaults.cardColors(containerColor = Color.White),
+      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))
+    ) {
+      Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Text("Application progress", color = navy, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        VendorProgressStep("✓", "Application received", "Your shop details have been submitted successfully.", true, Color(0xFF16803C), navy, muted)
+        VendorProgressStep("◷", "Verification in progress", "Our marketplace team is reviewing your shop information.", true, orange, navy, muted)
+        VendorProgressStep("▣", "Seller access", "We’ll email you when your seller dashboard is ready.", false, muted, navy, muted)
+      }
+    }
+
+    Card(
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(16.dp),
+      colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F7FC))
+    ) {
+      Row(Modifier.padding(15.dp), horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.Top) {
+        Text("ⓘ", color = Color(0xFF35679C), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(
+          "If we need any additional information or your application is not approved, we will notify you by email.",
+          color = Color(0xFF42566F),
+          style = MaterialTheme.typography.bodyMedium
+        )
+      }
+    }
+
+    Row(
+      modifier = Modifier.fillMaxWidth().background(Color(0xFFF8F9FB), RoundedCornerShape(12.dp)).padding(14.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text("Submitted", color = muted, style = MaterialTheme.typography.bodyMedium)
+      Text(submittedDate, color = navy, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+    }
+
+    Button(
+      onClick = onRefresh,
+      enabled = !refreshing,
+      modifier = Modifier.fillMaxWidth(),
+      colors = ButtonDefaults.buttonColors(containerColor = orange),
+      shape = RoundedCornerShape(12.dp)
+    ) {
+      if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+      else Text("Refresh application status", fontWeight = FontWeight.Bold)
+    }
+    Text(
+      "Your seller tools will become available here once your application is approved.",
+      modifier = Modifier.fillMaxWidth(),
+      color = muted,
+      style = MaterialTheme.typography.bodySmall
+    )
+  }
+}
+
+@Composable
+private fun VendorProgressStep(
+  symbol: String,
+  title: String,
+  description: String,
+  active: Boolean,
+  symbolColor: Color,
+  titleColor: Color,
+  mutedColor: Color
+) {
+  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+    Box(
+      modifier = Modifier.size(34.dp).background(if (active) Color(0xFFFFF0E7) else Color(0xFFF0F2F5), RoundedCornerShape(50)),
+      contentAlignment = Alignment.Center
+    ) {
+      Text(symbol, color = symbolColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+    }
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+      Text(title, color = titleColor, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
+      Text(description, color = mutedColor, style = MaterialTheme.typography.bodySmall)
+    }
+  }
+}
+
 @Composable
 private fun StatusPanel(app: VendorApplication) {
   val color = when (app.status.lowercase()) { "approved" -> Color(0xFF16803C); "rejected" -> Color(0xFFB91C1C); else -> Color(0xFFB7791F) }
