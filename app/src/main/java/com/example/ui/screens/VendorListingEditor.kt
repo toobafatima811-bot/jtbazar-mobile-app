@@ -89,7 +89,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
     return parsed
   }
 
-  Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+  Column(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.70f), RoundedCornerShape(26.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Text("Create product", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF17243A), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     Text("Add product information, pricing, images and stock details.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
     Text("PRODUCT INFORMATION", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
@@ -111,7 +111,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
       }
     }
     if (isFoodCategory) {
-      Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+      Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.72f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text("Food & groceries", style = MaterialTheme.typography.titleMedium)
           var unitExpanded by remember { mutableStateOf(false) }
@@ -163,7 +163,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
       TextButton(onClick = { variants = variants + ListingVariant() }) { Text("Add variant") }
     }
     variants.forEachIndexed { index, variant ->
-      Card(Modifier.fillMaxWidth()) {
+      Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.72f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
           ListingField("Option name", variant.optionName) { v -> variants = variants.toMutableList().also { it[index] = variant.copy(optionName = v) } }
           ListingField("Option value", variant.optionValue) { v -> variants = variants.toMutableList().also { it[index] = variant.copy(optionValue = v) } }
@@ -310,7 +310,7 @@ private fun nameToSlug(value: String): String = value.lowercase(Locale.ROOT).rep
 
 @Composable
 private fun ListingField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
-  OutlinedTextField(value, onChange, label = { Text(label, style = MaterialTheme.typography.bodySmall) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1, shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, focusedLabelColor = JTOrange))
+  OutlinedTextField(value, onChange, label = { Text(label, style = MaterialTheme.typography.bodySmall) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1, shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, focusedLabelColor = JTOrange, unfocusedBorderColor = Color(0xFFD7DFEA), unfocusedContainerColor = Color.White.copy(alpha = 0.72f), focusedContainerColor = Color.White.copy(alpha = 0.90f)))
 }
 
 
