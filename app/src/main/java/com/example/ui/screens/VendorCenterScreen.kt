@@ -96,6 +96,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var backPath by remember { mutableStateOf<String?>(null) }
   var shopImageUri by remember { mutableStateOf<Uri?>(null) }
   var showProductForm by remember { mutableStateOf(false) }
+  var editingProduct by remember { mutableStateOf<JSONObject?>(null) }
   var vendorTab by remember { mutableStateOf("overview") }
 
   fun refresh() {
@@ -186,11 +187,28 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               onRefresh = { refresh() },
               refreshing = loading
             )
-            VendorDashboardTabs(
+            if (vendorTab != "product_edit") VendorDashboardTabs(
               selected = vendorTab,
               onSelect = { vendorTab = it }
             )
             when (vendorTab) {
+              "product_edit" -> {
+                val selected = editingProduct
+                if (selected != null) {
+                  VendorProductEditScreen(
+                    product = selected,
+                    onBack = { editingProduct = null; vendorTab = "listings" },
+                    onSaved = {
+                      products = VendorService.listProducts()
+                      editingProduct = null
+                      vendorTab = "listings"
+                      info = "Product updated and sent for moderation where required."
+                    }
+                  )
+                } else {
+                  vendorTab = "listings"
+                }
+              }
               "overview" -> {
                 Text("Your business at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF17243A))
                 Text("A live snapshot of your JTBazar shop activity.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
@@ -264,17 +282,24 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                   Text(name, fontWeight = FontWeight.SemiBold)
                   Text("PKR ${p.optString("price","0")}  •  ${p.optString("publication_status", p.optString("status","draft"))}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                  val moderation = p.optString("moderation_status", p.optString("status", "pending")).lowercase()
+                  val rejected = moderation == "rejected"
                   Row(verticalAlignment = Alignment.CenterVertically) {
-                    val approvedForVisibility = p.optString("moderation_status").equals("approved", ignoreCase = true)
-                    Text(if (hidden) "Hidden" else if (approvedForVisibility) "Visible" else "Awaiting approval", color = if (hidden) Color.Gray else if (approvedForVisibility) Color(0xFF16803C) else Color(0xFF9A6700))
+                    Text(
+                      when { hidden -> "Hidden"; rejected -> "Rejected"; moderation == "approved" -> "Approved"; else -> "Pending approval" },
+                      color = when { hidden -> Color.Gray; rejected -> Color(0xFFB91C1C); moderation == "approved" -> Color(0xFF16803C); else -> Color(0xFF9A6700) }
+                    )
                     Spacer(Modifier.weight(1f))
-                    if (approvedForVisibility) {
+                    TextButton(onClick = { editingProduct = p; vendorTab = "product_edit" }) { Text("Edit") }
+                    if (moderation == "approved") {
                       TextButton(onClick = {
                         scope.launch { saving = true; actionErrorMessage = ""; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { actionErrorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
                       }, enabled = !saving) { Text(if (hidden) "Show" else "Hide") }
-                    } else {
-                      Text("After moderation", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
                     }
+                  }
+                  if (rejected) {
+                    val rejection = p.optString("rejection_reason").ifBlank { p.optString("moderation_note") }
+                    if (rejection.isNotBlank()) Text("Admin rejection reason: $rejection", color = Color(0xFFB91C1C), style = MaterialTheme.typography.bodySmall)
                   }
                 }
               }
