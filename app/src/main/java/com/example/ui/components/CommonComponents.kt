@@ -114,17 +114,6 @@ fun JTBazarTopBar(
 
         JTBazarBrandLogo()
 
-        if (title != null) {
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = title,
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            color = JTTextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-        }
       }
 
       Row(
