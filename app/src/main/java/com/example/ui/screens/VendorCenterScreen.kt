@@ -540,6 +540,53 @@ fun VendorCenterScreen(onBack: () -> Unit) {
       }
     )
   }
+
+  if (deletionTarget != null) {
+    val target = deletionTarget!!
+    AlertDialog(
+      onDismissRequest = { if (!saving) deletionTarget = null },
+      title = { Text("Request product deletion") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("This sends a request to JTBazar for review. The product will not be deleted immediately.")
+          Text(target.optString("name", "Product"), fontWeight = FontWeight.SemiBold)
+          OutlinedTextField(
+            value = deletionReason,
+            onValueChange = { deletionReason = it },
+            label = { Text("Reason for deletion") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            enabled = !saving
+          )
+        }
+      },
+      confirmButton = {
+        TextButton(
+          enabled = !saving && deletionReason.trim().length >= 3,
+          onClick = {
+            scope.launch {
+              saving = true
+              actionErrorMessage = ""
+              try {
+                VendorService.requestProductDeletion(target.optString("id"), deletionReason.trim())
+                productDeletionRequests = VendorService.listProductDeletionRequests()
+                info = "Product deletion request submitted for JTBazar review."
+                deletionTarget = null
+                deletionReason = ""
+              } catch (e: Exception) {
+                actionErrorMessage = e.message ?: "Deletion request could not be submitted."
+              } finally {
+                saving = false
+              }
+            }
+          }
+        ) { Text(if (saving) "Submitting…" else "Submit request", color = Color(0xFFB91C1C)) }
+      },
+      dismissButton = {
+        TextButton(onClick = { deletionTarget = null }, enabled = !saving) { Text("Cancel") }
+      }
+    )
+  }
 }
 
 @Composable
@@ -668,39 +715,6 @@ private fun VendorField(label: String, value: String, minLines: Int = 1, onChang
 private fun DocumentButton(label: String, uploaded: Boolean, onClick: () -> Unit) {
   OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(if (uploaded) "✓ $label uploaded" else "Upload $label") }
 }
-
-
-  if (deletionTarget != null) {
-    val target = deletionTarget!!
-    AlertDialog(
-      onDismissRequest = { if (!saving) deletionTarget = null },
-      title = { Text("Request product deletion") },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("This sends a request to JTBazar for review. The product will not be deleted immediately.")
-          Text(target.optString("name", "Product"), fontWeight = FontWeight.SemiBold)
-          OutlinedTextField(value = deletionReason, onValueChange = { deletionReason = it },
-            label = { Text("Reason for deletion") }, modifier = Modifier.fillMaxWidth(),
-            minLines = 3, enabled = !saving)
-        }
-      },
-      confirmButton = {
-        TextButton(enabled = !saving && deletionReason.trim().length >= 3, onClick = {
-          scope.launch {
-            saving = true; actionErrorMessage = ""
-            try {
-              VendorService.requestProductDeletion(target.optString("id"), deletionReason)
-              productDeletionRequests = VendorService.listProductDeletionRequests()
-              info = "Product deletion request submitted for JTBazar review."
-              deletionTarget = null
-            } catch (e: Exception) { actionErrorMessage = e.message ?: "Deletion request could not be submitted." }
-            finally { saving = false }
-          }
-        }) { Text(if (saving) "Submitting…" else "Submit request", color = Color(0xFFB91C1C)) }
-      },
-      dismissButton = { TextButton(onClick = { deletionTarget = null }, enabled = !saving) { Text("Cancel") } }
-    )
-  }
 
 @Composable
 private fun VendorDashboardHero(shopName: String, onRefresh: () -> Unit, refreshing: Boolean) {
