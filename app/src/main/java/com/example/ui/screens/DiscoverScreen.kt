@@ -610,9 +610,9 @@ private fun createShopClusterIcon(context: Context, count: Int): BitmapDrawable 
 // ----------------------------------------------------
 // TAB B: PRODUCTS FEED — INSTAGRAM REELS STYLE
 // ----------------------------------------------------
-@Composable
 private data class ProductFeedEntry(val product: Product, val videoUrl: String?, val createdAt: String)
 
+@Composable
 private fun ProductsFeedReelsView(
   products: List<Product>,
   videos: List<SupabaseProductVideoDto>,
