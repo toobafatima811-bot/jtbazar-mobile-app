@@ -427,7 +427,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun ShopLocationPickerDialog(
+fun ShopLocationPickerDialog(
   initialLatitude: Double?,
   initialLongitude: Double?,
   onDismiss: () -> Unit,
