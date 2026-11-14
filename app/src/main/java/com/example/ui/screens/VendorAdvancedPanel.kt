@@ -13,6 +13,7 @@ import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
 import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
@@ -71,6 +72,14 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
     }
   }
   LaunchedEffect(application.id) { reload() }
+  LaunchedEffect(selectedSupportTicketId) {
+    val ticketId = selectedSupportTicketId ?: return@LaunchedEffect
+    while (true) {
+      try { supportMessages = VendorService.listSupportMessages(ticketId) }
+      catch (e: Exception) { errorMessage = e.message ?: "Support conversation could not be refreshed." }
+      delay(10_000)
+    }
+  }
 
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
     val productId = imageProductId
@@ -471,23 +480,46 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             }
           }) { Text(if (selectedSupportTicketId == ticket.optString("id")) "Refresh conversation" else "Open conversation") }
           if (selectedSupportTicketId == ticket.optString("id")) {
+            Text("Conversation • updates automatically", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+              Column(Modifier.padding(10.dp)) {
+                Text("You • Ticket created", style = MaterialTheme.typography.labelSmall)
+                Text(ticket.optString("message"), style = MaterialTheme.typography.bodyMedium)
+                Text(ticket.optString("created_at"), style = MaterialTheme.typography.labelSmall)
+              }
+            }
+            if (supportMessages.length() == 0 && ticket.optString("admin_response").isNotBlank()) {
+              Text("JTBazar Support: ${ticket.optString("admin_response")}", style = MaterialTheme.typography.bodyMedium)
+            }
             for (m in 0 until supportMessages.length()) {
               val msg = supportMessages.optJSONObject(m) ?: continue
-              Text("${msg.optString("sender_role", "support").replaceFirstChar { it.uppercase() }}: ${msg.optString("message")}", style = MaterialTheme.typography.bodySmall)
-            }
-            OutlinedTextField(value = supportReply, onValueChange = { supportReply = it.take(4000) }, label = { Text("Reply to support") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-            Button(enabled = !saving && supportReply.isNotBlank(), onClick = {
-              scope.launch {
-                saving = true
-                try {
-                  VendorService.sendSupportMessage(ticket.optString("id"), supportReply)
-                  supportReply = ""
-                  supportMessages = VendorService.listSupportMessages(ticket.optString("id"))
-                  message = "Support reply sent."
-                } catch (e: Exception) { errorMessage = e.message ?: "Support reply could not be sent." }
-                finally { saving = false }
+              Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                containerColor = if (msg.optString("sender_role") == "seller") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+              )) {
+                Column(Modifier.padding(10.dp)) {
+                  Text(if (msg.optString("sender_role") == "admin") "JTBazar Support" else "You", style = MaterialTheme.typography.labelSmall)
+                  Text(msg.optString("message"), style = MaterialTheme.typography.bodyMedium)
+                  Text(msg.optString("created_at"), style = MaterialTheme.typography.labelSmall)
+                }
               }
-            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Send reply") }
+            }
+            if (ticket.optString("status").equals("resolved", true)) {
+              Text("This ticket is resolved. Create a new support ticket if you need further help.", color = MaterialTheme.colorScheme.secondary)
+            } else {
+              OutlinedTextField(value = supportReply, onValueChange = { supportReply = it.take(4000) }, label = { Text("Write your message") }, placeholder = { Text("Write your message…") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+              Button(enabled = !saving && supportReply.isNotBlank(), onClick = {
+                scope.launch {
+                  saving = true
+                  try {
+                    VendorService.sendSupportMessage(ticket.optString("id"), supportReply)
+                    supportReply = ""
+                    supportMessages = VendorService.listSupportMessages(ticket.optString("id"))
+                    message = "Support reply sent."
+                  } catch (e: Exception) { errorMessage = e.message ?: "Support reply could not be sent." }
+                  finally { saving = false }
+                }
+              }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Send") }
+            }
           }
         }
       }
