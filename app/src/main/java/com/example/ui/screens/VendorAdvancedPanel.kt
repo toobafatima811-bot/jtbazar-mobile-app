@@ -221,7 +221,6 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
           var editDimensions by remember(id) { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
           var editSeoTitle by remember(id) { mutableStateOf(product.optString("seo_title", "")) }
           var editSeoDescription by remember(id) { mutableStateOf(product.optString("seo_description", "")) }
-          var editStock by remember(id) { mutableStateOf(product.optString("stock_quantity", product.optString("quantity", "0"))) }
           Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
           Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
           TextButton(onClick = { editing = !editing }) { Text(if (editing) "Close product editor" else "Edit product details") }
@@ -263,7 +262,6 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             VendorAdvancedField("Dimensions (JSON object)", editDimensions, 3) { editDimensions = it }
             VendorAdvancedField("SEO title", editSeoTitle) { editSeoTitle = it }
             VendorAdvancedField("SEO description", editSeoDescription, 2) { editSeoDescription = it }
-            VendorAdvancedField("Stock quantity", editStock) { editStock = it.filter(Char::isDigit) }
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true
@@ -288,8 +286,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     .put("p_seo_title", editSeoTitle.trim().ifBlank { JSONObject.NULL })
                     .put("p_seo_description", editSeoDescription.trim().ifBlank { JSONObject.NULL })
                   VendorService.updateProductFull(id, payload)
-                  VendorService.setInventory(id, editStock.toIntOrNull() ?: error("Enter valid stock quantity."))
-                  message = "Product details saved. JTBazar moderation rules still apply."
+                  message = "Product details saved. Manage stock separately in Inventory with an adjustment reason."
                   editing = false
                   onRefresh()
                 } catch (e: Exception) { errorMessage = e.message ?: "Product update failed." }
