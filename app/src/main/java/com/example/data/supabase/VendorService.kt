@@ -28,7 +28,10 @@ data class VendorApplication(
   val showShopOnMap: Boolean = false,
   val shopIsOpen: Boolean = true,
   val minimumOrderValue: Int = 0,
-  val createdAt: String = ""
+  val createdAt: String = "",
+  val documentPath: String = "",
+  val cnicFrontPath: String = "",
+  val cnicBackPath: String = ""
 )
 
 object VendorService {
@@ -37,7 +40,7 @@ object VendorService {
 
   suspend fun getOwnApplication(): VendorApplication? {
     val user = SupabaseClient.currentUser.value ?: return null
-    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason,created_at&limit=1"))
+    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason,created_at,document_path,cnic_front_path,cnic_back_path&limit=1"))
     val rows = JSONArray(raw)
     if (rows.length() == 0) return null
     val o = rows.getJSONObject(0)
@@ -45,7 +48,7 @@ object VendorService {
       text(o,"slug"), text(o,"description"), text(o,"phone"), text(o,"current_address"), text(o,"complete_address"), text(o,"contact_email"),
       text(o,"vendor_type","individual_seller"), text(o,"owner_full_name"), text(o,"cnic_number"), text(o,"shop_location_text"),
       if (o.isNull("shop_lat")) null else o.optDouble("shop_lat"), if (o.isNull("shop_lng")) null else o.optDouble("shop_lng"),
-      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), o.optInt("minimum_order_value", 0), text(o,"created_at"))
+      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), o.optInt("minimum_order_value", 0), text(o,"created_at"), text(o,"document_path"), text(o,"cnic_front_path"), text(o,"cnic_back_path"))
   }
 
   suspend fun isVendor(): Boolean {
