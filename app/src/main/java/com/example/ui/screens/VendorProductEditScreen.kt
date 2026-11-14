@@ -200,17 +200,15 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
         Checkbox(checked = dailyItem, onCheckedChange = { dailyItem = it })
         Text("Manage as a daily dish / daily food item")
       }
-      if (dailyItem) {
-        var statusExpanded by remember(id) { mutableStateOf(false) }
-        val statuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
-        ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = !statusExpanded }) {
-          OutlinedTextField(value = statuses.firstOrNull { it.first == dailyStatus }?.second ?: "Available today", onValueChange = {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
-          ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
-            statuses.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { dailyStatus = value; statusExpanded = false }) }
-          }
+      var statusExpanded by remember(id) { mutableStateOf(false) }
+      val statuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
+      ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = !statusExpanded }) {
+        OutlinedTextField(value = statuses.firstOrNull { it.first == dailyStatus }?.second ?: "Available today", onValueChange = {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+        ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
+          statuses.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { dailyStatus = value; statusExpanded = false }) }
         }
-        EditProductField("Today's available quantity", dailyQuantity) { dailyQuantity = it.filter(Char::isDigit) }
       }
+      EditProductField("Today's available quantity", dailyQuantity) { dailyQuantity = it.filter(Char::isDigit) }
     }
     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
