@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onRefresh: suspend () -> Unit) {
   val context = LocalContext.current
