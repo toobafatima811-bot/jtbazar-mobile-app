@@ -94,6 +94,7 @@ fun CartCheckoutScreen(
 
   var stage by remember { mutableStateOf(CartCheckoutStage.CART) }
   var confirmedOrder by remember { mutableStateOf<OrderRecord?>(null) }
+  var orderErrorMessage by remember { mutableStateOf<String?>(null) }
 
   // Checkout Form States
   var recipientName by remember(userProfile, selectedAddress) {
@@ -338,7 +339,9 @@ fun CartCheckoutScreen(
               deliveryLng = null
             },
             isPlacingOrder = isPlacingOrder,
+            orderErrorMessage = orderErrorMessage,
             onPlaceOrder = {
+              orderErrorMessage = null
               if (recipientName.isBlank() || recipientPhone.isBlank() || city.isBlank() || streetAddress.isBlank()) {
                 Toast.makeText(context, "Please complete all required delivery fields.", Toast.LENGTH_SHORT).show()
                 return@CheckoutView
@@ -401,7 +404,7 @@ fun CartCheckoutScreen(
                   stage = CartCheckoutStage.CONFIRMATION
                 } else {
                   val err = result.exceptionOrNull()?.message ?: "Order placement failed"
-                  Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                  orderErrorMessage = readableOrderError(err)
                 }
               }
             }
@@ -422,6 +425,22 @@ fun CartCheckoutScreen(
       }
     }
   }
+}
+
+private fun readableOrderError(raw: String): String {
+  val normalized = raw.replace("\\/", "/")
+  if (normalized.contains("currently closed", ignoreCase = true) ||
+      normalized.contains("not accepting new customer orders", ignoreCase = true)) {
+    return "JTBazar is currently closed and is not accepting new orders. Please try again during store opening hours."
+  }
+  val messageStart = normalized.indexOf("\"message\"")
+  val backendMessage = if (messageStart >= 0) {
+    normalized.substring(messageStart).substringAfter(':', "").trim()
+      .removePrefix("\"").substringBefore("\"")
+  } else null
+  return (backendMessage?.takeIf { it.isNotBlank() }
+    ?: normalized.substringAfter(": ", normalized).takeIf { it.isNotBlank() }
+    ?: "Please check your connection and try again.").take(240)
 }
 
 // ----------------------------------------------------
@@ -706,6 +725,7 @@ private fun CheckoutView(
   onRequestPin: () -> Unit,
   onChangePin: () -> Unit,
   isPlacingOrder: Boolean,
+  orderErrorMessage: String? = null,
   onPlaceOrder: () -> Unit
 ) {
   Column(
@@ -715,6 +735,27 @@ private fun CheckoutView(
       .padding(16.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
+    if (!orderErrorMessage.isNullOrBlank()) {
+      Card(
+        modifier = Modifier.fillMaxWidth().testTag("checkout_order_error"),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1F0)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF2B8B5))
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth().padding(14.dp),
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          verticalAlignment = Alignment.Top
+        ) {
+          Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = Color(0xFFB42318))
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Order could not be placed", fontWeight = FontWeight.Bold, color = Color(0xFF912018))
+            Text(orderErrorMessage, color = Color(0xFF7A271A), fontSize = 13.sp)
+          }
+        }
+      }
+    }
+
     // Saved Address Quick Picker
     if (savedAddresses.isNotEmpty()) {
       Text("Select Saved Address", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
