@@ -17,15 +17,23 @@ object CampaignPopupManager {
   private val _activePopupCampaign = MutableStateFlow<SupabasePromotionDto?>(null)
   val activePopupCampaign: StateFlow<SupabasePromotionDto?> = _activePopupCampaign.asStateFlow()
 
-  fun evaluateLaunchCampaign(promotions: List<SupabasePromotionDto>) {
-    val nowIso = Instant.now().toString()
-    val campaign = promotions.firstOrNull { item ->
-      item.showOnLaunch &&
-        (item.targetPlatform.equals("android", true) || item.targetPlatform.equals("both", true)) &&
-        (item.startsAt.isNullOrBlank() || item.startsAt <= nowIso) &&
-        (item.endsAt.isNullOrBlank() || item.endsAt >= nowIso) &&
-        (!item.bannerImageUrl.isNullOrBlank() || item.bannerImageUrls.any { it.isNotBlank() })
-    } ?: return
+  fun evaluateLaunchCampaign(promotions: List<SupabasePromotionDto>, nowMillis: Long = System.currentTimeMillis()) {
+    val campaign = promotions
+      .asSequence()
+      .filter { item ->
+        item.showOnLaunch &&
+          PromotionCampaignFilter.isApprovedAndActive(item) &&
+          PromotionCampaignFilter.isPlatformEligible(item.targetPlatform) &&
+          PromotionCampaignFilter.isWithinSchedule(item, nowMillis) &&
+          item.primaryBannerImageUrl() != null
+      }
+      .sortedByDescending { it.priority }
+      .firstOrNull()
+
+    if (campaign == null) {
+      _activePopupCampaign.value = null
+      return
+    }
 
     val signature = listOf(
       campaign.id,
@@ -33,7 +41,8 @@ object CampaignPopupManager {
       campaign.bannerImageUrl.orEmpty(),
       campaign.bannerImageUrls.joinToString("|"),
       campaign.startsAt.orEmpty(),
-      campaign.endsAt.orEmpty()
+      campaign.endsAt.orEmpty(),
+      campaign.updatedAt.orEmpty()
     ).joinToString("_")
 
     if (hasShownInThisProcess && shownCampaignSignature == signature) return

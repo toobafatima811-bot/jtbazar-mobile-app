@@ -1,8 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -12,6 +10,10 @@ import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
+
+private fun JSONObject.optSafeString(key: String, fallback: String = ""): String =
+  optString(key, fallback).takeUnless { it == "null" } ?: fallback
 
 @Composable
 fun VendorCasesScreen() {
@@ -28,6 +30,7 @@ fun VendorCasesScreen() {
   var loading by remember { mutableStateOf(true) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
+  var dialogError by remember { mutableStateOf("") }
   var info by remember { mutableStateOf("") }
 
   suspend fun reload() {
@@ -49,7 +52,7 @@ fun VendorCasesScreen() {
     }
   }
 
-  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+  Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Text("Cases & support", style = MaterialTheme.typography.headlineSmall)
       TextButton(onClick = { scope.launch { reload() } }) { Text("Refresh") }
@@ -66,12 +69,13 @@ fun VendorCasesScreen() {
     if (!loading && cases.length() == 0) Text("No customer cases are open for your shop.")
     for (i in 0 until cases.length()) {
       val item = cases.optJSONObject(i) ?: continue
-      val id = item.optString("id")
+      val id = item.optSafeString("id")
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("${item.optString("case_type", "Customer case")} • ${item.optString("status", "open").replace('_', ' ')}", style = MaterialTheme.typography.titleSmall)
-          Text(item.optString("reason", "No reason supplied."))
-          if (item.optString("seller_response").isNotBlank()) Text("Your previous response: ${item.optString("seller_response")}", style = MaterialTheme.typography.bodySmall)
+          Text("${item.optSafeString("case_type", "Customer case")} • ${item.optSafeString("status", "open").replace('_', ' ')}", style = MaterialTheme.typography.titleSmall)
+          Text(item.optSafeString("reason", "No reason supplied."))
+          val sellerResponse = item.optSafeString("seller_response")
+          if (sellerResponse.isNotBlank()) Text("Your previous response: $sellerResponse", style = MaterialTheme.typography.bodySmall)
           OutlinedTextField(
             value = caseReplies[id].orEmpty(),
             onValueChange = { value -> caseReplies = caseReplies.toMutableMap().also { it[id] = value.take(4000) } },
@@ -96,32 +100,29 @@ fun VendorCasesScreen() {
       }
     }
 
-    Divider()
+    HorizontalDivider()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
       Text("JTBazar Support", style = MaterialTheme.typography.titleLarge)
-      Button(onClick = { showCreateDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Create support") }
+      Button(onClick = { dialogError = ""; showCreateDialog = true }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Create support") }
     }
     if (!loading && tickets.length() == 0) Text("No support tickets yet. Create one if you need help.")
     for (i in 0 until tickets.length()) {
       val ticket = tickets.optJSONObject(i) ?: continue
-      val id = ticket.optString("id")
+      val id = ticket.optSafeString("id")
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-          Text("${ticket.optString("subject")} • ${ticket.optString("status", "open").replace('_', ' ')}", style = MaterialTheme.typography.titleSmall)
-          Text(ticket.optString("message"), style = MaterialTheme.typography.bodySmall)
-          if (ticket.optString("admin_response").isNotBlank()) Text("Support update: ${ticket.optString("admin_response")}", style = MaterialTheme.typography.bodySmall)
+          Text("${ticket.optSafeString("subject")} • ${ticket.optSafeString("status", "open").replace('_', ' ')}", style = MaterialTheme.typography.titleSmall)
+          Text(ticket.optSafeString("message"), style = MaterialTheme.typography.bodySmall)
+          val adminResp = ticket.optSafeString("admin_response")
+          if (adminResp.isNotBlank()) Text("Support update: $adminResp", style = MaterialTheme.typography.bodySmall)
           OutlinedButton(onClick = {
             selectedTicket = if (selectedTicket == id) null else id
-            if (selectedTicket != null) scope.launch {
-              try { messages = VendorService.listSupportMessages(id) }
-              catch (e: Exception) { errorMessage = e.message ?: "Conversation could not be loaded." }
-            }
           }, modifier = Modifier.fillMaxWidth()) { Text(if (selectedTicket == id) "Close conversation" else "Open conversation") }
           if (selectedTicket == id) {
             Text("Conversation", style = MaterialTheme.typography.labelLarge)
             for (m in 0 until messages.length()) {
               val message = messages.optJSONObject(m) ?: continue
-              val seller = message.optString("sender_role") == "seller"
+              val seller = message.optSafeString("sender_role") == "seller"
               Surface(
                 color = if (seller) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.medium,
@@ -129,12 +130,12 @@ fun VendorCasesScreen() {
               ) {
                 Column(Modifier.padding(10.dp)) {
                   Text(if (seller) "You" else "JTBazar Support", style = MaterialTheme.typography.labelSmall)
-                  Text(message.optString("message"))
-                  Text(message.optString("created_at"), style = MaterialTheme.typography.labelSmall)
+                  Text(message.optSafeString("message"))
+                  Text(message.optSafeString("created_at"), style = MaterialTheme.typography.labelSmall)
                 }
               }
             }
-            if (ticket.optString("status").equals("resolved", true)) {
+            if (ticket.optSafeString("status").equals("resolved", true)) {
               Text("This ticket is resolved. Create a new support ticket for another issue.")
             } else {
               OutlinedTextField(reply, { reply = it.take(4000) }, label = { Text("Write your message") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
@@ -164,20 +165,21 @@ fun VendorCasesScreen() {
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Text("Tell JTBazar Support what you need help with.")
-          OutlinedTextField(subject, { subject = it.take(160) }, label = { Text("Subject *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-          OutlinedTextField(description, { description = it.take(4000) }, label = { Text("Describe your issue *") }, modifier = Modifier.fillMaxWidth(), minLines = 4)
+          OutlinedTextField(subject, { subject = it.take(160); dialogError = "" }, label = { Text("Subject *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+          OutlinedTextField(description, { description = it.take(4000); dialogError = "" }, label = { Text("Describe your issue *") }, modifier = Modifier.fillMaxWidth(), minLines = 4)
+          if (dialogError.isNotBlank()) Text(dialogError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
       },
       confirmButton = {
         Button(enabled = !saving && subject.trim().length >= 3 && description.trim().length >= 5, onClick = {
           scope.launch {
-            saving = true; errorMessage = ""
+            saving = true; errorMessage = ""; dialogError = ""
             try {
               VendorService.createSupportTicket(subject, description)
               subject = ""; description = ""; showCreateDialog = false
               tickets = VendorService.listSupportTickets()
               info = "Support request created. Open it below to chat with JTBazar Support."
-            } catch (e: Exception) { errorMessage = e.message ?: "Support request could not be created." }
+            } catch (e: Exception) { dialogError = e.message ?: "Support request could not be created." }
             finally { saving = false }
           }
         }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text(if (saving) "Creating…" else "Create request") }

@@ -1,10 +1,8 @@
 package com.example.ui.screens
 
 import android.net.Uri
-import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -12,10 +10,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.data.supabase.VendorService
 import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.launch
@@ -131,16 +130,14 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
       TextButton(enabled = images.size < 8, onClick = { imagePicker.launch("image/*") }) { Text("Select images") }
     }
     images.forEachIndexed { index, uri ->
-      val previewBitmap = remember(uri) {
-        runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull()
-      }
       Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
         Row(Modifier.padding(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-          if (previewBitmap != null) {
-            Image(bitmap = previewBitmap, contentDescription = "Product image ${index + 1}", modifier = Modifier.size(84.dp), contentScale = ContentScale.Crop)
-          } else {
-            Box(Modifier.size(84.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { Text("Preview unavailable", style = MaterialTheme.typography.labelSmall) }
-          }
+          AsyncImage(
+            model = uri,
+            contentDescription = "Product image ${index + 1}",
+            modifier = Modifier.size(84.dp).clip(RoundedCornerShape(10.dp)),
+            contentScale = ContentScale.Crop
+          )
           Column(Modifier.weight(1f)) {
             Text("Product image ${index + 1}", style = MaterialTheme.typography.labelLarge)
             Text(uri.lastPathSegment ?: "Selected image", style = MaterialTheme.typography.bodySmall, maxLines = 2)

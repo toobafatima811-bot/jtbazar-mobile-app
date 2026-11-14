@@ -20,6 +20,7 @@ fun VendorInventoryPanel() {
   var loading by remember { mutableStateOf(true) }
   var savingId by remember { mutableStateOf<String?>(null) }
   var errorMessage by remember { mutableStateOf("") }
+  var dialogError by remember { mutableStateOf("") }
   var info by remember { mutableStateOf("") }
   var editingKey by remember { mutableStateOf<String?>(null) }
 
@@ -78,6 +79,7 @@ fun VendorInventoryPanel() {
               Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 OutlinedButton(enabled = savingId != key, onClick = {
                   quantities = quantities.toMutableMap().also { it[key] = row.optInt("quantity").toString() }
+                  dialogError = ""
                   editingKey = key
                 }) { Text("Edit stock") }
               }
@@ -90,35 +92,38 @@ fun VendorInventoryPanel() {
                       Text("Current stock: ${row.optInt("quantity")} • Low stock threshold: ${row.optInt("low_stock_threshold")}")
                       OutlinedTextField(
                         value = quantities[key] ?: row.optInt("quantity").toString(),
-                        onValueChange = { value -> quantities = quantities.toMutableMap().also { it[key] = value.filter(Char::isDigit).take(9) } },
+                        onValueChange = { value -> dialogError = ""; quantities = quantities.toMutableMap().also { it[key] = value.filter(Char::isDigit).take(9) } },
                         label = { Text("New quantity") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                       )
                       OutlinedTextField(
                         value = adjustmentReasons[key].orEmpty(),
-                        onValueChange = { value -> adjustmentReasons = adjustmentReasons.toMutableMap().also { it[key] = value.take(240) } },
+                        onValueChange = { value -> dialogError = ""; adjustmentReasons = adjustmentReasons.toMutableMap().also { it[key] = value.take(240) } },
                         label = { Text("Adjustment reason / note *") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2
                       )
+                      if (dialogError.isNotBlank()) {
+                        Text(dialogError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                      }
                     }
                   },
                   confirmButton = {
                     Button(enabled = savingId != key, onClick = {
                       val quantity = quantities[key]?.toIntOrNull()
-                      if (quantity == null) { errorMessage = "Enter a valid stock quantity."; return@Button }
+                      if (quantity == null) { dialogError = "Enter a valid stock quantity."; return@Button }
                       val reason = adjustmentReasons[key]?.trim().orEmpty()
-                      if (reason.length < 3) { errorMessage = "Add a reason for this stock adjustment."; return@Button }
+                      if (reason.length < 3) { dialogError = "Add a reason for this stock adjustment (at least 3 characters)."; return@Button }
                       scope.launch {
-                        savingId = key; errorMessage = ""; info = ""
+                        savingId = key; dialogError = ""; errorMessage = ""; info = ""
                         try {
                           VendorService.setVariantInventory(productId, variantId, quantity, reason)
                           adjustmentReasons = adjustmentReasons.toMutableMap().also { it.remove(key) }
                           editingKey = null
                           info = "Stock updated for $label."
                           refresh()
-                        } catch (e: Exception) { errorMessage = e.message ?: "Stock update failed." }
+                        } catch (e: Exception) { dialogError = e.message ?: "Stock update failed." }
                         finally { savingId = null }
                       }
                     }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {

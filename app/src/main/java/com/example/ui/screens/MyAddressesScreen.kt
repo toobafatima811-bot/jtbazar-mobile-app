@@ -1,17 +1,16 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import android.app.Activity
 import android.Manifest
-import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import com.example.location.AddressReverseGeocoder
+import com.example.location.LocationFetchResult
+import com.example.location.LocationResolver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -267,47 +266,71 @@ private fun AddAddressDialog(
   var locationMessage by remember { mutableStateOf<String?>(null) }
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
+  lateinit var startLocationFetch: () -> Unit
+
+  val locationSettingsLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.StartIntentSenderForResult()
+  ) { result ->
+    if (result.resultCode == Activity.RESULT_OK) {
+      startLocationFetch()
+    } else {
+      locating = false
+      locationMessage = "Turn on device location / GPS to detect your address."
+    }
+  }
+
+  startLocationFetch = {
+    locating = true
+    locationMessage = null
+    scope.launch {
+      try {
+        when (val result = LocationResolver.fetchCurrentLocation(context)) {
+          is LocationFetchResult.Success -> {
+            val location = result.location
+            latitude = location.latitude
+            longitude = location.longitude
+            val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
+            if (resolved != null) {
+              if (resolved.street.isNotBlank()) street = resolved.street
+              if (resolved.area.isNotBlank()) area = resolved.area
+              if (resolved.city.isNotBlank()) city = resolved.city
+              locationMessage = if (resolved.street.isBlank()) "Location found. Please enter your street and house number." else "Address detected. Please verify your house number."
+            } else {
+              locationMessage = "GPS captured. Please enter street and area manually."
+            }
+            locating = false
+          }
+          is LocationFetchResult.NeedsResolution -> {
+            runCatching {
+              val request = IntentSenderRequest.Builder(result.exception.resolution).build()
+              locationSettingsLauncher.launch(request)
+            }.onFailure {
+              locating = false
+              locationMessage = "Turn on device location / GPS and try again."
+            }
+          }
+          is LocationFetchResult.Failure -> {
+            locating = false
+            locationMessage = result.message
+          }
+        }
+      } catch (_: Exception) {
+        locating = false
+        locationMessage = "Unable to detect location. Please try again."
+      }
+    }
+  }
+
   val locationPermissionLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.RequestMultiplePermissions()
   ) { permissions ->
     val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     if (!granted) {
+      locating = false
       locationMessage = "Location permission is needed to detect your address."
     } else {
-      try {
-        locating = true
-        LocationServices.getFusedLocationProviderClient(context)
-          .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
-          .addOnSuccessListener { location ->
-            if (location == null) {
-              locating = false
-              locationMessage = "Could not get a fresh GPS fix. Please try again."
-            } else {
-              latitude = location.latitude
-              longitude = location.longitude
-              scope.launch {
-                val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
-                if (resolved != null) {
-                  if (resolved.street.isNotBlank()) street = resolved.street
-                  if (resolved.area.isNotBlank()) area = resolved.area
-                  if (resolved.city.isNotBlank()) city = resolved.city
-                  locationMessage = if (resolved.street.isBlank()) "Location found. Please enter your street and house number." else "Address detected. Please verify your house number."
-                } else {
-                  locationMessage = "GPS captured. Please enter street and area manually."
-                }
-                locating = false
-              }
-            }
-          }
-          .addOnFailureListener {
-            locating = false
-            locationMessage = "Unable to detect location. Please try again."
-          }
-      } catch (_: SecurityException) {
-        locating = false
-        locationMessage = "Location permission is required."
-      }
+      startLocationFetch()
     }
   }
 
@@ -322,9 +345,7 @@ private fun AddAddressDialog(
         OutlinedButton(
           enabled = !locating,
           onClick = {
-            val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            if (fine || coarse) locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            if (LocationResolver.hasLocationPermission(context)) startLocationFetch()
             else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
           },
           modifier = Modifier.fillMaxWidth()

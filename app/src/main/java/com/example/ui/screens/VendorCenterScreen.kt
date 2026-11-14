@@ -4,15 +4,14 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
 import android.net.Uri
-import android.graphics.BitmapFactory
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import coil.compose.AsyncImage
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.background
 import androidx.compose.ui.viewinterop.AndroidView
@@ -38,7 +37,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -290,7 +288,12 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (productImageUrl.isNotBlank()) {
-                      AsyncImage(model = productImageUrl, contentDescription = name, modifier = Modifier.size(88.dp), contentScale = ContentScale.Crop)
+                      AsyncImage(
+                        model = productImageUrl,
+                        contentDescription = name,
+                        modifier = Modifier.size(88.dp).clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                      )
                     } else {
                       Box(Modifier.size(88.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Inventory2, null, tint = JTOrange)
@@ -301,12 +304,13 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                       Text("PKR ${p.optString("price","0")}  •  ${p.optString("publication_status", p.optString("status","draft"))}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                     }
                   }
-                  val moderation = p.optString("moderation_status", p.optString("status", "pending")).lowercase()
+                  val moderation = p.optString("moderation_status", p.optString("status", "pending"))
+                    .takeUnless { it == "null" }?.lowercase() ?: "pending"
                   val rejected = moderation == "rejected"
                   Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                      when { hidden -> "Hidden"; rejected -> "Rejected"; moderation == "approved" -> "Approved"; else -> "Pending approval" },
-                      color = when { hidden -> Color.Gray; rejected -> Color(0xFFB91C1C); moderation == "approved" -> Color(0xFF16803C); else -> Color(0xFF9A6700) }
+                      when { rejected -> "Rejected"; hidden -> "Hidden"; moderation == "approved" -> "Approved"; else -> "Pending approval" },
+                      color = when { rejected -> Color(0xFFB91C1C); hidden -> Color.Gray; moderation == "approved" -> Color(0xFF16803C); else -> Color(0xFF9A6700) }
                     )
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { editingProduct = p; vendorTab = "product_edit" }) { Text("Edit") }
@@ -317,7 +321,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                     }
                   }
                   if (rejected) {
-                    val rejection = p.optString("rejection_reason").ifBlank { p.optString("moderation_note") }
+                    val rejection = p.optString("rejection_reason").takeUnless { it == "null" }?.trim().orEmpty()
+                      .ifBlank { p.optString("moderation_note").takeUnless { it == "null" }?.trim().orEmpty() }
                     if (rejection.isNotBlank()) Text("Admin rejection reason: $rejection", color = Color(0xFFB91C1C), style = MaterialTheme.typography.bodySmall)
                   }
                 }
@@ -442,8 +447,12 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               Text(if (shopImageUri == null) "Choose shop picture" else "Change selected shop picture")
             }
             shopImageUri?.let { uri ->
-              val bitmap = remember(uri) { runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull() }
-              bitmap?.let { Image(bitmap = it, contentDescription = "Shop picture preview", modifier = Modifier.fillMaxWidth().height(180.dp), contentScale = ContentScale.Crop) }
+              AsyncImage(
+                model = uri,
+                contentDescription = "Shop picture preview",
+                modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+              )
             }
             Text("Verification documents", fontWeight = FontWeight.Bold)
             DocumentButton("Identity / business verification document", verificationPath != null) { pendingDoc = "verification"; documentPicker.launch("*/*") }
@@ -735,10 +744,27 @@ private fun VendorEmptyState(title: String, description: String, action: String,
 
 @Composable
 private fun VendorCompactProductCard(product: JSONObject) {
+  val id = product.optString("id")
+  var thumbUrl by remember(id) { mutableStateOf("") }
+  LaunchedEffect(id) {
+    if (id.isNotBlank()) {
+      runCatching { VendorService.listProductImageUrls(id).firstOrNull().orEmpty() }
+        .onSuccess { thumbUrl = it }
+    }
+  }
   Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE9EDF3))) {
     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-      Box(Modifier.size(46.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-        Icon(Icons.Default.Inventory2, null, tint = JTOrange)
+      if (thumbUrl.isNotBlank()) {
+        AsyncImage(
+          model = thumbUrl,
+          contentDescription = product.optString("name", "Product"),
+          modifier = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)),
+          contentScale = ContentScale.Crop
+        )
+      } else {
+        Box(Modifier.size(46.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+          Icon(Icons.Default.Inventory2, null, tint = JTOrange)
+        }
       }
       Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(product.optString("name", "Product"), color = Color(0xFF25344A), fontWeight = FontWeight.SemiBold, maxLines = 1)

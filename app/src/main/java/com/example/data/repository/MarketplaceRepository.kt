@@ -459,6 +459,43 @@ object MarketplaceRepository {
     }
   }
 
+  private val promotionsRefreshMutex = Mutex()
+  private val realtimeClient = SupabaseRealtimeClient(
+    onPromotionsChanged = { refreshPromotions() },
+    onCatalogChanged = { refreshLiveCatalog(showLoading = false, refreshUserData = false) }
+  )
+
+  fun startRealtimeCampaignSync() {
+    realtimeClient.start()
+  }
+
+  fun stopRealtimeCampaignSync() {
+    realtimeClient.stop()
+  }
+
+  fun refreshPromotions() {
+    scope.launch {
+      refreshPromotionsSuspending()
+    }
+  }
+
+  suspend fun refreshPromotionsSuspending() {
+    if (!promotionsRefreshMutex.tryLock()) return
+    try {
+      SupabaseApiService.fetchHomepageHeroes()
+        .onSuccess { if (_homepageHeroes.value != it) _homepageHeroes.value = it }
+        .onFailure { Log.w(TAG, "Homepage heroes refresh unavailable: ${it.message}") }
+      SupabaseApiService.fetchActivePromotions()
+        .onSuccess {
+          if (_homepagePromotions.value != it) _homepagePromotions.value = it
+          CampaignPopupManager.evaluateLaunchCampaign(it)
+        }
+        .onFailure { Log.w(TAG, "Homepage promotions refresh unavailable: ${it.message}") }
+    } finally {
+      promotionsRefreshMutex.unlock()
+    }
+  }
+
   fun refreshLiveCatalog(showLoading: Boolean = true, refreshUserData: Boolean = true) {
     scope.launch {
       refreshLiveCatalogSuspending(showLoading = showLoading, refreshUserData = refreshUserData)
@@ -481,13 +518,13 @@ object MarketplaceRepository {
     // Fetch the same published homepage content used by the website.
     SupabaseApiService.fetchHomepageHeroes()
       .onSuccess { if (_homepageHeroes.value != it) _homepageHeroes.value = it }
-      .onFailure { _homepageHeroes.value = emptyList(); Log.w(TAG, "Homepage heroes unavailable: ${it.message}") }
+      .onFailure { Log.w(TAG, "Homepage heroes unavailable: ${it.message}") }
     SupabaseApiService.fetchActivePromotions()
       .onSuccess {
         if (_homepagePromotions.value != it) _homepagePromotions.value = it
         CampaignPopupManager.evaluateLaunchCampaign(it)
       }
-      .onFailure { _homepagePromotions.value = emptyList(); Log.w(TAG, "Homepage promotions unavailable: ${it.message}") }
+      .onFailure { Log.w(TAG, "Homepage promotions unavailable: ${it.message}") }
 
         // 1. Fetch live products from Supabase
         val productResult = SupabaseApiService.fetchProducts(limit = 100)

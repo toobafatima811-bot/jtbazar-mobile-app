@@ -249,33 +249,71 @@ object SupabaseApiService {
     }
   }
 
+  private fun normalizePromotionImageUrl(raw: String?): String? {
+    val clean = raw?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: return null
+    return when {
+      clean.startsWith("https://", ignoreCase = true) || clean.startsWith("http://", ignoreCase = true) -> clean
+      clean.startsWith("/storage/v1/") -> "${SupabaseConfig.projectUrl}$clean"
+      clean.startsWith("/") -> "${SupabaseConfig.projectUrl}$clean"
+      !clean.contains("://") -> "${SupabaseConfig.storageUrl}/object/public/product-images/${clean.removePrefix("/")}"
+      else -> null
+    }
+  }
+
+  private fun JSONObject.optCleanString(vararg keys: String): String? {
+    for (key in keys) {
+      if (!has(key) || isNull(key)) continue
+      val value = optString(key).trim()
+      if (value.isNotBlank() && !value.equals("null", ignoreCase = true)) return value
+    }
+    return null
+  }
+
+  private fun JSONObject.optActiveFlag(): Boolean {
+    for (key in listOf("is_active", "active", "is_enabled", "enabled")) {
+      if (has(key) && !isNull(key)) {
+        return optBoolean(key, true)
+      }
+    }
+    return true
+  }
+
   suspend fun fetchActivePromotions(position: String? = null): Result<List<SupabasePromotionDto>> = withContext(Dispatchers.IO) {
     try {
       val positionFilter = position?.takeIf { it.isNotBlank() }?.let { "&display_position=eq.${URLEncoder.encode(it, "UTF-8")}" } ?: ""
-      SupabaseClient.get("promotions?select=id,title,description,banner_image_url,banner_image_urls,cta_text,cta_destination,display_position,priority,target_platform,campaign_type,show_on_launch,starts_at,ends_at,coupon_code,discount_percent&status=eq.approved&order=priority.desc$positionFilter")
+      SupabaseClient.get("promotions?select=*&status=eq.approved&order=priority.desc,created_at.desc$positionFilter")
         .mapCatching { json ->
           val rows = JSONArray(json)
           (0 until rows.length()).mapNotNull { index ->
             val row = rows.optJSONObject(index) ?: return@mapNotNull null
             val images = row.optJSONArray("banner_image_urls")
-            val urls = if (images == null) emptyList() else (0 until images.length()).mapNotNull { images.optString(it).takeIf { url -> url.startsWith("https://") } }
+            val urls = if (images == null) {
+              emptyList()
+            } else {
+              (0 until images.length()).mapNotNull { normalizePromotionImageUrl(images.optString(it)) }.distinct()
+            }
+            val primaryImage = normalizePromotionImageUrl(row.optCleanString("banner_image_url"))
             SupabasePromotionDto(
               id = row.optString("id"),
               title = row.optString("title"),
-              description = row.optString("description").takeIf { it.isNotBlank() && it != "null" },
-              bannerImageUrl = row.optString("banner_image_url").takeIf { it.startsWith("https://") },
+              description = row.optCleanString("description"),
+              bannerImageUrl = primaryImage,
               bannerImageUrls = urls,
-              ctaText = row.optString("cta_text").takeIf { it.isNotBlank() && it != "null" },
-              ctaDestination = row.optString("cta_destination").takeIf { it.isNotBlank() && it != "null" },
-              displayPosition = row.optString("display_position"),
-              priority = row.optInt("priority"),
-              targetPlatform = row.optString("target_platform", "both"),
-              campaignType = row.optString("campaign_type", "banner"),
+              ctaText = row.optCleanString("cta_text"),
+              ctaDestination = row.optCleanString("cta_destination"),
+              displayPosition = row.optCleanString("display_position") ?: "",
+              priority = row.optInt("priority", 0),
+              targetPlatform = row.optCleanString("target_platform") ?: "both",
+              campaignType = row.optCleanString("campaign_type") ?: "banner",
               showOnLaunch = row.optBoolean("show_on_launch", false),
-              startsAt = row.optString("starts_at").takeIf { it.isNotBlank() && it != "null" },
-              endsAt = row.optString("ends_at").takeIf { it.isNotBlank() && it != "null" },
-              couponCode = row.optString("coupon_code").takeIf { it.isNotBlank() && it != "null" },
-              discountPercent = if (row.isNull("discount_percent")) null else row.optDouble("discount_percent")
+              startsAt = row.optCleanString("starts_at", "start_date"),
+              endsAt = row.optCleanString("ends_at", "end_date"),
+              couponCode = row.optCleanString("coupon_code"),
+              discountPercent = if (!row.has("discount_percent") || row.isNull("discount_percent")) null else row.optDouble("discount_percent"),
+              status = row.optCleanString("status") ?: "approved",
+              isActive = row.optActiveFlag(),
+              createdAt = row.optCleanString("created_at"),
+              updatedAt = row.optCleanString("updated_at")
             )
           }
         }

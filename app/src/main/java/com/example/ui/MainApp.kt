@@ -33,12 +33,17 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.content.Intent
+import android.net.Uri
 import com.example.R
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
+import com.example.data.repository.BannerDestination
 import com.example.data.repository.CampaignPopupManager
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.repository.PromotionCampaignFilter
 import com.example.data.supabase.SupabaseAuthService
+import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.GlobalLoadingState
 import com.example.data.supabase.NetworkConnectivity
 import com.example.ui.components.CampaignLaunchPopupDialog
@@ -105,9 +110,25 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-      while (true) {
-        delay(60_000)
-        MarketplaceRepository.refreshLiveCatalog(showLoading = false, refreshUserData = false)
+      MarketplaceRepository.startRealtimeCampaignSync()
+      MarketplaceRepository.refreshPromotionsSuspending()
+      val promoPoller = launch {
+        while (true) {
+          delay(15_000L)
+          MarketplaceRepository.refreshPromotionsSuspending()
+        }
+      }
+      val catalogPoller = launch {
+        while (true) {
+          delay(60_000L)
+          MarketplaceRepository.refreshLiveCatalogSuspending(showLoading = false, refreshUserData = false)
+        }
+      }
+      try {
+        promoPoller.join()
+        catalogPoller.join()
+      } finally {
+        MarketplaceRepository.stopRealtimeCampaignSync()
       }
     }
   }
@@ -441,6 +462,9 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         }
 
         AppScreen.HOME -> {
+          LaunchedEffect(AppScreen.HOME) {
+            MarketplaceRepository.refreshPromotions()
+          }
           HomeScreen(
             onProductClick = { product ->
               selectedProduct = product
@@ -454,6 +478,66 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onExploreShopsClick = {
               selectedPublicShopId = null
               navigateTo(AppScreen.PUBLIC_SHOPS)
+            },
+            onBannerDestinationClick = { rawDestination ->
+              when (val dest = PromotionCampaignFilter.resolveDestination(rawDestination)) {
+                is BannerDestination.Home -> switchRootTab(AppScreen.HOME)
+                is BannerDestination.Categories -> switchRootTab(AppScreen.CATEGORIES)
+                is BannerDestination.CategoryByQuery -> {
+                  val q = dest.query.trim().lowercase().replace('-', ' ')
+                  val matched = MarketplaceRepository.categories.value.firstOrNull { cat ->
+                    cat.id.equals(dest.query, ignoreCase = true) ||
+                      cat.title.trim().lowercase() == q ||
+                      cat.title.trim().lowercase().replace(' ', '-') == dest.query.trim().lowercase()
+                  }
+                  if (matched != null) {
+                    selectedCategory = matched
+                    navigateTo(AppScreen.CATEGORY_PRODUCTS)
+                  } else {
+                    switchRootTab(AppScreen.CATEGORIES)
+                  }
+                }
+                is BannerDestination.ProductById -> {
+                  val matched = products.firstOrNull { p ->
+                    p.id.equals(dest.productId, ignoreCase = true) ||
+                      p.title.trim().lowercase().replace(' ', '-') == dest.productId.trim().lowercase()
+                  }
+                  if (matched != null) {
+                    selectedProduct = matched
+                    MarketplaceRepository.selectProduct(matched)
+                    navigateTo(AppScreen.PRODUCT_DETAIL)
+                  } else {
+                    switchRootTab(AppScreen.CATEGORIES)
+                  }
+                }
+                is BannerDestination.ShopsList -> {
+                  selectedPublicShopId = null
+                  navigateTo(AppScreen.PUBLIC_SHOPS)
+                }
+                is BannerDestination.ShopByQuery -> {
+                  val q = dest.query.trim().lowercase().replace('-', ' ')
+                  val matched = MarketplaceRepository.shops.value.firstOrNull { s ->
+                    s.id.equals(dest.query, ignoreCase = true) ||
+                      s.name.trim().lowercase() == q ||
+                      s.name.trim().lowercase().replace(' ', '-') == dest.query.trim().lowercase()
+                  }
+                  selectedPublicShopId = matched?.id
+                  navigateTo(AppScreen.PUBLIC_SHOPS)
+                }
+                is BannerDestination.BudgetShopping -> navigateTo(AppScreen.BUDGET_SHOPPING)
+                is BannerDestination.Discover -> switchRootTab(AppScreen.DISCOVER)
+                is BannerDestination.Wishlist -> switchRootTab(AppScreen.WISHLIST)
+                is BannerDestination.CartCheckout -> navigateTo(AppScreen.CART_CHECKOUT)
+                is BannerDestination.VendorCenter -> {
+                  if (SupabaseClient.isAuthenticated) navigateTo(AppScreen.VENDOR_CENTER)
+                  else switchRootTab(AppScreen.ACCOUNT)
+                }
+                is BannerDestination.Account -> switchRootTab(AppScreen.ACCOUNT)
+                is BannerDestination.ExternalUrl -> {
+                  runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(dest.url))) }
+                }
+                null -> Unit
+              }
             }
           )
         }

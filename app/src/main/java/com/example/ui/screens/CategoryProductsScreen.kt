@@ -93,20 +93,21 @@ fun CategoryProductsScreen(
         chunked.forEach { rowItems ->
           item {
             Row(
-              modifier = Modifier.fillMaxWidth(),
+              modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
               horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
               rowItems.forEach { product ->
-                Box(modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                   ProductCard(
                     product = product,
                     onProductClick = { onProductClick(product) },
                     onAddToCart = { MarketplaceRepository.addToCart(product) },
-                    onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) }
+                    onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
+                    modifier = Modifier.fillMaxHeight()
                   )
                 }
               }
-              if (rowItems.size == 1) {
+              repeat((productGridColumns - rowItems.size).coerceAtLeast(0)) {
                 Spacer(modifier = Modifier.weight(1f))
               }
             }

@@ -225,7 +225,7 @@ data class SupabaseHomepageHeroDto(
   val endDate: String? = null
 )
 
-/** Approved seller promotion content configured in the marketplace. */
+/** Approved seller/admin promotion campaign content configured in the marketplace. */
 data class SupabasePromotionDto(
   val id: String,
   val title: String,
@@ -242,8 +242,18 @@ data class SupabasePromotionDto(
   val startsAt: String? = null,
   val endsAt: String? = null,
   val couponCode: String? = null,
-  val discountPercent: Double? = null
-)
+  val discountPercent: Double? = null,
+  val status: String = "approved",
+  val isActive: Boolean = true,
+  val createdAt: String? = null,
+  val updatedAt: String? = null
+) {
+  fun primaryBannerImageUrl(): String? {
+    return (bannerImageUrls + listOfNotNull(bannerImageUrl))
+      .map { it.trim() }
+      .firstOrNull { it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true) }
+  }
+}
 
 
 

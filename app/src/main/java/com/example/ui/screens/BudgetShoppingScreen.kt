@@ -5,9 +5,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -234,24 +233,35 @@ fun BudgetShoppingScreen(
           )
         }
       } else {
-        LazyVerticalGrid(
-          columns = GridCells.Fixed(productGridColumns),
+        val chunkedProducts = filteredProducts.chunked(productGridColumns)
+        LazyColumn(
           modifier = Modifier.fillMaxSize(),
           contentPadding = PaddingValues(16.dp),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
           verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-          items(filteredProducts, key = { it.id }) { product ->
-            ProductCard(
-              product = product,
-              onProductClick = { onProductClick(product) },
-              onAddToCart = {
-                MarketplaceRepository.addToCart(product, 1)
-                Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
-              },
-              onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
-              modifier = Modifier.testTag("budget_product_${product.id}")
-            )
+          items(chunkedProducts, key = { row -> row.joinToString("_") { it.id } }) { rowProducts ->
+            Row(
+              modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+              horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              rowProducts.forEach { product ->
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                  ProductCard(
+                    product = product,
+                    onProductClick = { onProductClick(product) },
+                    onAddToCart = {
+                      MarketplaceRepository.addToCart(product, 1)
+                      Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
+                    },
+                    onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
+                    modifier = Modifier.fillMaxHeight().testTag("budget_product_${product.id}")
+                  )
+                }
+              }
+              repeat((productGridColumns - rowProducts.size).coerceAtLeast(0)) {
+                Spacer(modifier = Modifier.weight(1f))
+              }
+            }
           }
         }
       }

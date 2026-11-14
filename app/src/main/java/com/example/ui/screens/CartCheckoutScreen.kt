@@ -1,9 +1,10 @@
 package com.example.ui.screens
 
 import android.Manifest
-import android.content.pm.PackageManager
+import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -52,9 +53,8 @@ import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
 import com.example.ui.theme.*
 import com.example.location.AddressReverseGeocoder
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
+import com.example.location.LocationFetchResult
+import com.example.location.LocationResolver
 import kotlinx.coroutines.launch
 
 enum class CartCheckoutStage {
@@ -124,50 +124,92 @@ fun CartCheckoutScreen(
   var locationCapturedAt by remember { mutableStateOf<String?>(null) }
   var isPinConfirmed by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude != null && selectedAddress?.longitude != null) }
 
+  var isLocatingPin by remember { mutableStateOf(false) }
+
+  suspend fun applyCheckoutLocation(loc: android.location.Location) {
+    deliveryLat = loc.latitude
+    deliveryLng = loc.longitude
+    locationCapturedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+      timeZone = java.util.TimeZone.getTimeZone("UTC")
+    }.format(java.util.Date())
+    isPinConfirmed = true
+    val resolved = AddressReverseGeocoder.resolve(context, loc.latitude, loc.longitude)
+    if (resolved != null) {
+      if (resolved.street.isNotBlank()) streetAddress = resolved.street
+      if (resolved.area.isNotBlank()) areaLocality = resolved.area
+      if (resolved.city.isNotBlank()) city = resolved.city
+      Toast.makeText(
+        context,
+        if (resolved.street.isNotBlank()) "Location and street detected. Please verify your house number."
+        else "Location captured. Please enter your street and house number.",
+        Toast.LENGTH_LONG
+      ).show()
+    } else {
+      Toast.makeText(context, "Location captured. Please enter your street and house number.", Toast.LENGTH_LONG).show()
+    }
+  }
+
+  lateinit var startCheckoutLocationFetch: () -> Unit
+
+  val locationSettingsLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.StartIntentSenderForResult()
+  ) { result ->
+    if (result.resultCode == Activity.RESULT_OK) {
+      startCheckoutLocationFetch()
+    } else {
+      isLocatingPin = false
+      Toast.makeText(context, "Turn on device location / GPS to confirm your delivery pin.", Toast.LENGTH_LONG).show()
+    }
+  }
+
+  startCheckoutLocationFetch = {
+    isLocatingPin = true
+    coroutineScope.launch {
+      try {
+        when (val result = LocationResolver.fetchCurrentLocation(context)) {
+          is LocationFetchResult.Success -> {
+            applyCheckoutLocation(result.location)
+            isLocatingPin = false
+          }
+          is LocationFetchResult.NeedsResolution -> {
+            runCatching {
+              locationSettingsLauncher.launch(IntentSenderRequest.Builder(result.exception.resolution).build())
+            }.onFailure {
+              isLocatingPin = false
+              Toast.makeText(context, "Turn on device location / GPS and try again.", Toast.LENGTH_LONG).show()
+            }
+          }
+          is LocationFetchResult.Failure -> {
+            isLocatingPin = false
+            Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+          }
+        }
+      } catch (_: Exception) {
+        isLocatingPin = false
+        Toast.makeText(context, "Unable to get your current location. Please try again.", Toast.LENGTH_LONG).show()
+      }
+    }
+  }
+
   val locationPermissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestMultiplePermissions()
   ) { perms ->
     val granted = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     if (granted) {
-      try {
-        LocationServices.getFusedLocationProviderClient(context)
-          .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
-          .addOnSuccessListener { loc ->
-            if (loc == null) {
-              Toast.makeText(context, "Could not get a fresh GPS fix. Turn on location and try again.", Toast.LENGTH_LONG).show()
-            } else {
-              deliveryLat = loc.latitude
-              deliveryLng = loc.longitude
-              locationCapturedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                timeZone = java.util.TimeZone.getTimeZone("UTC")
-              }.format(java.util.Date())
-              isPinConfirmed = true
-              coroutineScope.launch {
-                val resolved = AddressReverseGeocoder.resolve(context, loc.latitude, loc.longitude)
-                if (resolved != null) {
-                  if (resolved.street.isNotBlank()) streetAddress = resolved.street
-                  if (resolved.area.isNotBlank()) areaLocality = resolved.area
-                  if (resolved.city.isNotBlank()) city = resolved.city
-                  Toast.makeText(
-                    context,
-                    if (resolved.street.isNotBlank()) "Location and street detected. Please verify your house number."
-                    else "Location captured. Please enter your street and house number.",
-                    Toast.LENGTH_LONG
-                  ).show()
-                } else {
-                  Toast.makeText(context, "Location captured. Please enter your street and house number.", Toast.LENGTH_LONG).show()
-                }
-              }
-            }
-          }
-          .addOnFailureListener {
-            Toast.makeText(context, "Unable to get your current location. Please try again.", Toast.LENGTH_LONG).show()
-          }
-      } catch (_: SecurityException) {
-        Toast.makeText(context, "Location permission is required.", Toast.LENGTH_LONG).show()
-      }
+      startCheckoutLocationFetch()
     } else {
       Toast.makeText(context, "Location permission is required to confirm your delivery pin.", Toast.LENGTH_SHORT).show()
+    }
+  }
+
+  fun requestCheckoutLocationPin() {
+    if (isLocatingPin) return
+    if (LocationResolver.hasLocationPermission(context)) {
+      startCheckoutLocationFetch()
+    } else {
+      locationPermissionLauncher.launch(
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+      )
     }
   }
 
@@ -328,11 +370,7 @@ fun CartCheckoutScreen(
             deliveryLat = deliveryLat,
             deliveryLng = deliveryLng,
             isPinConfirmed = isPinConfirmed,
-            onRequestPin = {
-              locationPermissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-              )
-            },
+            onRequestPin = { requestCheckoutLocationPin() },
             onChangePin = {
               isPinConfirmed = false
               deliveryLat = null

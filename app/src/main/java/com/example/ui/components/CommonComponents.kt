@@ -1,19 +1,18 @@
 package com.example.ui.components
 
 import android.Manifest
-import android.content.pm.PackageManager
-import android.location.LocationManager
-import android.os.Build
-import android.os.CancellationSignal
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,6 +36,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import com.example.location.AddressReverseGeocoder
+import com.example.location.LocationFetchResult
+import com.example.location.LocationResolver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -126,7 +127,10 @@ fun JTBazarTopBar(
             shape = if (showLocationText) RoundedCornerShape(16.dp) else CircleShape,
             color = JTPurpleContainer.copy(alpha = 0.5f),
             modifier = Modifier
-              .then(if (showLocationText) Modifier.height(38.dp) else Modifier.size(38.dp))
+              .then(
+                if (showLocationText) Modifier.heightIn(min = 48.dp)
+                else Modifier.size(48.dp)
+              )
               .clickable { onLocationClick() }
               .testTag("location_picker")
           ) {
@@ -382,9 +386,14 @@ fun AddressSelectionSheet(
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
+  val currentProfile by com.example.data.supabase.SupabaseAuthService.userProfile.collectAsState()
   var showNewAddressForm by remember { mutableStateOf(addresses.isEmpty()) }
-  var recipientName by remember { mutableStateOf("") }
-  var phone by remember { mutableStateOf("") }
+  var recipientName by remember(currentProfile) {
+    mutableStateOf(currentProfile?.fullName ?: "")
+  }
+  var phone by remember(currentProfile) {
+    mutableStateOf(currentProfile?.phone ?: "")
+  }
   var addressLine by remember { mutableStateOf("") }
   var area by remember { mutableStateOf("") }
   var city by remember { mutableStateOf("") }
@@ -394,22 +403,70 @@ fun AddressSelectionSheet(
   var longitude by remember { mutableStateOf<Double?>(null) }
   var locating by remember { mutableStateOf(false) }
   var locationError by remember { mutableStateOf<String?>(null) }
+  var locationStatus by remember { mutableStateOf<String?>(null) }
 
-  fun applyDeviceLocation(location: android.location.Location) {
+  suspend fun applyDeviceLocation(location: android.location.Location) {
     latitude = location.latitude
     longitude = location.longitude
-    locating = true
-    scope.launch {
-      val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
-      if (resolved != null) {
-        if (resolved.street.isNotBlank()) addressLine = resolved.street
-        if (resolved.area.isNotBlank()) area = resolved.area
-        if (resolved.city.isNotBlank()) city = resolved.city
-        locationError = if (resolved.street.isBlank()) "Street name was not available. Please enter your house/street details." else null
+    val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
+    if (resolved != null) {
+      if (resolved.street.isNotBlank()) addressLine = resolved.street
+      if (resolved.area.isNotBlank()) area = resolved.area
+      if (resolved.city.isNotBlank()) city = resolved.city
+      locationError = null
+      locationStatus = if (resolved.street.isBlank()) {
+        "Location detected. Please verify or enter your house/street details."
       } else {
-        locationError = "GPS coordinates captured. Please enter the address details manually."
+        "Current location detected. Verify details and save."
       }
+    } else {
+      locationError = null
+      locationStatus = "GPS coordinates captured. Please enter your street, area and city."
+    }
+  }
+
+  lateinit var startLocationFetch: () -> Unit
+
+  val locationSettingsLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.StartIntentSenderForResult()
+  ) { result ->
+    if (result.resultCode == Activity.RESULT_OK) {
+      startLocationFetch()
+    } else {
       locating = false
+      locationError = "Turn on device location / GPS to detect your current address."
+    }
+  }
+
+  startLocationFetch = {
+    locating = true
+    locationError = null
+    locationStatus = null
+    scope.launch {
+      try {
+        when (val result = LocationResolver.fetchCurrentLocation(context)) {
+          is LocationFetchResult.Success -> {
+            applyDeviceLocation(result.location)
+            locating = false
+          }
+          is LocationFetchResult.NeedsResolution -> {
+            runCatching {
+              val request = IntentSenderRequest.Builder(result.exception.resolution).build()
+              locationSettingsLauncher.launch(request)
+            }.onFailure {
+              locating = false
+              locationError = "Turn on device location / GPS and try again."
+            }
+          }
+          is LocationFetchResult.Failure -> {
+            locating = false
+            locationError = result.message
+          }
+        }
+      } catch (_: Exception) {
+        locating = false
+        locationError = "Unable to detect current location. Please try again."
+      }
     }
   }
 
@@ -419,34 +476,20 @@ fun AddressSelectionSheet(
     val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     if (!granted) {
-      locationError = "Location permission was not granted."
-      return@rememberLauncherForActivityResult
-    }
-    try {
-      val manager = context.getSystemService(android.content.Context.LOCATION_SERVICE) as LocationManager
-      locating = true
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        val provider = if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) LocationManager.GPS_PROVIDER else LocationManager.NETWORK_PROVIDER
-        manager.getCurrentLocation(provider, CancellationSignal(), context.mainExecutor) { location ->
-          if (location != null) applyDeviceLocation(location)
-          else {
-            locating = false
-            locationError = "Could not get current location. Turn on device location and try again."
-          }
-        }
-      } else {
-        @Suppress("DEPRECATION")
-        val location = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-          ?: manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        if (location != null) applyDeviceLocation(location)
-        else {
-          locating = false
-          locationError = "Could not get current location. Turn on device location and try again."
-        }
-      }
-    } catch (_: SecurityException) {
       locating = false
-      locationError = "Location permission is required."
+      locationError = "Location permission was not granted."
+    } else {
+      startLocationFetch()
+    }
+  }
+
+  fun requestCurrentLocation() {
+    if (LocationResolver.hasLocationPermission(context)) {
+      startLocationFetch()
+    } else {
+      locationPermissionLauncher.launch(
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+      )
     }
   }
 
@@ -494,28 +537,30 @@ fun AddressSelectionSheet(
       }
     },
     text = {
-      Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+      ) {
         if (showNewAddressForm) {
           OutlinedButton(
             enabled = !locating,
-            onClick = {
-              val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-              val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-              if (fine || coarse) {
-                locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-              } else {
-                locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-              }
-            },
-            modifier = Modifier.fillMaxWidth()
+            onClick = { requestCurrentLocation() },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("use_current_location_btn")
           ) {
-            Icon(Icons.Filled.MyLocation, contentDescription = null)
+            if (locating) {
+              CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            } else {
+              Icon(Icons.Filled.MyLocation, contentDescription = null)
+            }
             Spacer(Modifier.width(6.dp))
             Text(if (locating) "Getting current location..." else "Use Current Location")
           }
           if (latitude != null && longitude != null) {
             Text("GPS: ${String.format(Locale.US, "%.6f", latitude)} , ${String.format(Locale.US, "%.6f", longitude)}", fontSize = 11.sp, color = JTTextSecondary)
           }
+          locationStatus?.let { Text(it, color = JTPurplePrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
           locationError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
           Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("HOME", "OFFICE", "OTHER").forEach { value ->
@@ -560,7 +605,23 @@ fun AddressSelectionSheet(
               }
             }
           }
-          OutlinedButton(onClick = { showNewAddressForm = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+          OutlinedButton(
+            onClick = {
+              showNewAddressForm = true
+              requestCurrentLocation()
+            },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("quick_use_current_location_btn"),
+            shape = RoundedCornerShape(8.dp)
+          ) {
+            Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Use Current Location", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+          }
+          OutlinedButton(
+            onClick = { showNewAddressForm = true },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            shape = RoundedCornerShape(8.dp)
+          ) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
             Text("Add New Location", fontSize = 12.sp, fontWeight = FontWeight.Bold)

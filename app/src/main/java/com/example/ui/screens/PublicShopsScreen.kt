@@ -243,7 +243,7 @@ private fun PublicShopDetailScreen(
       } else {
         products.chunked(productColumns).forEach { productRow ->
           Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top
           ) {
@@ -253,7 +253,7 @@ private fun PublicShopDetailScreen(
                 onProductClick = { onProductClick(product) },
                 onAddToCart = { MarketplaceRepository.addToCart(product) },
                 onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).fillMaxHeight()
               )
             }
             repeat((productColumns - productRow.size).coerceAtLeast(0)) {

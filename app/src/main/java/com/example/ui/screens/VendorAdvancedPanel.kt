@@ -206,22 +206,22 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
           var editing by remember(id) { mutableStateOf(false) }
-          var editName by remember(id) { mutableStateOf(product.optString("name", "")) }
-          var editSlug by remember(id) { mutableStateOf(product.optString("slug", "")) }
-          var editSku by remember(id) { mutableStateOf(product.optString("sku", "")) }
-          var editCategory by remember(id) { mutableStateOf(product.optString("category_id", "")) }
-          var editShortDescription by remember(id) { mutableStateOf(product.optString("short_description", "")) }
-          var editDescription by remember(id) { mutableStateOf(product.optString("description", "")) }
-          var editPrice by remember(id) { mutableStateOf(product.optString("vendor_base_price", product.optString("price", ""))) }
-          var editDiscount by remember(id) { mutableStateOf(product.optString("discount_percent", "0")) }
-          var editSupplierCost by remember(id) { mutableStateOf(if (product.isNull("supplier_cost")) "" else product.optString("supplier_cost")) }
-          var editFulfilment by remember(id) { mutableStateOf(product.optString("fulfillment_expense", "0")) }
-          var editMinimumProfit by remember(id) { mutableStateOf(product.optString("minimum_profit", "0")) }
-          var editWeight by remember(id) { mutableStateOf(if (product.isNull("weight_grams")) "" else product.optString("weight_grams")) }
+          var editName by remember(id) { mutableStateOf(product.optString("name", "").takeUnless { it == "null" }.orEmpty()) }
+          var editSlug by remember(id) { mutableStateOf(product.optString("slug", "").takeUnless { it == "null" }.orEmpty()) }
+          var editSku by remember(id) { mutableStateOf(product.optString("sku", "").takeUnless { it == "null" }.orEmpty()) }
+          var editCategory by remember(id) { mutableStateOf(product.optString("category_id", "").takeUnless { it == "null" }.orEmpty()) }
+          var editShortDescription by remember(id) { mutableStateOf(product.optString("short_description", "").takeUnless { it == "null" }.orEmpty()) }
+          var editDescription by remember(id) { mutableStateOf(product.optString("description", "").takeUnless { it == "null" }.orEmpty()) }
+          var editPrice by remember(id) { mutableStateOf(product.optString("vendor_base_price", product.optString("price", "")).takeUnless { it == "null" }.orEmpty()) }
+          var editDiscount by remember(id) { mutableStateOf(product.optString("discount_percent", "0").takeUnless { it == "null" } ?: "0") }
+          var editSupplierCost by remember(id) { mutableStateOf(if (product.isNull("supplier_cost")) "" else product.optString("supplier_cost").takeUnless { it == "null" }.orEmpty()) }
+          var editFulfilment by remember(id) { mutableStateOf(product.optString("fulfillment_expense", "0").takeUnless { it == "null" } ?: "0") }
+          var editMinimumProfit by remember(id) { mutableStateOf(product.optString("minimum_profit", "0").takeUnless { it == "null" } ?: "0") }
+          var editWeight by remember(id) { mutableStateOf(if (product.isNull("weight_grams")) "" else product.optString("weight_grams").takeUnless { it == "null" }.orEmpty()) }
           var editSpecifications by remember(id) { mutableStateOf((product.optJSONArray("specifications") ?: JSONArray()).toString(2)) }
           var editDimensions by remember(id) { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
-          var editSeoTitle by remember(id) { mutableStateOf(product.optString("seo_title", "")) }
-          var editSeoDescription by remember(id) { mutableStateOf(product.optString("seo_description", "")) }
+          var editSeoTitle by remember(id) { mutableStateOf(product.optString("seo_title", "").takeUnless { it == "null" }.orEmpty()) }
+          var editSeoDescription by remember(id) { mutableStateOf(product.optString("seo_description", "").takeUnless { it == "null" }.orEmpty()) }
           Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
           Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
           TextButton(onClick = { editing = !editing }) { Text(if (editing) "Close product editor" else "Edit product details") }

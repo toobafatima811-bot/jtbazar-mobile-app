@@ -1,52 +1,143 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.data.supabase.VendorService
 import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
+private fun JSONObject.optCleanString(key: String, fallback: String = ""): String =
+  optString(key, fallback).takeUnless { it == "null" } ?: fallback
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: suspend () -> Unit) {
+  BackHandler { onBack() }
+  val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  val id = product.optString("id")
-  var name by remember { mutableStateOf(product.optString("name")) }
-  var slug by remember { mutableStateOf(product.optString("slug")) }
-  var sku by remember { mutableStateOf(product.optString("sku")) }
-  var category by remember { mutableStateOf(product.optString("category_id")) }
-  var shortDescription by remember { mutableStateOf(product.optString("short_description")) }
-  var description by remember { mutableStateOf(product.optString("description")) }
-  var price by remember { mutableStateOf(product.optString("vendor_base_price", product.optString("price"))) }
-  var discount by remember { mutableStateOf(product.optString("discount_percent", "0")) }
-  var supplierCost by remember { mutableStateOf(product.optString("supplier_cost").takeUnless { product.isNull("supplier_cost") }.orEmpty()) }
-  var fulfilment by remember { mutableStateOf(product.optString("fulfillment_expense", "0")) }
-  var minimumProfit by remember { mutableStateOf(product.optString("minimum_profit", "0")) }
-  var weight by remember { mutableStateOf(product.optString("weight_grams").takeUnless { product.isNull("weight_grams") }.orEmpty()) }
-  var specs by remember { mutableStateOf((product.optJSONArray("specifications") ?: JSONArray()).toString(2)) }
-  var dimensions by remember { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
-  var seoTitle by remember { mutableStateOf(product.optString("seo_title")) }
-  var seoDescription by remember { mutableStateOf(product.optString("seo_description")) }
+  val id = product.optCleanString("id")
+  var categories by remember { mutableStateOf(JSONArray()) }
+  var existingImageUrls by remember(id) { mutableStateOf<List<String>>(emptyList()) }
+  var newImages by remember(id) { mutableStateOf<List<Uri>>(emptyList()) }
+  var name by remember(id) { mutableStateOf(product.optCleanString("name")) }
+  var slug by remember(id) { mutableStateOf(product.optCleanString("slug")) }
+  var sku by remember(id) { mutableStateOf(product.optCleanString("sku")) }
+  var category by remember(id) { mutableStateOf(product.optCleanString("category_id")) }
+  var shortDescription by remember(id) { mutableStateOf(product.optCleanString("short_description")) }
+  var description by remember(id) { mutableStateOf(product.optCleanString("description")) }
+  var price by remember(id) {
+    mutableStateOf(
+      product.optCleanString("vendor_base_price").ifBlank { product.optCleanString("price") }
+    )
+  }
+  var discount by remember(id) { mutableStateOf(product.optCleanString("discount_percent", "0").ifBlank { "0" }) }
+  var supplierCost by remember(id) { mutableStateOf(product.optCleanString("supplier_cost")) }
+  var fulfilment by remember(id) { mutableStateOf(product.optCleanString("fulfillment_expense", "0").ifBlank { "0" }) }
+  var minimumProfit by remember(id) { mutableStateOf(product.optCleanString("minimum_profit", "0").ifBlank { "0" }) }
+  var weight by remember(id) { mutableStateOf(product.optCleanString("weight_grams")) }
+  var specs by remember(id) { mutableStateOf((product.optJSONArray("specifications") ?: JSONArray()).toString(2)) }
+  var dimensions by remember(id) { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
+  var seoTitle by remember(id) { mutableStateOf(product.optCleanString("seo_title")) }
+  var seoDescription by remember(id) { mutableStateOf(product.optCleanString("seo_description")) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
 
-  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+  LaunchedEffect(id) {
+    runCatching { VendorService.listCategories() }.onSuccess { categories = it }
+    if (id.isNotBlank()) {
+      runCatching { VendorService.listProductImageUrls(id) }.onSuccess { existingImageUrls = it }
+    }
+  }
+
+  val totalImages = existingImageUrls.size + newImages.size
+  val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
+    val remaining = (8 - existingImageUrls.size - newImages.size).coerceAtLeast(0)
+    newImages = (newImages + selected.take(remaining)).distinct().take((8 - existingImageUrls.size).coerceAtLeast(0))
+    if (selected.size > remaining) errorMessage = "A product can have up to 8 images total."
+  }
+
+  Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Text("Edit product", style = MaterialTheme.typography.headlineSmall)
-      TextButton(onClick = onBack) { Text("Back") }
+      TextButton(onClick = onBack, enabled = !saving) { Text("Back") }
     }
     Text("Changes are sent through JTBazar product moderation. Stock remains managed separately in Inventory.", style = MaterialTheme.typography.bodySmall)
     EditProductField("Product name", name) { name = it }
     EditProductField("URL slug", slug) { slug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
     EditProductField("SKU", sku) { sku = it }
-    EditProductField("Category ID", category) { category = it }
+
+    var categoryExpanded by remember(id) { mutableStateOf(false) }
+    val selectedCategoryName = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
+      .firstOrNull { it.optSafeString("id") == category }?.optSafeString("name")
+      ?: if (category.isBlank()) "Select category" else category
+    ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = !categoryExpanded }) {
+      OutlinedTextField(
+        value = selectedCategoryName,
+        onValueChange = {},
+        readOnly = true,
+        label = { Text("Category") },
+        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) },
+        modifier = Modifier.fillMaxWidth().menuAnchor()
+      )
+      ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
+        for (i in 0 until categories.length()) {
+          val row = categories.optJSONObject(i) ?: continue
+          DropdownMenuItem(text = { Text(row.optSafeString("name")) }, onClick = {
+            category = row.optSafeString("id")
+            categoryExpanded = false
+          })
+        }
+      }
+    }
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+      Text("Product images ($totalImages/8)", style = MaterialTheme.typography.titleMedium)
+      TextButton(enabled = totalImages < 8 && !saving, onClick = { imagePicker.launch("image/*") }) { Text("Add images") }
+    }
+    if (existingImageUrls.isNotEmpty() || newImages.isNotEmpty()) {
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        existingImageUrls.take(4).forEach { url ->
+          AsyncImage(
+            model = url,
+            contentDescription = name,
+            modifier = Modifier.size(68.dp).clip(RoundedCornerShape(10.dp)),
+            contentScale = ContentScale.Crop
+          )
+        }
+      }
+      newImages.forEachIndexed { index, uri ->
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+          Row(Modifier.padding(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AsyncImage(
+              model = uri,
+              contentDescription = "New product image ${index + 1}",
+              modifier = Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)),
+              contentScale = ContentScale.Crop
+            )
+            Column(Modifier.weight(1f)) {
+              Text("New image ${index + 1}", style = MaterialTheme.typography.labelLarge)
+              TextButton(enabled = !saving, onClick = { newImages = newImages.filterIndexed { i, _ -> i != index } }) { Text("Remove") }
+            }
+          }
+        }
+      }
+    }
+
     EditProductField("Short description", shortDescription, 2) { shortDescription = it }
     EditProductField("Full description", description, 4) { description = it }
     EditProductField("Vendor base price (PKR)", price) { price = it.filter { ch -> ch.isDigit() || ch == '.' } }
@@ -83,6 +174,12 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
             .put("p_seo_title", seoTitle.trim().ifBlank { JSONObject.NULL })
             .put("p_seo_description", seoDescription.trim().ifBlank { JSONObject.NULL })
           VendorService.updateProductFull(id, payload)
+          newImages.forEach { uri ->
+            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Image could not be read.")
+            require(bytes.size <= 10 * 1024 * 1024) { "Each image must be 10 MB or smaller." }
+            VendorService.uploadProductImage(id, bytes, mime, name.trim())
+          }
           message = "Product details saved."
           onSaved()
         } catch (e: Exception) { errorMessage = e.message ?: "Product could not be updated." }
@@ -94,6 +191,9 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
     OutlinedButton(onClick = onBack, enabled = !saving, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
   }
 }
+
+private fun JSONObject.optSafeString(key: String, fallback: String = ""): String =
+  optString(key, fallback).takeUnless { it == "null" } ?: fallback
 
 @Composable
 private fun EditProductField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {

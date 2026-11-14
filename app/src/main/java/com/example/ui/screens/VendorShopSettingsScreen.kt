@@ -1,20 +1,18 @@
 package com.example.ui.screens
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
 import com.example.data.supabase.SupabaseClient
@@ -28,25 +26,26 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val currentUser by SupabaseClient.currentUser.collectAsState()
-  var shopName by remember { mutableStateOf(application.shopName) }
-  var slug by remember { mutableStateOf(application.slug) }
-  var vendorType by remember { mutableStateOf(application.vendorType) }
-  var ownerName by remember { mutableStateOf(application.ownerFullName) }
-  var cnic by remember { mutableStateOf(application.cnicNumber) }
-  var phone by remember { mutableStateOf(application.phone) }
-  var description by remember { mutableStateOf(application.description) }
-  var currentAddress by remember { mutableStateOf(application.currentAddress) }
-  var completeAddress by remember { mutableStateOf(application.completeAddress) }
-  var locationText by remember { mutableStateOf(application.shopLocationText) }
-  var locationLabel by remember { mutableStateOf(application.shopLocationText) }
-  var latitude by remember { mutableStateOf(application.shopLat?.toString().orEmpty()) }
-  var longitude by remember { mutableStateOf(application.shopLng?.toString().orEmpty()) }
-  var showOnMap by remember { mutableStateOf(application.showShopOnMap) }
-  var shopImageUri by remember { mutableStateOf<Uri?>(null) }
-  var shopImageUrl by remember { mutableStateOf(application.shopImageUrl) }
-  var documentPath by remember { mutableStateOf(application.documentPath) }
-  var frontPath by remember { mutableStateOf(application.cnicFrontPath) }
-  var backPath by remember { mutableStateOf(application.cnicBackPath) }
+  val resolvedEmail = accountEmail.ifBlank { application.contactEmail }
+  var shopName by remember(application.id) { mutableStateOf(application.shopName) }
+  var slug by remember(application.id) { mutableStateOf(application.slug) }
+  var vendorType by remember(application.id) { mutableStateOf(application.vendorType) }
+  var ownerName by remember(application.id) { mutableStateOf(application.ownerFullName) }
+  var cnic by remember(application.id) { mutableStateOf(application.cnicNumber) }
+  var phone by remember(application.id) { mutableStateOf(application.phone) }
+  var description by remember(application.id) { mutableStateOf(application.description) }
+  var currentAddress by remember(application.id) { mutableStateOf(application.currentAddress) }
+  var completeAddress by remember(application.id) { mutableStateOf(application.completeAddress) }
+  var locationText by remember(application.id) { mutableStateOf(application.shopLocationText) }
+  var locationLabel by remember(application.id) { mutableStateOf(application.shopLocationText) }
+  var latitude by remember(application.id) { mutableStateOf(application.shopLat?.toString().orEmpty()) }
+  var longitude by remember(application.id) { mutableStateOf(application.shopLng?.toString().orEmpty()) }
+  var showOnMap by remember(application.id) { mutableStateOf(application.showShopOnMap) }
+  var shopImageUri by remember(application.id) { mutableStateOf<Uri?>(null) }
+  var shopImageUrl by remember(application.id) { mutableStateOf(application.shopImageUrl) }
+  var documentPath by remember(application.id) { mutableStateOf(application.documentPath) }
+  var frontPath by remember(application.id) { mutableStateOf(application.cnicFrontPath) }
+  var backPath by remember(application.id) { mutableStateOf(application.cnicBackPath) }
   var documentKind by remember { mutableStateOf("verification") }
   var mapOpen by remember { mutableStateOf(false) }
   var saving by remember { mutableStateOf(false) }
@@ -73,12 +72,12 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
     }
   }
 
-  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+  Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Text("Shop settings", style = MaterialTheme.typography.headlineSmall)
     Text("Update the public details and private verification information associated with your seller account.", style = MaterialTheme.typography.bodySmall)
     ShopSettingsField("Shop name *", shopName) { shopName = it }
     ShopSettingsField("Shop URL slug *", slug) { slug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
-    OutlinedTextField(accountEmail, {}, label = { Text("Account email *") }, readOnly = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(resolvedEmail, {}, label = { Text("Account email *") }, readOnly = true, modifier = Modifier.fillMaxWidth())
     VendorTypeDropdown(vendorType) { vendorType = it }
     ShopSettingsField("Owner's full legal name *", ownerName) { ownerName = it }
     ShopSettingsField("CNIC number *", cnic) { cnic = it.filter(Char::isDigit).take(13) }
@@ -88,14 +87,21 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
     ShopSettingsField("Complete address *", completeAddress, 2) { completeAddress = it }
 
     Text("Public shop picture", style = MaterialTheme.typography.titleMedium)
-    OutlinedButton(onClick = { shopPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (shopImageUri == null && shopImageUrl.isNotBlank()) "Change shop picture" else "Choose shop picture") }
-    shopImageUri?.let { uri ->
-      val bitmap = remember(uri) { runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull() }
-      bitmap?.let { Image(bitmap = it, contentDescription = "Shop picture preview", modifier = Modifier.fillMaxWidth().height(180.dp), contentScale = ContentScale.Crop) }
+    OutlinedButton(onClick = { shopPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
+      Text(if (shopImageUri == null && shopImageUrl.isBlank()) "Choose shop picture" else "Change shop picture")
+    }
+    val previewModel: Any? = shopImageUri ?: shopImageUrl.takeIf { it.isNotBlank() }
+    if (previewModel != null) {
+      AsyncImage(
+        model = previewModel,
+        contentDescription = "Shop picture preview",
+        modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(12.dp)),
+        contentScale = ContentScale.Crop
+      )
     }
     Text("Shown on your public shop page. JPG, PNG, WebP or AVIF up to 5 MB.", style = MaterialTheme.typography.bodySmall)
 
-    Divider()
+    HorizontalDivider()
     Text("Explore map location", style = MaterialTheme.typography.titleMedium)
     ShopSettingsField("Public area label", locationLabel) { locationLabel = it }
     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -106,7 +112,7 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
     OutlinedButton(onClick = { mapOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("Choose / update shop map pin") }
     ShopSettingsField("Shop location / complete address for admin verification *", locationText, 2) { locationText = it }
 
-    Divider()
+    HorizontalDivider()
     Text("Private verification documents", style = MaterialTheme.typography.titleMedium)
     Text("Only authorized JTBazar marketplace administrators can open these files.", style = MaterialTheme.typography.bodySmall)
     OutlinedButton(onClick = { documentKind = "cnic-front"; documentPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (frontPath.isBlank()) "Upload CNIC front *" else "Replace saved CNIC front") }
@@ -121,7 +127,7 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
         saving = true; errorMessage = ""; info = ""
         try {
           require(shopName.trim().length >= 2 && slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid shop name and URL slug." }
-          require(accountEmail.isNotBlank() && accountEmail.trim().equals(currentUser?.email?.trim(), true)) { "Use the same verified email as your signed-in JTBazar account." }
+          require(resolvedEmail.isNotBlank() && resolvedEmail.trim().equals(currentUser?.email?.trim(), true)) { "Use the same verified email as your signed-in JTBazar account." }
           require(ownerName.trim().length >= 3 && cnic.matches(Regex("[0-9]{13}"))) { "Enter the owner's legal name and 13-digit CNIC." }
           require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani mobile number." }
           require(description.trim().length >= 10 && currentAddress.trim().length >= 3 && completeAddress.trim().length >= 10 && locationText.trim().length >= 10) { "Complete all required shop details." }
@@ -134,9 +140,10 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
             val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Shop picture could not be read.")
             shopImageUrl = VendorService.uploadShopImage(bytes, mime)
+            shopImageUri = null
           }
           VendorService.updateOwnShop(JSONObject()
-            .put("shop_name", shopName.trim()).put("slug", slug.trim()).put("contact_email", accountEmail.trim())
+            .put("shop_name", shopName.trim()).put("slug", slug.trim()).put("contact_email", resolvedEmail.trim())
             .put("vendor_type", vendorType).put("owner_full_name", ownerName.trim()).put("cnic_number", cnic)
             .put("phone", phone.trim()).put("description", description.trim())
             .put("current_address", currentAddress.trim()).put("complete_address", completeAddress.trim())
