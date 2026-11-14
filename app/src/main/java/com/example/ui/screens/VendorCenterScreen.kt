@@ -67,6 +67,9 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var application by remember { mutableStateOf<VendorApplication?>(null) }
   var isVendor by remember { mutableStateOf(false) }
   var products by remember { mutableStateOf(JSONArray()) }
+  var productDeletionRequests by remember { mutableStateOf(JSONArray()) }
+  var deletionTarget by remember { mutableStateOf<JSONObject?>(null) }
+  var deletionReason by remember { mutableStateOf("") }
   var orders by remember { mutableStateOf(JSONArray()) }
   var ordersSearch by remember { mutableStateOf("") }
   var ordersStatus by remember { mutableStateOf("all") }
@@ -107,6 +110,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
         isVendor = VendorService.isVendor()
         if (isVendor && application?.status == "approved") {
           products = VendorService.listProducts()
+          productDeletionRequests = VendorService.listProductDeletionRequests()
           orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus)
           ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
         }
@@ -268,8 +272,10 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 onSaved = { successMessage ->
                   showProductForm = false
                   info = successMessage
-                  try { products = VendorService.listProducts() }
-                  catch (e: Exception) { actionErrorMessage = e.message ?: "Listing was submitted, but the product list could not refresh." }
+                  try {
+                    products = VendorService.listProducts()
+                    productDeletionRequests = VendorService.listProductDeletionRequests()
+                  } catch (e: Exception) { actionErrorMessage = e.message ?: "Listing was submitted, but the product list could not refresh." }
                 }
               )
             }
@@ -279,6 +285,9 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               val id = p.optString("id")
               val name = p.optString("name", "Product")
               val hidden = p.optBoolean("vendor_hidden", p.optBoolean("is_hidden", false))
+              val deletionRequest = (0 until productDeletionRequests.length()).mapNotNull { productDeletionRequests.optJSONObject(it) }
+                .filter { it.optString("product_id") == id }.maxByOrNull { it.optString("created_at") }
+              val deletionStatus = deletionRequest?.optString("status").orEmpty().lowercase()
               var productImageUrl by remember(id) { mutableStateOf("") }
               LaunchedEffect(id) {
                 try { productImageUrl = VendorService.listProductImageUrls(id).firstOrNull().orEmpty() }
@@ -318,6 +327,13 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                       TextButton(onClick = {
                         scope.launch { saving = true; actionErrorMessage = ""; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { actionErrorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
                       }, enabled = !saving) { Text(if (hidden) "Show" else "Hide") }
+                    }
+                    if (deletionStatus == "pending") {
+                      Text("Deletion requested", color = Color(0xFF9A6700), style = MaterialTheme.typography.labelSmall)
+                    } else {
+                      TextButton(onClick = { deletionTarget = p; deletionReason = "" }, enabled = !saving) {
+                        Text(if (deletionStatus == "rejected") "Request again" else "Request deletion", color = Color(0xFFB91C1C))
+                      }
                     }
                   }
                   if (rejected) {
@@ -643,6 +659,39 @@ private fun VendorField(label: String, value: String, minLines: Int = 1, onChang
 private fun DocumentButton(label: String, uploaded: Boolean, onClick: () -> Unit) {
   OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(if (uploaded) "✓ $label uploaded" else "Upload $label") }
 }
+
+
+  if (deletionTarget != null) {
+    val target = deletionTarget!!
+    AlertDialog(
+      onDismissRequest = { if (!saving) deletionTarget = null },
+      title = { Text("Request product deletion") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("This sends a request to JTBazar for review. The product will not be deleted immediately.")
+          Text(target.optString("name", "Product"), fontWeight = FontWeight.SemiBold)
+          OutlinedTextField(value = deletionReason, onValueChange = { deletionReason = it },
+            label = { Text("Reason for deletion") }, modifier = Modifier.fillMaxWidth(),
+            minLines = 3, enabled = !saving)
+        }
+      },
+      confirmButton = {
+        TextButton(enabled = !saving && deletionReason.trim().length >= 3, onClick = {
+          scope.launch {
+            saving = true; actionErrorMessage = ""
+            try {
+              VendorService.requestProductDeletion(target.optString("id"), deletionReason)
+              productDeletionRequests = VendorService.listProductDeletionRequests()
+              info = "Product deletion request submitted for JTBazar review."
+              deletionTarget = null
+            } catch (e: Exception) { actionErrorMessage = e.message ?: "Deletion request could not be submitted." }
+            finally { saving = false }
+          }
+        }) { Text(if (saving) "Submitting…" else "Submit request", color = Color(0xFFB91C1C)) }
+      },
+      dismissButton = { TextButton(onClick = { deletionTarget = null }, enabled = !saving) { Text("Cancel") } }
+    )
+  }
 
 @Composable
 private fun VendorDashboardHero(shopName: String, onRefresh: () -> Unit, refreshing: Boolean) {
