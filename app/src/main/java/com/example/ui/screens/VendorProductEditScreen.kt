@@ -20,6 +20,7 @@ import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 private fun JSONObject.vendorEditCleanString(key: String, fallback: String = ""): String =
   optString(key, fallback).takeUnless { it == "null" } ?: fallback
