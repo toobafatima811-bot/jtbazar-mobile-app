@@ -222,6 +222,27 @@ object VendorService {
     fail(SupabaseClient.rpc("vendor_set_product_inventory", params.toString()))
   }
 
+  suspend fun updateFoodProductDetails(
+    productId: String, sellingUnit: String, unitPrice: Double, quantityIncrement: Int,
+    minimumQuantity: Int, isDailyItem: Boolean, dailyStatus: String, dailyAvailableQuantity: Int
+  ) {
+    require(sellingUnit in setOf("kg", "g", "l", "ml", "piece", "dozen", "pack")) { "Select a valid food selling unit." }
+    require(unitPrice >= 0 && quantityIncrement >= 1 && minimumQuantity >= 1 && dailyAvailableQuantity >= 0) {
+      "Enter valid food unit price and quantities."
+    }
+    require(dailyStatus in setOf("available", "not_today", "coming_soon")) { "Select a valid daily availability status." }
+    val params = JSONObject()
+      .put("p_product_id", productId)
+      .put("p_selling_unit", sellingUnit)
+      .put("p_unit_price", unitPrice)
+      .put("p_quantity_increment", quantityIncrement)
+      .put("p_minimum_quantity", minimumQuantity)
+      .put("p_is_daily_item", isDailyItem)
+      .put("p_daily_status", dailyStatus)
+      .put("p_daily_available_quantity", dailyAvailableQuantity)
+    fail(SupabaseClient.rpc("vendor_update_food_product_details", params.toString()))
+  }
+
   suspend fun setFoodProductDetails(productId: String, sellingUnit: String, unitPrice: Double, quantityIncrement: Int, minimumQuantity: Int) {
     require(sellingUnit in setOf("kg", "g", "l", "ml", "piece", "dozen", "pack")) { "Select a valid food selling unit." }
     require(unitPrice >= 0 && quantityIncrement >= 1 && minimumQuantity >= 1) { "Enter valid food unit pricing and quantities." }
