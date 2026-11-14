@@ -54,6 +54,9 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   var subject by remember { mutableStateOf("") }
   var ticketMessage by remember { mutableStateOf("") }
   var responseText by remember { mutableStateOf("") }
+  var selectedSupportTicketId by remember { mutableStateOf<String?>(null) }
+  var supportMessages by remember { mutableStateOf(JSONArray()) }
+  var supportReply by remember { mutableStateOf("") }
 
   fun reload() {
     scope.launch {
@@ -404,6 +407,33 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
           Text("${ticket.optString("subject")} • ${ticket.optString("status", "open")}")
           Text(ticket.optString("message"), style = MaterialTheme.typography.bodySmall)
           if (ticket.optString("admin_response").isNotBlank()) Text("Admin reply: ${ticket.optString("admin_response")}")
+          TextButton(enabled = !saving, onClick = {
+            val id = ticket.optString("id")
+            selectedSupportTicketId = id
+            scope.launch {
+              try { supportMessages = VendorService.listSupportMessages(id) }
+              catch (e: Exception) { errorMessage = e.message ?: "Support conversation could not be loaded." }
+            }
+          }) { Text(if (selectedSupportTicketId == ticket.optString("id")) "Refresh conversation" else "Open conversation") }
+          if (selectedSupportTicketId == ticket.optString("id")) {
+            for (m in 0 until supportMessages.length()) {
+              val msg = supportMessages.optJSONObject(m) ?: continue
+              Text("${msg.optString("sender_role", "support").replaceFirstChar { it.uppercase() }}: ${msg.optString("message")}", style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedTextField(value = supportReply, onValueChange = { supportReply = it.take(4000) }, label = { Text("Reply to support") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+            Button(enabled = !saving && supportReply.isNotBlank(), onClick = {
+              scope.launch {
+                saving = true
+                try {
+                  VendorService.sendSupportMessage(ticket.optString("id"), supportReply)
+                  supportReply = ""
+                  supportMessages = VendorService.listSupportMessages(ticket.optString("id"))
+                  message = "Support reply sent."
+                } catch (e: Exception) { errorMessage = e.message ?: "Support reply could not be sent." }
+                finally { saving = false }
+              }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Send reply") }
+          }
         }
       }
     }
