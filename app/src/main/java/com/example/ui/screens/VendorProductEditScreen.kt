@@ -54,7 +54,11 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   var seoTitle by remember(id) { mutableStateOf(product.optCleanString("seo_title")) }
   var seoDescription by remember(id) { mutableStateOf(product.optCleanString("seo_description")) }
   var foodUnit by remember(id) { mutableStateOf(product.optCleanString("food_selling_unit", "kg").ifBlank { "kg" }) }
-  var foodUnitPrice by remember(id) { mutableStateOf(product.optCleanString("food_unit_price").ifBlank { price }) }
+  var foodUnitPrice by remember(id) { mutableStateOf(run {
+    val savedCustomerUnitPrice = product.optCleanString("food_unit_price").toDoubleOrNull()
+    val commission = product.optCleanString("commission_percent", "0").toDoubleOrNull() ?: 0.0
+    if (savedCustomerUnitPrice != null && commission >= 0) (savedCustomerUnitPrice / (1.0 + commission / 100.0)).toString() else price
+  }) }
   var foodStep by remember(id) { mutableStateOf(product.optCleanString("food_quantity_increment", "250").ifBlank { "250" }) }
   var foodMinimum by remember(id) { mutableStateOf(product.optCleanString("food_minimum_quantity", "1").ifBlank { "1" }) }
   var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
