@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.UUID
 
 private data class ListingVariant(
   val optionName: String = "Size",
@@ -150,7 +151,9 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
         saving = true; errorMessage = ""; message = ""
         try {
           require(name.trim().length >= 2) { "Enter a product name." }
-          val productSlug = slug.ifBlank { "product-${System.currentTimeMillis()}" }
+          val baseSlug = slug.ifBlank { "product" }
+          // Marketplace product slugs are globally unique across all sellers.
+          val productSlug = "$baseSlug-${UUID.randomUUID().toString().take(6)}"
           require(productSlug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid slug." }
           require(categoryId.isNotBlank()) { "Select a category." }
           val basePrice = fieldNumber(price, "selling price")
@@ -194,7 +197,15 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
           }
           message = "Listing submitted for moderation."
           onSaved()
-        } catch (e: Exception) { errorMessage = e.message ?: "Listing could not be submitted." }
+        } catch (e: Exception) {
+          val details = generateSequence(e as Throwable?) { it.cause }.mapNotNull { it.message }.joinToString(" ").lowercase()
+          errorMessage = when {
+            details.contains("products_sku_unique_idx") || details.contains("product_variants_sku_unique_idx") || (details.contains("already exists") && details.contains("sku")) -> "This SKU is already being used. Enter a unique SKU for this product or variant."
+            details.contains("products_slug_key") -> "This product URL is already in use. Please change the slug and try again."
+            details.contains("row-level security") || details.contains("accessdenied") -> "Image upload was blocked by storage permissions. Please retry; if it continues, contact JTBazar support."
+            else -> e.message ?: "Listing could not be submitted."
+          }
+        }
         finally { saving = false }
       }
     }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
