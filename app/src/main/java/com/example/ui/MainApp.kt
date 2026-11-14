@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -39,6 +40,7 @@ import com.example.data.repository.CampaignPopupManager
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.GlobalLoadingState
+import com.example.data.supabase.NetworkConnectivity
 import com.example.ui.components.CampaignLaunchPopupDialog
 import com.example.ui.components.JTBazarPullRefresh
 import com.example.ui.screens.*
@@ -90,7 +92,14 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
   val isGlobalLoading by GlobalLoadingState.active.collectAsState()
-  val showGlobalLoader = isGlobalLoading || isPlacingOrder || (isCatalogLoading && products.isEmpty())
+  val hasInternet by NetworkConnectivity.isOnline.collectAsState()
+  val context = LocalContext.current
+  DisposableEffect(context) {
+    NetworkConnectivity.start(context)
+    onDispose { NetworkConnectivity.stop(context) }
+  }
+  val showGlobalLoader = hasInternet != false &&
+    (isGlobalLoading || isPlacingOrder || (isCatalogLoading && products.isEmpty()))
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -690,6 +699,36 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
       }
       }
 
+      if (hasInternet == false) {
+        Surface(
+          modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().testTag("offline_connection_banner"),
+          color = Color(0xFFFFF1F0),
+          shadowElevation = 4.dp
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            Icon(Icons.Filled.WifiOff, contentDescription = null, tint = Color(0xFFB42318))
+            Column(modifier = Modifier.weight(1f)) {
+              Text("No internet connection", color = Color(0xFF912018), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              Text("Check your Wi-Fi or mobile data, then retry.", color = Color(0xFF7A271A), fontSize = 11.sp)
+            }
+            TextButton(
+              onClick = {
+                pullRefreshScope.launch {
+                  MarketplaceRepository.refreshLiveCatalogSuspending(showLoading = false, refreshUserData = true)
+                  MarketplaceRepository.refreshShops()
+                }
+              }
+            ) {
+              Text("Retry", color = Color(0xFFB42318), fontWeight = FontWeight.Bold)
+            }
+          }
+        }
+      }
+
       val activeCampaignPopup by CampaignPopupManager.activePopupCampaign.collectAsState()
       if (activeCampaignPopup != null && currentScreen != AppScreen.SPLASH) {
         CampaignLaunchPopupDialog(
@@ -725,12 +764,23 @@ private fun GlobalLoadingOverlay() {
       ),
     contentAlignment = Alignment.Center
   ) {
-    AsyncImage(
-      model = R.drawable.jtbazar_mascot_loader,
-      imageLoader = gifImageLoader,
-      contentDescription = "JTBazar loading",
-      contentScale = ContentScale.Fit,
-      modifier = Modifier.size(190.dp)
-    )
+    Column(
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+      AsyncImage(
+        model = R.drawable.jtbazar_mascot_loader,
+        imageLoader = gifImageLoader,
+        contentDescription = "JTBazar loading",
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.size(160.dp)
+      )
+      CircularProgressIndicator(
+        modifier = Modifier.size(34.dp),
+        color = JTOrange,
+        strokeWidth = 3.dp
+      )
+      Text("Please wait, loading...", color = JTTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
   }
 }
