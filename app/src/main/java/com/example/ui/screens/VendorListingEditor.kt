@@ -95,7 +95,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
     Text("Add product information, pricing, images and stock details.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
     Text("PRODUCT INFORMATION", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     Text("Product name", style = MaterialTheme.typography.labelLarge)
-    OutlinedTextField(name, { name = it; if (slug.isBlank() || slug == nameToSlug(name.dropLast(1))) slug = nameToSlug(it) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+    OutlinedTextField(name, { name = it; if (slug.isBlank() || slug == nameToSlug(name.dropLast(1))) slug = nameToSlug(it) }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, unfocusedBorderColor = Color(0xFFD7DFEA), unfocusedContainerColor = Color.White.copy(alpha = 0.72f), focusedContainerColor = Color.White.copy(alpha = 0.90f)))
     ListingField("Slug", slug) { slug = it.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
     ListingField("SKU", sku) { sku = it }
     Text("CATEGORY", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
@@ -103,7 +103,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
     var categoryExpanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = !categoryExpanded }) {
       val selectedCategory = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }.firstOrNull { it.optString("id") == categoryId }
-      OutlinedTextField(selectedCategory?.optString("name") ?: "", {}, readOnly = true, label = { Text("Select category") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+      OutlinedTextField(selectedCategory?.optString("name") ?: "", {}, readOnly = true, label = { Text("Select category") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, unfocusedBorderColor = Color(0xFFD7DFEA), unfocusedContainerColor = Color.White.copy(alpha = 0.72f), focusedContainerColor = Color.White.copy(alpha = 0.90f)))
       ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
         for (i in 0 until categories.length()) {
           val category = categories.optJSONObject(i) ?: continue
