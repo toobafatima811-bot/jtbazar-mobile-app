@@ -29,7 +29,7 @@ private data class ListingVariant(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
+fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   var categories by remember { mutableStateOf(JSONArray()) }
@@ -149,6 +149,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
     Button(enabled = !saving, onClick = {
       scope.launch {
         saving = true; errorMessage = ""; message = ""
+        var createdProductId: String? = null
         try {
           require(name.trim().length >= 2) { "Enter a product name." }
           val baseSlug = slug.ifBlank { "product" }
@@ -188,6 +189,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
             discountValue, weight.toIntOrNull(), specs, dims, seoTitle.trim().ifBlank { null },
             seoDescription.trim().ifBlank { null }, trackInventory
           )
+          createdProductId = id
           if (variantJson.length() > 0) VendorService.saveVariants(id, variantJson)
           images.forEachIndexed { index, uri ->
             val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
@@ -196,10 +198,12 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend () -> Unit) {
             VendorService.uploadProductImage(id, bytes, mime, name)
           }
           message = "Listing submitted for moderation."
-          onSaved()
+          onSaved(message)
         } catch (e: Exception) {
           val details = generateSequence(e as Throwable?) { it.cause }.mapNotNull { it.message }.joinToString(" ").lowercase()
-          errorMessage = when {
+          if (createdProductId != null) {
+            onSaved("Product created as a draft, but variants or images could not all be saved. Do not submit it again. Please contact JTBazar support: ${e.message ?: "Additional product data failed."}")
+          } else errorMessage = when {
             details.contains("products_sku_unique_idx") || details.contains("product_variants_sku_unique_idx") || (details.contains("already exists") && details.contains("sku")) -> "This SKU is already being used. Enter a unique SKU for this product or variant."
             details.contains("products_slug_key") -> "This product URL is already in use. Please change the slug and try again."
             details.contains("row-level security") || details.contains("accessdenied") -> "Image upload was blocked by storage permissions. Please retry; if it continues, contact JTBazar support."
