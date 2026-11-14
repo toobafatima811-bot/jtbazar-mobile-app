@@ -62,7 +62,7 @@ fun VendorInventoryPanel() {
           Text(rows.length().toString(), color = Color(0xFF17243A), style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         }
       }
-      Card(Modifier.weight(1f), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))) {
+      Card(Modifier.weight(1f), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.72f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(Modifier.padding(14.dp)) {
           Text("Total units", color = Color(0xFF718096), style = MaterialTheme.typography.labelSmall)
           Text((0 until rows.length()).sumOf { rows.optJSONObject(it)?.optInt("quantity") ?: 0 }.toString(), color = Color(0xFF17243A), style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
