@@ -20,6 +20,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -158,21 +163,60 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { refresh() }) { Text("Refresh status") }
           }
           isVendor && application?.status == "approved" -> {
-            Text("Vendor Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            ScrollableTabRow(selectedTabIndex = listOf("overview", "listings", "inventory", "fulfilment", "tools").indexOf(vendorTab).coerceAtLeast(0), edgePadding = 0.dp) {
-              listOf("overview" to "Overview", "listings" to "Listings", "inventory" to "Inventory", "fulfilment" to "Fulfilment", "tools" to "More tools").forEach { item ->
-                Tab(selected = vendorTab == item.first, onClick = { vendorTab = item.first }, text = { Text(item.second) })
-              }
-            }
+            VendorDashboardHero(
+              shopName = application?.shopName.orEmpty(),
+              onRefresh = { refresh() },
+              refreshing = loading
+            )
+            VendorDashboardTabs(
+              selected = vendorTab,
+              onSelect = { vendorTab = it }
+            )
             when (vendorTab) {
               "overview" -> {
+                Text("Your business at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF17243A))
+                Text("A live snapshot of your JTBazar shop activity.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                  SummaryTile("Listings", products.length().toString(), Modifier.weight(1f))
-                  SummaryTile("Open fulfilment", orders.length().toString(), Modifier.weight(1f))
+                  VendorMetricCard("Total listings", products.length().toString(), "Products in your shop", Icons.Default.ShoppingBag, Modifier.weight(1f))
+                  VendorMetricCard("Order items", ordersTotal.toString(), "Across your fulfilment", Icons.Default.ReceiptLong, Modifier.weight(1f))
                 }
-                Text("Recent listings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                if (products.length() == 0) Text("No listings yet. Create your first listing.")
-                TextButton(onClick = { vendorTab = "listings"; showProductForm = true }) { Icon(Icons.Default.Add, null); Text("Create a listing") }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                  VendorMetricCard("Current page", orders.length().toString(), "Items to prepare", Icons.Default.LocalShipping, Modifier.weight(1f))
+                  VendorMetricCard("Shop status", "Active", "Approved seller", Icons.Default.TrendingUp, Modifier.weight(1f))
+                }
+                Card(
+                  modifier = Modifier.fillMaxWidth(),
+                  shape = RoundedCornerShape(20.dp),
+                  colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4EC))
+                ) {
+                  Row(Modifier.fillMaxWidth().padding(17.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(44.dp).background(Color.White, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                      Icon(Icons.Default.Add, null, tint = JTOrange, modifier = Modifier.size(24.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                      Text("Grow your shop", color = Color(0xFF17243A), fontWeight = FontWeight.Bold)
+                      Text("Add a new product listing and make it available to JTBazar customers.", color = Color(0xFF66758A), style = MaterialTheme.typography.bodySmall)
+                    }
+                    IconButton(onClick = { vendorTab = "listings"; showProductForm = true }) {
+                      Icon(Icons.Default.ChevronRight, contentDescription = "Create listing", tint = JTOrange)
+                    }
+                  }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Text("Recent listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF17243A))
+                  Spacer(Modifier.weight(1f))
+                  TextButton(onClick = { vendorTab = "listings" }) { Text("View all", color = JTOrange) }
+                }
+                if (products.length() == 0) {
+                  VendorEmptyState("No products listed yet", "Your product listings will appear here once you add them.", "Add your first product") {
+                    vendorTab = "listings"; showProductForm = true
+                  }
+                } else {
+                  for (i in 0 until minOf(products.length(), 4)) {
+                    val product = products.optJSONObject(i) ?: continue
+                    VendorCompactProductCard(product)
+                  }
+                }
               }
               "listings" -> {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -497,6 +541,121 @@ private fun VendorField(label: String, value: String, minLines: Int = 1, onChang
 private fun DocumentButton(label: String, uploaded: Boolean, onClick: () -> Unit) {
   OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(if (uploaded) "✓ $label uploaded" else "Upload $label") }
 }
+
+@Composable
+private fun VendorDashboardHero(shopName: String, onRefresh: () -> Unit, refreshing: Boolean) {
+  Card(
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(24.dp),
+    colors = CardDefaults.cardColors(containerColor = Color(0xFF17243A))
+  ) {
+    Box(Modifier.fillMaxWidth()) {
+      Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Surface(color = Color(0x33FFFFFF), shape = RoundedCornerShape(50)) {
+            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+              Box(Modifier.size(7.dp).background(Color(0xFF58D68D), RoundedCornerShape(50)))
+              Spacer(Modifier.width(7.dp))
+              Text("SELLER ACCOUNT ACTIVE", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            }
+          }
+          Spacer(Modifier.weight(1f))
+          IconButton(onClick = onRefresh, enabled = !refreshing) {
+            if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+            else Icon(Icons.Default.Refresh, contentDescription = "Refresh dashboard", tint = Color.White)
+          }
+        }
+        Text("Welcome to your shop", color = Color(0xFFFFC49E), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Text(shopName.ifBlank { "Vendor Dashboard" }, color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+        Text("Manage products, prepare orders and keep your business moving.", color = Color(0xFFD5DDEA), style = MaterialTheme.typography.bodyMedium)
+      }
+    }
+  }
+}
+
+@Composable
+private fun VendorDashboardTabs(selected: String, onSelect: (String) -> Unit) {
+  val tabs = listOf(
+    "overview" to ("Overview" to Icons.Default.Storefront),
+    "listings" to ("Products" to Icons.Default.ShoppingBag),
+    "inventory" to ("Inventory" to Icons.Default.Inventory2),
+    "fulfilment" to ("Orders" to Icons.Default.LocalShipping),
+    "tools" to ("More tools" to Icons.Default.TrendingUp)
+  )
+  ScrollableTabRow(
+    selectedTabIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0),
+    edgePadding = 0.dp,
+    containerColor = Color.White,
+    contentColor = JTOrange,
+    indicator = {},
+    divider = {}
+  ) {
+    tabs.forEach { item ->
+      val active = selected == item.first
+      Surface(
+        onClick = { onSelect(item.first) },
+        shape = RoundedCornerShape(14.dp),
+        color = if (active) Color(0xFFFFEEE4) else Color(0xFFF5F7FA),
+        modifier = Modifier.padding(end = 8.dp)
+      ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+          Icon(item.second.second, null, tint = if (active) JTOrange else Color(0xFF718096), modifier = Modifier.size(17.dp))
+          Text(item.second.first, color = if (active) JTOrange else Color(0xFF526176), fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, style = MaterialTheme.typography.labelLarge)
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun VendorMetricCard(title: String, value: String, detail: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
+  Card(
+    modifier = modifier,
+    shape = RoundedCornerShape(18.dp),
+    colors = CardDefaults.cardColors(containerColor = Color.White),
+    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE9EDF3))
+  ) {
+    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+      Box(Modifier.size(36.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+        Icon(icon, null, tint = JTOrange, modifier = Modifier.size(19.dp))
+      }
+      Text(value, color = Color(0xFF17243A), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+      Text(title, color = Color(0xFF26354A), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+      Text(detail, color = Color(0xFF8290A2), style = MaterialTheme.typography.labelSmall)
+    }
+  }
+}
+
+@Composable
+private fun VendorEmptyState(title: String, description: String, action: String, onAction: () -> Unit) {
+  Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F9FC))) {
+    Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Icon(Icons.Default.Inventory2, null, tint = Color(0xFF9AA7B8), modifier = Modifier.size(34.dp))
+      Text(title, color = Color(0xFF25344A), fontWeight = FontWeight.Bold)
+      Text(description, color = Color(0xFF718096), style = MaterialTheme.typography.bodySmall)
+      TextButton(onClick = onAction) { Text(action, color = JTOrange, fontWeight = FontWeight.Bold) }
+    }
+  }
+}
+
+@Composable
+private fun VendorCompactProductCard(product: JSONObject) {
+  Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE9EDF3))) {
+    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+      Box(Modifier.size(46.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+        Icon(Icons.Default.Inventory2, null, tint = JTOrange)
+      }
+      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(product.optString("name", "Product"), color = Color(0xFF25344A), fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text("PKR ${product.optString("price", "0")}", color = Color(0xFF718096), style = MaterialTheme.typography.bodySmall)
+      }
+      Surface(color = Color(0xFFEAF8F0), shape = RoundedCornerShape(50)) {
+        Text(product.optString("publication_status", product.optString("status", "draft")).replace('_', ' '), modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color(0xFF187548), style = MaterialTheme.typography.labelSmall)
+      }
+    }
+  }
+}
+
 @Composable
 private fun SummaryTile(label: String, value: String, modifier: Modifier = Modifier) {
   Card(modifier) { Column(Modifier.padding(16.dp)) { Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Text(label, color = Color.Gray) } }
