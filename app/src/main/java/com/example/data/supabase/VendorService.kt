@@ -135,7 +135,7 @@ object VendorService {
     val ext = when (normalizedMime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
     val path = "${user.id}/$productId/${System.currentTimeMillis()}-${UUID.randomUUID()}.$ext"
     val url = try {
-      SupabaseClient.uploadPublicFile("product-images", path, bytes, normalizedMime).getOrThrow()
+      SupabaseClient.uploadPublicFile("product-images", path, bytes, normalizedMime, upsert = false).getOrThrow()
     } catch (e: Exception) {
       throw IOException("Image upload to Supabase Storage failed (${e.message ?: "unknown storage error"}). Product was created, but its image was not uploaded.", e)
     }
