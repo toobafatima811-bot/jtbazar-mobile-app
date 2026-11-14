@@ -60,6 +60,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   var selectedSupportTicketId by remember { mutableStateOf<String?>(null) }
   var supportMessages by remember { mutableStateOf(JSONArray()) }
   var supportReply by remember { mutableStateOf("") }
+  var productCategories by remember { mutableStateOf(JSONArray()) }
 
   fun reload() {
     scope.launch {
@@ -71,7 +72,11 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       if (failures.isNotEmpty()) errorMessage = failures.joinToString("\n")
     }
   }
-  LaunchedEffect(application.id) { reload() }
+  LaunchedEffect(application.id) {
+    reload()
+    try { productCategories = VendorService.listCategories() }
+    catch (e: Exception) { errorMessage = e.message ?: "Product categories could not be loaded." }
+  }
   LaunchedEffect(selectedSupportTicketId) {
     val ticketId = selectedSupportTicketId ?: return@LaunchedEffect
     while (true) {
@@ -224,7 +229,28 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             VendorAdvancedField("Product name", editName) { editName = it }
             VendorAdvancedField("Product URL slug", editSlug) { editSlug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
             VendorAdvancedField("Product SKU", editSku) { editSku = it }
-            VendorAdvancedField("Category ID", editCategory) { editCategory = it }
+            var categoryExpanded by remember(id) { mutableStateOf(false) }
+            val selectedCategoryName = (0 until productCategories.length()).mapNotNull { productCategories.optJSONObject(it) }
+              .firstOrNull { it.optString("id") == editCategory }?.optString("name") ?: "Select category"
+            ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = !categoryExpanded }) {
+              OutlinedTextField(
+                value = selectedCategoryName,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Category") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor()
+              )
+              ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
+                for (categoryIndex in 0 until productCategories.length()) {
+                  val category = productCategories.optJSONObject(categoryIndex) ?: continue
+                  DropdownMenuItem(text = { Text(category.optString("name")) }, onClick = {
+                    editCategory = category.optString("id")
+                    categoryExpanded = false
+                  })
+                }
+              }
+            }
             VendorAdvancedField("Short description", editShortDescription, 2) { editShortDescription = it }
             VendorAdvancedField("Full description", editDescription, 4) { editDescription = it }
             VendorAdvancedField("Vendor base price (PKR)", editPrice) { editPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
