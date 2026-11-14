@@ -96,7 +96,7 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
     if (selected.size > remaining) errorMessage = "A product can have up to 8 images total."
   }
 
-  Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+  Column(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.70f), RoundedCornerShape(26.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Text("Edit product", style = MaterialTheme.typography.headlineSmall)
       TextButton(onClick = onBack, enabled = !saving) { Text("Back") }
@@ -170,7 +170,7 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
           }
         }
         newImages.forEachIndexed { index, uri ->
-          Card(Modifier.width(104.dp), shape = RoundedCornerShape(12.dp)) {
+          Card(Modifier.width(104.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.74f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
             Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
               AsyncImage(
                 model = uri,
@@ -332,5 +332,5 @@ private fun categoryTreeContainsFood(categories: JSONArray, selectedId: String):
 
 @Composable
 private fun EditProductField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
-  OutlinedTextField(value, onChange, label = { Text(label, style = MaterialTheme.typography.bodySmall) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1, shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, focusedLabelColor = JTOrange))
+  OutlinedTextField(value, onChange, label = { Text(label, style = MaterialTheme.typography.bodySmall) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1, shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, focusedLabelColor = JTOrange, unfocusedBorderColor = Color(0xFFD7DFEA), unfocusedContainerColor = Color.White.copy(alpha = 0.72f), focusedContainerColor = Color.White.copy(alpha = 0.90f)))
 }
