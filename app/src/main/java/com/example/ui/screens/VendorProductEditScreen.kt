@@ -53,6 +53,13 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   var dimensions by remember(id) { mutableStateOf((product.optJSONObject("dimensions") ?: JSONObject()).toString(2)) }
   var seoTitle by remember(id) { mutableStateOf(product.optCleanString("seo_title")) }
   var seoDescription by remember(id) { mutableStateOf(product.optCleanString("seo_description")) }
+  var foodUnit by remember(id) { mutableStateOf(product.optCleanString("food_selling_unit", "kg").ifBlank { "kg" }) }
+  var foodUnitPrice by remember(id) { mutableStateOf(product.optCleanString("food_unit_price").ifBlank { price }) }
+  var foodStep by remember(id) { mutableStateOf(product.optCleanString("food_quantity_increment", "250").ifBlank { "250" }) }
+  var foodMinimum by remember(id) { mutableStateOf(product.optCleanString("food_minimum_quantity", "1").ifBlank { "1" }) }
+  var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
+  var dailyStatus by remember(id) { mutableStateOf(product.optCleanString("daily_status", "available").ifBlank { "available" }) }
+  var dailyQuantity by remember(id) { mutableStateOf(product.optCleanString("daily_available_quantity", "0").ifBlank { "0" }) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
@@ -65,6 +72,18 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   }
 
   val totalImages = existingImageUrls.size + newImages.size
+  fun isFoodCategory(categoryId: String): Boolean {
+    var currentId: String? = categoryId.takeIf { it.isNotBlank() }
+    val visited = mutableSetOf<String>()
+    while (currentId != null && visited.add(currentId)) {
+      val row = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
+        .firstOrNull { it.optSafeString("id") == currentId } ?: return false
+      if (row.optBoolean("is_food_category") || row.optSafeString("slug") == "food-groceries") return true
+      currentId = row.optSafeString("parent_id").takeIf { it.isNotBlank() && it != "null" }
+    }
+    return false
+  }
+  val showFoodFields = isFoodCategory(category) || product.optCleanString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
     val remaining = (8 - existingImageUrls.size - newImages.size).coerceAtLeast(0)
     newImages = (newImages + selected.take(remaining)).distinct().take((8 - existingImageUrls.size).coerceAtLeast(0))
@@ -99,6 +118,10 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
           val row = categories.optJSONObject(i) ?: continue
           DropdownMenuItem(text = { Text(row.optSafeString("name")) }, onClick = {
             category = row.optSafeString("id")
+            if (row.optBoolean("is_food_category") || row.optSafeString("slug") == "food-groceries") {
+              if (foodUnit.isBlank()) foodUnit = "kg"
+              if (foodStep.isBlank()) foodStep = if (foodUnit == "kg" || foodUnit == "l") "250" else "1"
+            }
             categoryExpanded = false
           })
         }
@@ -150,13 +173,48 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
     EditProductField("Dimensions (JSON object)", dimensions, 3) { dimensions = it }
     EditProductField("SEO title", seoTitle) { seoTitle = it }
     EditProductField("SEO description", seoDescription, 2) { seoDescription = it }
+    if (showFoodFields) {
+      HorizontalDivider()
+      Text("Food & groceries", style = MaterialTheme.typography.titleMedium)
+      var unitExpanded by remember(id) { mutableStateOf(false) }
+      val units = listOf("kg" to "Kilogram (kg)", "g" to "Gram (g)", "l" to "Litre (L)", "ml" to "Millilitre (ml)", "piece" to "Piece", "dozen" to "Dozen", "pack" to "Pack")
+      ExposedDropdownMenuBox(expanded = unitExpanded, onExpandedChange = { unitExpanded = !unitExpanded }) {
+        OutlinedTextField(value = units.firstOrNull { it.first == foodUnit }?.second ?: "Kilogram (kg)", onValueChange = {}, readOnly = true, label = { Text("Selling unit") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(unitExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+        ExposedDropdownMenu(expanded = unitExpanded, onDismissRequest = { unitExpanded = false }) {
+          units.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = {
+            foodUnit = value
+            foodStep = if (value == "kg" || value == "l") "250" else if (value == "g" || value == "ml") "100" else "1"
+            unitExpanded = false
+          }) }
+        }
+      }
+      EditProductField("Price per ${foodUnit} (PKR)", foodUnitPrice) { foodUnitPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
+      EditProductField("Customer quantity step (${if (foodUnit == "kg") "grams" else if (foodUnit == "l") "ml" else "units"})", foodStep) { foodStep = it.filter(Char::isDigit) }
+      Text("For kg/litre the step is grams/ml; for dozen, piece and pack it is units.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      EditProductField("Minimum purchase steps", foodMinimum) { foodMinimum = it.filter(Char::isDigit) }
+      Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Checkbox(checked = dailyItem, onCheckedChange = { dailyItem = it })
+        Text("Manage as a daily dish / daily food item")
+      }
+      if (dailyItem) {
+        var statusExpanded by remember(id) { mutableStateOf(false) }
+        val statuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
+        ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = !statusExpanded }) {
+          OutlinedTextField(value = statuses.firstOrNull { it.first == dailyStatus }?.second ?: "Available today", onValueChange = {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+          ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
+            statuses.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { dailyStatus = value; statusExpanded = false }) }
+          }
+        }
+        EditProductField("Today's available quantity", dailyQuantity) { dailyQuantity = it.filter(Char::isDigit) }
+      }
+    }
     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
     Button(enabled = !saving, onClick = {
       scope.launch {
         saving = true; errorMessage = ""; message = ""
         try {
-          val basePrice = price.toDoubleOrNull() ?: error("Enter a valid price.")
+          val basePrice = (if (showFoodFields) foodUnitPrice else price).toDoubleOrNull() ?: error(if (showFoodFields) "Enter a valid food unit price." else "Enter a valid price.")
           val discountValue = discount.toDoubleOrNull() ?: error("Enter a valid discount.")
           require(discountValue in 0.0..100.0) { "Discount must be between 0 and 100%." }
           val payload = JSONObject()
@@ -174,6 +232,13 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
             .put("p_seo_title", seoTitle.trim().ifBlank { JSONObject.NULL })
             .put("p_seo_description", seoDescription.trim().ifBlank { JSONObject.NULL })
           VendorService.updateProductFull(id, payload)
+          if (showFoodFields) {
+            val step = foodStep.toIntOrNull() ?: error("Enter a valid customer quantity step.")
+            val minimum = foodMinimum.toIntOrNull() ?: error("Enter valid minimum purchase steps.")
+            val quantity = dailyQuantity.toIntOrNull() ?: error("Enter a valid daily available quantity.")
+            require(step > 0 && minimum > 0 && quantity >= 0) { "Check food quantity settings." }
+            VendorService.updateFoodProductDetails(id, foodUnit, basePrice, step, minimum, dailyItem, dailyStatus, quantity)
+          }
           newImages.forEach { uri ->
             val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Image could not be read.")
