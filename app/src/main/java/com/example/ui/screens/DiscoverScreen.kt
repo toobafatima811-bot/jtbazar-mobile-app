@@ -11,6 +11,9 @@ import android.graphics.Paint
 import android.graphics.Point
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.os.Build
 import android.widget.Toast
 import android.widget.VideoView
 import android.net.Uri
@@ -30,6 +33,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -54,6 +59,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.Product
@@ -659,6 +667,22 @@ private fun ProductsFeedReelsView(
     }
   } else {
     val pagerState = rememberPagerState(pageCount = { feedEntries.size })
+    var isVideoMuted by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isLifecycleResumed by remember {
+      mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+      val observer = LifecycleEventObserver { _, event ->
+        when (event) {
+          Lifecycle.Event.ON_RESUME -> isLifecycleResumed = true
+          Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> isLifecycleResumed = false
+          else -> Unit
+        }
+      }
+      lifecycleOwner.lifecycle.addObserver(observer)
+      onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     VerticalPager(
       state = pagerState,
@@ -670,27 +694,68 @@ private fun ProductsFeedReelsView(
       Box(
         modifier = Modifier
           .fillMaxSize()
-          .background(Color(0xFFF5F5F5))
+          .background(if (entry.videoUrl != null) Color.Black else Color(0xFFF5F5F5))
       ) {
         if (entry.videoUrl != null) {
-          AndroidView(
-            modifier = Modifier.fillMaxSize().align(Alignment.Center),
-            factory = { ctx ->
-              VideoView(ctx).apply {
-                setVideoURI(Uri.parse(entry.videoUrl))
-                setOnPreparedListener { player ->
-                  player.isLooping = true
-                  player.setVolume(0f, 0f)
-                  if (page == pagerState.currentPage) start()
+          key(entry.videoUrl, page) {
+            var preparedPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+            var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+
+            LaunchedEffect(preparedPlayer, videoViewRef, isVideoMuted, pagerState.currentPage, isLifecycleResumed) {
+              val isCurrent = page == pagerState.currentPage && isLifecycleResumed
+              val vol = if (isVideoMuted || !isCurrent) 0f else 1f
+              preparedPlayer?.let { mp ->
+                runCatching { mp.setVolume(vol, vol) }
+              }
+              videoViewRef?.let { vv ->
+                if (isCurrent) {
+                  if (!vv.isPlaying) runCatching { vv.start() }
+                } else if (vv.isPlaying) {
+                  runCatching { vv.pause() }
                 }
               }
-            },
-            update = { player ->
-              if (page == pagerState.currentPage) {
-                if (!player.isPlaying) player.start()
-              } else if (player.isPlaying) player.pause()
             }
-          )
+
+            AndroidView(
+              modifier = Modifier.fillMaxSize().align(Alignment.Center),
+              factory = { ctx ->
+                VideoView(ctx).apply {
+                  videoViewRef = this
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    setAudioFocusRequest(AudioManager.AUDIOFOCUS_GAIN)
+                  }
+                  setOnPreparedListener { player ->
+                    player.isLooping = true
+                    preparedPlayer = player
+                    val isCurrent = page == pagerState.currentPage && isLifecycleResumed
+                    val vol = if (isVideoMuted || !isCurrent) 0f else 1f
+                    runCatching { player.setVolume(vol, vol) }
+                    if (isCurrent) start()
+                  }
+                  setOnErrorListener { _, _, _ -> true }
+                  setVideoURI(Uri.parse(entry.videoUrl))
+                }
+              },
+              update = { view ->
+                videoViewRef = view
+                val isCurrent = page == pagerState.currentPage && isLifecycleResumed
+                val vol = if (isVideoMuted || !isCurrent) 0f else 1f
+                preparedPlayer?.let { mp ->
+                  runCatching { mp.setVolume(vol, vol) }
+                }
+                if (isCurrent) {
+                  if (!view.isPlaying) runCatching { view.start() }
+                } else if (view.isPlaying) {
+                  runCatching { view.pause() }
+                }
+              },
+              onRelease = { view ->
+                preparedPlayer = null
+                videoViewRef = null
+                runCatching { view.stopPlayback() }
+              }
+            )
+          }
           Surface(
             color = Color.Black.copy(alpha = 0.55f),
             shape = RoundedCornerShape(20.dp),
@@ -701,6 +766,24 @@ private fun ProductsFeedReelsView(
               Spacer(Modifier.width(5.dp))
               Text("Product video", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
+          }
+          IconButton(
+            onClick = { isVideoMuted = !isVideoMuted },
+            modifier = Modifier
+              .align(Alignment.TopEnd)
+              .padding(10.dp)
+              .size(48.dp)
+              .clip(CircleShape)
+              .background(Color.Black.copy(alpha = 0.55f))
+              .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+              .testTag("reels_mute_toggle_btn")
+          ) {
+            Icon(
+              imageVector = if (isVideoMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+              contentDescription = if (isVideoMuted) "Unmute video sound" else "Mute video sound",
+              tint = Color.White,
+              modifier = Modifier.size(22.dp)
+            )
           }
         } else {
           AsyncImage(

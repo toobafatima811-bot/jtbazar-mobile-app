@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Product
@@ -27,30 +29,48 @@ import org.json.JSONArray
 import kotlinx.coroutines.launch
 
 @Composable
-fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit, initialShopId: String? = null) {
+fun PublicShopsScreen(
+  onBack: () -> Unit,
+  onProductClick: (Product) -> Unit,
+  initialShopId: String? = null,
+  onShopSelected: (String?) -> Unit = {}
+) {
   val shops by MarketplaceRepository.shops.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
   var selectedShop by remember { mutableStateOf<ShopRecord?>(null) }
 
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
   LaunchedEffect(shops, initialShopId) {
-    if (!initialShopId.isNullOrBlank()) selectedShop = shops.firstOrNull { it.id == initialShopId }
+    if (!initialShopId.isNullOrBlank()) {
+      shops.firstOrNull { it.id == initialShopId }?.let { selectedShop = it }
+    }
+  }
+
+  val exitShopDetail = {
+    selectedShop = null
+    onShopSelected(null)
   }
 
   if (selectedShop != null) {
+    BackHandler { exitShopDetail() }
     PublicShopDetailScreen(
       shop = selectedShop!!,
       products = products.filter { product ->
         product.sellerId == selectedShop!!.id ||
           (product.sellerId.isNullOrBlank() && product.vendor.equals(selectedShop!!.name, ignoreCase = true))
       },
-      onBack = { selectedShop = null },
+      onBack = exitShopDetail,
       onProductClick = onProductClick
     )
   } else {
     Column(Modifier.fillMaxSize()) {
       Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+        IconButton(
+          onClick = onBack,
+          modifier = Modifier.size(48.dp).testTag("public_shops_back_button")
+        ) {
+          Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
         Column(Modifier.weight(1f)) {
           Text("Trusted JTBazar Shops", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
           Text("Browse approved sellers and their published products", style = MaterialTheme.typography.bodySmall)
@@ -71,7 +91,10 @@ fun PublicShopsScreen(onBack: () -> Unit, onProductClick: (Product) -> Unit, ini
               }
             }
             Card(
-              modifier = Modifier.fillMaxWidth().clickable { selectedShop = shop },
+              modifier = Modifier.fillMaxWidth().clickable {
+                selectedShop = shop
+                onShopSelected(shop.id)
+              },
               shape = RoundedCornerShape(14.dp)
             ) {
               Row(
@@ -123,7 +146,12 @@ private fun PublicShopDetailScreen(
 
   Column(Modifier.fillMaxSize()) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-      IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to shops") }
+      IconButton(
+        onClick = onBack,
+        modifier = Modifier.size(48.dp).testTag("public_shop_detail_back_button")
+      ) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to shops")
+      }
       Text("Shop details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
     HorizontalDivider()

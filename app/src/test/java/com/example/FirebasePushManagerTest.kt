@@ -49,8 +49,8 @@ class FirebasePushManagerTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     FirebasePushManager.ensureNotificationChannel(context)
     val manager = context.getSystemService(android.app.NotificationManager::class.java)
-    val channel = manager?.getNotificationChannel("jtbazar_updates")
+    val channel = manager?.getNotificationChannel(FirebasePushManager.NOTIFICATION_CHANNEL_ID)
     assertNotNull(channel)
-    assertEquals("jtbazar_updates", channel?.id)
+    assertEquals(FirebasePushManager.NOTIFICATION_CHANNEL_ID, channel?.id)
   }
 }

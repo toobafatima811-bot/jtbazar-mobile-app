@@ -116,7 +116,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var isPullRefreshing by remember { mutableStateOf(false) }
   val pullRefreshScope = rememberCoroutineScope()
-  var previousScreen by remember { mutableStateOf(AppScreen.HOME) }
+  val backStack = remember { mutableStateListOf<AppScreen>() }
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
   var selectedPublicShopId by remember { mutableStateOf<String?>(null) }
   var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
@@ -125,6 +125,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link) {
     val tap = notificationTap ?: return@LaunchedEffect
     if (!tap.id.isNullOrBlank()) MarketplaceRepository.markNotificationRead(tap.id)
+    backStack.clear()
+    selectedPublicShopId = null
     when {
       tap.kind.equals("order", ignoreCase = true) || !tap.relatedOrderId.isNullOrBlank() -> currentScreen = AppScreen.MY_ORDERS
       tap.kind.equals("account", ignoreCase = true) || tap.link?.contains("account", true) == true -> currentScreen = AppScreen.ACCOUNT
@@ -139,34 +141,67 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val googleOAuthStatus by SupabaseAuthService.googleOAuthStatus.collectAsState()
   LaunchedEffect(googleOAuthStatus) {
     if (googleOAuthStatus == "success") {
+      backStack.clear()
+      selectedPublicShopId = null
       currentScreen = AppScreen.ACCOUNT
       SupabaseAuthService.clearGoogleOAuthStatus()
     }
   }
 
   fun navigateTo(screen: AppScreen) {
-    previousScreen = currentScreen
+    if (currentScreen != screen && currentScreen != AppScreen.SPLASH) {
+      backStack.add(currentScreen)
+    }
     currentScreen = screen
+  }
+
+  fun switchRootTab(screen: AppScreen) {
+    backStack.clear()
+    selectedPublicShopId = null
+    currentScreen = screen
+  }
+
+  fun popBack(fallback: AppScreen = AppScreen.HOME): AppScreen {
+    return if (backStack.isNotEmpty()) backStack.removeAt(backStack.lastIndex) else fallback
   }
 
   fun navigateBack() {
     when (currentScreen) {
-      AppScreen.PRODUCT_DETAIL -> currentScreen = previousScreen
-      AppScreen.CATEGORY_PRODUCTS -> currentScreen = AppScreen.CATEGORIES
-      AppScreen.CART_CHECKOUT -> currentScreen = AppScreen.HOME
-      AppScreen.ORDER_TRACKING -> currentScreen = AppScreen.HOME
-      AppScreen.SPLASH -> currentScreen = AppScreen.HOME
-      AppScreen.LOGIN, AppScreen.REGISTER, AppScreen.FORGOT_PASSWORD -> currentScreen = AppScreen.ACCOUNT
-      AppScreen.EMAIL_OTP, AppScreen.LOGIN_OTP, AppScreen.RESET_PASSWORD -> currentScreen = AppScreen.LOGIN
-      AppScreen.MY_PROFILE, AppScreen.NOTIFICATIONS -> currentScreen = if (previousScreen == AppScreen.DRIVER_CENTER) AppScreen.DRIVER_CENTER else AppScreen.ACCOUNT
+      AppScreen.PUBLIC_SHOPS -> {
+        selectedPublicShopId = null
+        currentScreen = popBack(AppScreen.HOME)
+      }
+      AppScreen.PRODUCT_DETAIL, AppScreen.BUDGET_SHOPPING, AppScreen.CART_CHECKOUT, AppScreen.ORDER_TRACKING -> {
+        currentScreen = popBack(AppScreen.HOME)
+      }
+      AppScreen.CATEGORY_PRODUCTS -> {
+        currentScreen = popBack(AppScreen.CATEGORIES)
+      }
+      AppScreen.SPLASH -> {
+        backStack.clear()
+        currentScreen = AppScreen.HOME
+      }
+      AppScreen.LOGIN, AppScreen.REGISTER, AppScreen.FORGOT_PASSWORD -> {
+        backStack.clear()
+        currentScreen = AppScreen.ACCOUNT
+      }
+      AppScreen.EMAIL_OTP, AppScreen.LOGIN_OTP, AppScreen.RESET_PASSWORD -> {
+        currentScreen = AppScreen.LOGIN
+      }
+      AppScreen.MY_PROFILE, AppScreen.NOTIFICATIONS, AppScreen.SECURITY_PASSWORD -> {
+        currentScreen = popBack(AppScreen.ACCOUNT)
+      }
       AppScreen.MY_ORDERS, AppScreen.MY_ADDRESSES, AppScreen.RETURNS_REFUNDS, AppScreen.CUSTOMER_SUPPORT,
-      AppScreen.ACCOUNT_SETTINGS, AppScreen.SECURITY_PASSWORD -> currentScreen = AppScreen.ACCOUNT
-      AppScreen.BUDGET_SHOPPING -> currentScreen = previousScreen
-      AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER -> currentScreen = AppScreen.ACCOUNT
-      AppScreen.DRIVER_NAVIGATION -> currentScreen = AppScreen.DRIVER_CENTER
-      AppScreen.PUBLIC_SHOPS -> currentScreen = previousScreen
+      AppScreen.ACCOUNT_SETTINGS, AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER -> {
+        backStack.clear()
+        currentScreen = AppScreen.ACCOUNT
+      }
+      AppScreen.DRIVER_NAVIGATION -> {
+        currentScreen = popBack(AppScreen.DRIVER_CENTER)
+      }
       else -> {
         if (currentScreen != AppScreen.HOME) {
+          backStack.clear()
           currentScreen = AppScreen.HOME
         }
       }
@@ -199,7 +234,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           // 1. Home
           NavigationBarItem(
             selected = currentScreen == AppScreen.HOME,
-            onClick = { currentScreen = AppScreen.HOME },
+            onClick = { switchRootTab(AppScreen.HOME) },
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.HOME) Icons.Filled.Home else Icons.Outlined.Home,
@@ -226,7 +261,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           // 2. Categories
           NavigationBarItem(
             selected = currentScreen == AppScreen.CATEGORIES,
-            onClick = { currentScreen = AppScreen.CATEGORIES },
+            onClick = { switchRootTab(AppScreen.CATEGORIES) },
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.CATEGORIES) Icons.Filled.GridView else Icons.Outlined.GridView,
@@ -253,7 +288,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           // 3. Discover
           NavigationBarItem(
             selected = currentScreen == AppScreen.DISCOVER,
-            onClick = { currentScreen = AppScreen.DISCOVER },
+            onClick = { switchRootTab(AppScreen.DISCOVER) },
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.DISCOVER) Icons.Filled.Explore else Icons.Outlined.Explore,
@@ -280,7 +315,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           // 4. Wishlist
           NavigationBarItem(
             selected = currentScreen == AppScreen.WISHLIST,
-            onClick = { currentScreen = AppScreen.WISHLIST },
+            onClick = { switchRootTab(AppScreen.WISHLIST) },
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.WISHLIST) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
@@ -307,7 +342,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           // 5. Account
           NavigationBarItem(
             selected = currentScreen == AppScreen.ACCOUNT,
-            onClick = { currentScreen = AppScreen.ACCOUNT },
+            onClick = { switchRootTab(AppScreen.ACCOUNT) },
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.ACCOUNT) Icons.Filled.Person else Icons.Outlined.Person,
@@ -340,6 +375,37 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         .fillMaxSize()
         .padding(paddingValues)
     ) {
+      Column(modifier = Modifier.fillMaxSize()) {
+        if (hasInternet == false) {
+          Surface(
+            modifier = Modifier.fillMaxWidth().testTag("offline_connection_banner"),
+            color = Color(0xFFFFF1F0),
+            shadowElevation = 4.dp
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+              Icon(Icons.Filled.WifiOff, contentDescription = null, tint = Color(0xFFB42318))
+              Column(modifier = Modifier.weight(1f)) {
+                Text("No internet connection", color = Color(0xFF912018), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Check your Wi-Fi or mobile data, then retry.", color = Color(0xFF7A271A), fontSize = 11.sp)
+              }
+              TextButton(
+                onClick = {
+                  pullRefreshScope.launch {
+                    MarketplaceRepository.refreshLiveCatalogSuspending(showLoading = false, refreshUserData = true)
+                    MarketplaceRepository.refreshShops()
+                  }
+                }
+              ) {
+                Text("Retry", color = Color(0xFFB42318), fontWeight = FontWeight.Bold)
+              }
+            }
+          }
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
       JTBazarPullRefresh(
         isRefreshing = isPullRefreshing,
         enabled = currentScreen in setOf(
@@ -381,11 +447,14 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               MarketplaceRepository.selectProduct(product)
               navigateTo(AppScreen.PRODUCT_DETAIL)
             },
-            onExploreCategoriesClick = { currentScreen = AppScreen.CATEGORIES },
+            onExploreCategoriesClick = { switchRootTab(AppScreen.CATEGORIES) },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT },
+            onAccountClick = { switchRootTab(AppScreen.ACCOUNT) },
             onBudgetClick = { navigateTo(AppScreen.BUDGET_SHOPPING) },
-            onExploreShopsClick = { navigateTo(AppScreen.PUBLIC_SHOPS) }
+            onExploreShopsClick = {
+              selectedPublicShopId = null
+              navigateTo(AppScreen.PUBLIC_SHOPS)
+            }
           )
         }
 
@@ -396,7 +465,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               navigateTo(AppScreen.CATEGORY_PRODUCTS)
             },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+            onAccountClick = { switchRootTab(AppScreen.ACCOUNT) }
           )
         }
 
@@ -414,7 +483,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) }
             )
           } else {
-            navigateBack()
+            LaunchedEffect(Unit) { navigateBack() }
           }
         }
 
@@ -426,7 +495,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               navigateTo(AppScreen.PRODUCT_DETAIL)
             },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT },
+            onAccountClick = { switchRootTab(AppScreen.ACCOUNT) },
             onOpenShop = { shopId ->
               selectedPublicShopId = shopId
               navigateTo(AppScreen.PUBLIC_SHOPS)
@@ -442,7 +511,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               navigateTo(AppScreen.PRODUCT_DETAIL)
             },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+            onAccountClick = { switchRootTab(AppScreen.ACCOUNT) }
           )
         }
 
@@ -453,7 +522,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onNavigateToProfile = { navigateTo(AppScreen.MY_PROFILE) },
             onNavigateToOrders = { navigateTo(AppScreen.MY_ORDERS) },
             onNavigateToAddresses = { navigateTo(AppScreen.MY_ADDRESSES) },
-            onNavigateToWishlist = { currentScreen = AppScreen.WISHLIST },
+            onNavigateToWishlist = { switchRootTab(AppScreen.WISHLIST) },
             onNavigateToNotifications = { navigateTo(AppScreen.NOTIFICATIONS) },
             onNavigateToReturns = { navigateTo(AppScreen.RETURNS_REFUNDS) },
             onNavigateToSupport = { navigateTo(AppScreen.CUSTOMER_SUPPORT) },
@@ -475,30 +544,33 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               onBackClick = { navigateBack() },
               onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
               onBuyNowClick = { navigateTo(AppScreen.CART_CHECKOUT) },
-              onAccountClick = { currentScreen = AppScreen.ACCOUNT },
+              onAccountClick = { switchRootTab(AppScreen.ACCOUNT) },
               onVisitShop = { shopId ->
                 selectedPublicShopId = shopId
                 navigateTo(AppScreen.PUBLIC_SHOPS)
               }
             )
           } else {
-            navigateBack()
+            LaunchedEffect(Unit) { navigateBack() }
           }
         }
 
         AppScreen.CART_CHECKOUT -> {
           CartCheckoutScreen(
             onBackClick = { navigateBack() },
-            onOrderPlaced = { navigateTo(AppScreen.ORDER_TRACKING) },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+            onOrderPlaced = {
+              backStack.clear()
+              currentScreen = AppScreen.ORDER_TRACKING
+            },
+            onAccountClick = { switchRootTab(AppScreen.ACCOUNT) }
           )
         }
 
         AppScreen.ORDER_TRACKING -> {
           OrderTrackingScreen(
             onBackClick = { navigateBack() },
-            onContinueShopping = { currentScreen = AppScreen.HOME },
-            onAccountClick = { currentScreen = AppScreen.ACCOUNT }
+            onContinueShopping = { switchRootTab(AppScreen.HOME) },
+            onAccountClick = { switchRootTab(AppScreen.ACCOUNT) }
           )
         }
 
@@ -511,7 +583,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               pendingAuthEmail = email
               navigateTo(AppScreen.LOGIN_OTP)
             },
-            onLoginSuccess = { currentScreen = AppScreen.ACCOUNT },
+            onLoginSuccess = { switchRootTab(AppScreen.ACCOUNT) },
             onBack = { navigateBack() }
           )
         }
@@ -532,7 +604,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           EmailOtpVerificationScreen(
             email = pendingAuthEmail,
             fullName = pendingFullName,
-            onVerified = { currentScreen = AppScreen.HOME },
+            onVerified = { switchRootTab(AppScreen.HOME) },
             onBack = { navigateBack() }
           )
         }
@@ -540,7 +612,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         AppScreen.LOGIN_OTP -> {
           LoginOtpVerificationScreen(
             email = pendingAuthEmail,
-            onVerified = { currentScreen = AppScreen.ACCOUNT },
+            onVerified = { switchRootTab(AppScreen.ACCOUNT) },
             onBack = { navigateBack() }
           )
         }
@@ -572,7 +644,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         AppScreen.MY_ORDERS -> {
           MyOrdersScreen(
             onOrderClick = { ord -> navigateTo(AppScreen.ORDER_TRACKING) },
-            onExploreProducts = { currentScreen = AppScreen.HOME },
+            onExploreProducts = { switchRootTab(AppScreen.HOME) },
             onBack = { navigateBack() }
           )
         }
@@ -598,12 +670,12 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
                   }
                 }
                 "account" -> {
-                  currentScreen = AppScreen.ACCOUNT
+                  switchRootTab(AppScreen.ACCOUNT)
                 }
                 "store", "product", "promotion" -> {
-                  currentScreen = AppScreen.HOME
+                  switchRootTab(AppScreen.HOME)
                 }
-                else -> currentScreen = AppScreen.HOME
+                else -> switchRootTab(AppScreen.HOME)
               }
             }
           )
@@ -630,8 +702,9 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 
         AppScreen.PUBLIC_SHOPS -> {
           PublicShopsScreen(
-            onBack = { selectedPublicShopId = null; navigateBack() },
+            onBack = { navigateBack() },
             initialShopId = selectedPublicShopId,
+            onShopSelected = { selectedPublicShopId = it },
             onProductClick = { product ->
               selectedProduct = product
               MarketplaceRepository.selectProduct(product)
@@ -683,7 +756,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               onBack = { navigateBack() }
             )
           } else {
-            navigateBack()
+            LaunchedEffect(Unit) { navigateBack() }
           }
         }
 
@@ -700,34 +773,6 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         }
       }
       }
-
-      if (hasInternet == false) {
-        Surface(
-          modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().testTag("offline_connection_banner"),
-          color = Color(0xFFFFF1F0),
-          shadowElevation = 4.dp
-        ) {
-          Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-          ) {
-            Icon(Icons.Filled.WifiOff, contentDescription = null, tint = Color(0xFFB42318))
-            Column(modifier = Modifier.weight(1f)) {
-              Text("No internet connection", color = Color(0xFF912018), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-              Text("Check your Wi-Fi or mobile data, then retry.", color = Color(0xFF7A271A), fontSize = 11.sp)
-            }
-            TextButton(
-              onClick = {
-                pullRefreshScope.launch {
-                  MarketplaceRepository.refreshLiveCatalogSuspending(showLoading = false, refreshUserData = true)
-                  MarketplaceRepository.refreshShops()
-                }
-              }
-            ) {
-              Text("Retry", color = Color(0xFFB42318), fontWeight = FontWeight.Bold)
-            }
-          }
         }
       }
 
