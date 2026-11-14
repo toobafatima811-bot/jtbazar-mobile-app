@@ -119,7 +119,9 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
         readOnly = true,
         label = { Text("Category") },
         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) },
-        modifier = Modifier.fillMaxWidth().menuAnchor()
+        modifier = Modifier.fillMaxWidth().menuAnchor(),
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, unfocusedBorderColor = Color(0xFFD7DFEA), unfocusedContainerColor = Color.White.copy(alpha = 0.72f), focusedContainerColor = Color.White.copy(alpha = 0.90f))
       )
       ExposedDropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
         for (i in 0 until categories.length()) {
