@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -310,10 +311,25 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
               VendorAdvancedField("Customer quantity step (${if (editFoodUnit == "kg") "grams" else if (editFoodUnit == "l") "ml" else "units"})", editFoodStep) { editFoodStep = it.filter(Char::isDigit) }
               Text("For kg/litre the step is grams/ml; for dozen, piece and pack it is units.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
               VendorAdvancedField("Minimum purchase steps", editFoodMinimum) { editFoodMinimum = it.filter(Char::isDigit) }
-              Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Checkbox(checked = editDailyItem, onCheckedChange = { editDailyItem = it })
-                Text("Manage as a daily dish / daily food item")
-              }
+      Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth().clickable { editDailyItem = !editDailyItem }.padding(horizontal = 12.dp, vertical = 6.dp),
+          verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+          Checkbox(checked = editDailyItem, onCheckedChange = { editDailyItem = it })
+          Text(
+            "Manage as a daily dish / daily food item",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium
+          )
+        }
+      }
               var dailyStatusExpanded by remember(id) { mutableStateOf(false) }
               val dailyStatuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
               ExposedDropdownMenuBox(expanded = dailyStatusExpanded, onExpandedChange = { dailyStatusExpanded = !dailyStatusExpanded }) {
