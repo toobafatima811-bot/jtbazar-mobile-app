@@ -55,6 +55,13 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
   var seoDescription by remember { mutableStateOf("") }
   var trackInventory by remember { mutableStateOf(true) }
   var initialStock by remember { mutableStateOf("0") }
+  var foodUnit by remember { mutableStateOf("kg") }
+  var foodUnitPrice by remember { mutableStateOf("") }
+  var foodQuantityStep by remember { mutableStateOf("250") }
+  var foodMinimumSteps by remember { mutableStateOf("1") }
+  var foodDailyItem by remember { mutableStateOf(false) }
+  var foodDailyStatus by remember { mutableStateOf("available") }
+  var foodDailyQuantity by remember { mutableStateOf("0") }
   var variants by remember { mutableStateOf(listOf<ListingVariant>()) }
   var images by remember { mutableStateOf<List<Uri>>(emptyList()) }
   var saving by remember { mutableStateOf(false) }
@@ -65,6 +72,8 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
     try { categories = VendorService.listCategories() }
     catch (e: Exception) { errorMessage = e.message ?: "Categories could not be loaded." }
   }
+
+  val isFoodCategory = remember(categories, categoryId) { categoryTreeContainsFood(categories, categoryId) }
 
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
     val remaining = (8 - images.size).coerceAtLeast(0)
@@ -97,6 +106,42 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
         }
       }
     }
+    if (isFoodCategory) {
+      Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Food & groceries", style = MaterialTheme.typography.titleMedium)
+          var unitExpanded by remember { mutableStateOf(false) }
+          ExposedDropdownMenuBox(expanded = unitExpanded, onExpandedChange = { unitExpanded = !unitExpanded }) {
+            OutlinedTextField(foodUnit, {}, readOnly = true, label = { Text("Selling unit") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(unitExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+            ExposedDropdownMenu(expanded = unitExpanded, onDismissRequest = { unitExpanded = false }) {
+              listOf("kg", "g", "l", "ml", "piece", "dozen", "pack").forEach { unit ->
+                val label = when(unit) { "kg" -> "Kilogram (kg)"; "g" -> "Gram (g)"; "l" -> "Litre (L)"; "ml" -> "Millilitre (ml)"; "piece" -> "Piece"; "dozen" -> "Dozen"; else -> "Pack" }
+                DropdownMenuItem(text = { Text(label) }, onClick = { foodUnit = unit; unitExpanded = false })
+              }
+            }
+          }
+          ListingField("Price per selling unit (PKR)", foodUnitPrice) { foodUnitPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
+          ListingField("Customer quantity step (grams / ml / units)", foodQuantityStep) { foodQuantityStep = it.filter(Char::isDigit) }
+          ListingField("Minimum purchase steps", foodMinimumSteps) { foodMinimumSteps = it.filter(Char::isDigit) }
+          Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Checkbox(checked = foodDailyItem, onCheckedChange = { foodDailyItem = it })
+            Text("Manage as a daily dish / daily food item")
+          }
+          var dailyStatusExpanded by remember { mutableStateOf(false) }
+          ExposedDropdownMenuBox(expanded = dailyStatusExpanded, onExpandedChange = { dailyStatusExpanded = !dailyStatusExpanded }) {
+            val statusLabel = when(foodDailyStatus) { "not_today" -> "Not for today"; "coming_soon" -> "Coming soon"; else -> "Available today" }
+            OutlinedTextField(statusLabel, {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dailyStatusExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
+            ExposedDropdownMenu(expanded = dailyStatusExpanded, onDismissRequest = { dailyStatusExpanded = false }) {
+              listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon").forEach { (value,label) ->
+                DropdownMenuItem(text = { Text(label) }, onClick = { foodDailyStatus = value; dailyStatusExpanded = false })
+              }
+            }
+          }
+          ListingField("Today's available quantity", foodDailyQuantity) { foodDailyQuantity = it.filter(Char::isDigit) }
+        }
+      }
+    }
+
     ListingField("Selling price (PKR) *", price) { price = it.filter { c -> c.isDigit() || c == '.' } }
     ListingField("Discount (%)", discount) { discount = it.filter { c -> c.isDigit() || c == '.' } }
     ListingField("Shipping weight (grams)", weight) { weight = it.filter(Char::isDigit) }
@@ -174,6 +219,13 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
           require(categoryId.isNotBlank()) { "Select a category." }
           val basePrice = fieldNumber(price, "selling price")
           require(basePrice > 0) { "Selling price must be greater than zero." }
+          val foodUnitPriceValue = if (isFoodCategory) fieldNumber(foodUnitPrice, "food unit price") else 0.0
+          if (isFoodCategory) {
+            require(foodUnitPriceValue > 0) { "Enter the food price per selling unit." }
+            require(fieldNumber(foodQuantityStep, "customer quantity step", false) >= 1) { "Customer quantity step must be at least 1." }
+            require(fieldNumber(foodMinimumSteps, "minimum purchase steps", false) >= 1) { "Minimum purchase steps must be at least 1." }
+            fieldNumber(foodDailyQuantity, "today's available quantity", false)
+          }
           val discountValue = fieldNumber(discount, "discount")
           require(discountValue <= 100) { "Discount cannot exceed 100%." }
           val supplierCostValue = supplierCost.trim().takeIf { it.isNotEmpty() }?.let { fieldNumber(it, "supplier cost") }
@@ -205,6 +257,15 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
             seoDescription.trim().ifBlank { null }, trackInventory
           )
           createdProductId = id
+          if (isFoodCategory) {
+            VendorService.updateFoodProductDetails(
+              id, foodUnit, foodUnitPriceValue,
+              fieldNumber(foodQuantityStep, "customer quantity step", false).toInt(),
+              fieldNumber(foodMinimumSteps, "minimum purchase steps", false).toInt(),
+              foodDailyItem, foodDailyStatus,
+              fieldNumber(foodDailyQuantity, "today's available quantity", false).toInt()
+            )
+          }
           if (variantJson.length() > 0) VendorService.saveVariants(id, variantJson)
           images.forEachIndexed { index, uri ->
             val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
@@ -239,4 +300,20 @@ private fun nameToSlug(value: String): String = value.lowercase(Locale.ROOT).rep
 @Composable
 private fun ListingField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
   OutlinedTextField(value, onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1)
+}
+
+
+private fun categoryTreeContainsFood(categories: JSONArray, selectedId: String): Boolean {
+  if (selectedId.isBlank()) return false
+  val rows = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
+  val byId = rows.associateBy { it.optString("id") }
+  var current = byId[selectedId]
+  val visited = mutableSetOf<String>()
+  while (current != null) {
+    if (current.optBoolean("is_food_category") || current.optString("slug").equals("food-groceries", true)) return true
+    val parentId = current.optString("parent_id")
+    if (parentId.isBlank() || !visited.add(parentId)) break
+    current = byId[parentId]
+  }
+  return false
 }
