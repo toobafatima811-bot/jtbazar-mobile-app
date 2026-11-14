@@ -239,7 +239,9 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
               val currentCategory = (0 until productCategories.length()).mapNotNull { productCategories.optJSONObject(it) }
                 .firstOrNull { it.optString("id") == categoryId }
               if (currentCategory == null) break
-              if (currentCategory.optBoolean("is_food_category") || currentCategory.optString("slug") == "food-groceries") {
+              if (currentCategory.optBoolean("is_food_category") || currentCategory.optString("is_food_category").equals("true", true) ||
+                currentCategory.optString("slug").lowercase() in setOf("food-groceries", "food-and-groceries", "food-grocery") ||
+                currentCategory.optString("name").trim().lowercase() in setOf("food & groceries", "food and groceries", "home & kitchen")) {
                 isFood = true
                 break
               }
