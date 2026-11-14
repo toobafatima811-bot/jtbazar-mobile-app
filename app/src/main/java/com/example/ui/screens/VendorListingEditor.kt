@@ -89,12 +89,15 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
     return parsed
   }
 
-  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    Text("New listing", style = MaterialTheme.typography.titleLarge)
+  Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Text("Create product", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF17243A), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+    Text("Add product information, pricing, images and stock details.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
+    Text("PRODUCT INFORMATION", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     Text("Product name", style = MaterialTheme.typography.labelLarge)
     OutlinedTextField(name, { name = it; if (slug.isBlank() || slug == nameToSlug(name.dropLast(1))) slug = nameToSlug(it) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     ListingField("Slug", slug) { slug = it.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
     ListingField("SKU", sku) { sku = it }
+    Text("CATEGORY", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     Text("Category *", style = MaterialTheme.typography.labelLarge)
     var categoryExpanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = !categoryExpanded }) {
@@ -143,6 +146,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
       }
     }
 
+    Text("PRICING & STOCK", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     ListingField("Selling price (PKR) *", price) { price = it.filter { c -> c.isDigit() || c == '.' } }
     ListingField("Discount (%)", discount) { discount = it.filter { c -> c.isDigit() || c == '.' } }
     ListingField("Shipping weight (grams)", weight) { weight = it.filter(Char::isDigit) }
@@ -152,6 +156,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Column(Modifier.weight(1f)) {
+        Text("PRODUCT VARIANTS", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         Text("Product variants", style = MaterialTheme.typography.titleMedium)
         Text("Each option can have its own SKU, price and stock.", style = MaterialTheme.typography.bodySmall)
       }
@@ -172,6 +177,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
     Text("Variant changes are sent to JTBazar moderation before publication. Supplier costs and fulfilment details remain private.", style = MaterialTheme.typography.bodySmall)
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+      Text("PRODUCT IMAGES", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
       Text("Product images (${images.size}/8)", style = MaterialTheme.typography.titleMedium)
       TextButton(enabled = images.size < 8, onClick = { imagePicker.launch("image/*") }) { Text("Select images") }
     }
@@ -194,6 +200,7 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
     }
     Text("Select multiple JPG, PNG, WebP or AVIF images · maximum 10 MB each · up to 8 images total.", style = MaterialTheme.typography.bodySmall)
 
+    Text("DESCRIPTION & SEARCH", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     ListingField("Short description", shortDescription, 2) { shortDescription = it }
     ListingField("Full description", description, 4) { description = it }
     ListingField("Specifications (JSON array)", specifications, 3) { specifications = it }
@@ -303,7 +310,7 @@ private fun nameToSlug(value: String): String = value.lowercase(Locale.ROOT).rep
 
 @Composable
 private fun ListingField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
-  OutlinedTextField(value, onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1)
+  OutlinedTextField(value, onChange, label = { Text(label, style = MaterialTheme.typography.bodySmall) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1, shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, focusedLabelColor = JTOrange))
 }
 
 
