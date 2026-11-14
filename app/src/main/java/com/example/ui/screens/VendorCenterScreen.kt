@@ -252,11 +252,16 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                   Text(name, fontWeight = FontWeight.SemiBold)
                   Text("PKR ${p.optString("price","0")}  •  ${p.optString("publication_status", p.optString("status","draft"))}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                   Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (hidden) "Hidden" else "Visible", color = if (hidden) Color.Gray else Color(0xFF16803C))
+                    val approvedForVisibility = p.optString("moderation_status").equals("approved", ignoreCase = true)
+                    Text(if (hidden) "Hidden" else if (approvedForVisibility) "Visible" else "Awaiting approval", color = if (hidden) Color.Gray else if (approvedForVisibility) Color(0xFF16803C) else Color(0xFF9A6700))
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = {
-                      scope.launch { saving = true; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { errorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
-                    }) { Text(if (hidden) "Show" else "Hide") }
+                    if (approvedForVisibility) {
+                      TextButton(onClick = {
+                        scope.launch { saving = true; actionErrorMessage = ""; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { actionErrorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
+                      }, enabled = !saving) { Text(if (hidden) "Show" else "Hide") }
+                    } else {
+                      Text("After moderation", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+                    }
                   }
                 }
               }
@@ -274,7 +279,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                   scope.launch {
                     saving = true
                     try { orders = VendorService.listOrders(0, ordersSearch, status); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 }
-                    catch (e: Exception) { errorMessage = e.message ?: "Orders could not be filtered." }
+                    catch (e: Exception) { actionErrorMessage = e.message ?: "Orders could not be filtered." }
                     finally { saving = false }
                   }
                 }) { Text(if (ordersStatus == status) "• ${status.replace('_', ' ')}" else status.replace('_', ' ')) }
@@ -284,7 +289,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               scope.launch {
                 saving = true
                 try { ordersPage = 0; orders = VendorService.listOrders(0, ordersSearch, ordersStatus); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 }
-                catch (e: Exception) { errorMessage = e.message ?: "Orders could not be searched." }
+                catch (e: Exception) { actionErrorMessage = e.message ?: "Orders could not be searched." }
                 finally { saving = false }
               }
             }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Search orders") }
@@ -292,10 +297,10 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               Text("Page ${ordersPage + 1} • ${ordersTotal} orders", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
               Row {
                 TextButton(enabled = !saving && ordersPage > 0, onClick = {
-                  scope.launch { saving = true; try { ordersPage--; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus) } catch (e: Exception) { errorMessage = e.message ?: "Previous page failed." } finally { saving = false } }
+                  scope.launch { saving = true; try { ordersPage--; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus) } catch (e: Exception) { actionErrorMessage = e.message ?: "Previous page failed." } finally { saving = false } }
                 }) { Text("Previous") }
                 TextButton(enabled = !saving && (ordersPage + 1) * 12 < ordersTotal, onClick = {
-                  scope.launch { saving = true; try { ordersPage++; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus) } catch (e: Exception) { errorMessage = e.message ?: "Next page failed." } finally { saving = false } }
+                  scope.launch { saving = true; try { ordersPage++; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus) } catch (e: Exception) { actionErrorMessage = e.message ?: "Next page failed." } finally { saving = false } }
                 }) { Text("Next") }
               }
             }
@@ -314,7 +319,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                   Text("Order ${o.optString("order_number","")}  •  Qty: ${o.optString("quantity","1")}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                   Text("Status: ${o.optString("vendor_fulfillment_status", o.optString("status","processing"))}", style = MaterialTheme.typography.bodySmall)
                   Button(enabled = !saving && orderId.isNotBlank() && o.optString("vendor_fulfillment_status", o.optString("status")) != "ready_for_pickup", onClick = {
-                    scope.launch { saving = true; try { VendorService.markOrderReady(orderId); info = "Marked ready for JTBazar pickup."; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 } catch (e: Exception) { errorMessage = e.message ?: "Could not update order." } finally { saving = false } }
+                    scope.launch { saving = true; try { VendorService.markOrderReady(orderId); info = "Marked ready for JTBazar pickup."; orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus); ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0 } catch (e: Exception) { actionErrorMessage = e.message ?: "Could not update order." } finally { saving = false } }
                   }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Ready for pickup") }
                 }
               }
