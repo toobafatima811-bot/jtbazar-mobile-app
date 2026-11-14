@@ -66,6 +66,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var ordersPage by remember { mutableIntStateOf(0) }
   var ordersTotal by remember { mutableIntStateOf(0) }
   var loading by remember { mutableStateOf(true) }
+  var hasLoadedData by remember { mutableStateOf(false) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
   var actionErrorMessage by remember { mutableStateOf("") }
@@ -90,7 +91,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
 
   fun refresh() {
     scope.launch {
-      loading = true
+      loading = !hasLoadedData
       errorMessage = ""
       try {
         application = VendorService.getOwnApplication()
@@ -100,8 +101,12 @@ fun VendorCenterScreen(onBack: () -> Unit) {
           orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus)
           ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
         }
-      } catch (e: Exception) { errorMessage = vendorLoadErrorMessage(e) }
-      finally { loading = false }
+        hasLoadedData = true
+        actionErrorMessage = ""
+      } catch (e: Exception) {
+        val message = vendorLoadErrorMessage(e)
+        if (hasLoadedData) actionErrorMessage = message else errorMessage = message
+      } finally { loading = false }
     }
   }
   LaunchedEffect(user?.id) { refresh() }
@@ -231,7 +236,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 onSaved = {
                   showProductForm = false
                   info = "Listing submitted for JTBazar moderation."
-                  products = VendorService.listProducts()
+                  try { products = VendorService.listProducts() }
+                  catch (e: Exception) { actionErrorMessage = e.message ?: "Listing was submitted, but the product list could not refresh." }
                 }
               )
             }
