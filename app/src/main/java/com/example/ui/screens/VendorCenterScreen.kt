@@ -186,7 +186,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { refresh() }) { Text("Refresh status") }
           }
           isVendor && application?.status == "approved" -> {
-            VendorDashboardHero(
+            if (vendorTab !in setOf("product_edit", "product_add", "product_details")) VendorDashboardHero(
               shopName = application?.shopName.orEmpty(),
               onRefresh = { refresh() },
               refreshing = loading
@@ -330,7 +330,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                       color = when { rejected -> Color(0xFFB91C1C); hidden -> Color.Gray; moderation == "approved" -> Color(0xFF16803C); else -> Color(0xFF9A6700) }
                     )
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { editingProduct = p; vendorTab = "product_edit" }) { Text("Edit") }
+                    TextButton(onClick = { viewingProduct = p; vendorTab = "product_details" }) { Text("Details", color = Color(0xFF64748B)) }
+                    TextButton(onClick = { editingProduct = p; vendorTab = "product_edit" }) { Text("Edit", color = JTOrange) }
                     if (moderation == "approved") {
                       TextButton(onClick = {
                         scope.launch { saving = true; actionErrorMessage = ""; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { actionErrorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
