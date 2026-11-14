@@ -233,9 +233,9 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             if (showProductForm) {
               VendorListingEditor(
                 onCancel = { showProductForm = false },
-                onSaved = {
+                onSaved = { successMessage ->
                   showProductForm = false
-                  info = "Listing submitted for JTBazar moderation."
+                  info = successMessage
                   try { products = VendorService.listProducts() }
                   catch (e: Exception) { actionErrorMessage = e.message ?: "Listing was submitted, but the product list could not refresh." }
                 }
