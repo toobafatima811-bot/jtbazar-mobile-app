@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
+import com.example.data.supabase.SupabaseClient
 import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -26,6 +27,7 @@ import org.osmdroid.util.GeoPoint
 fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: String, onSaved: suspend () -> Unit) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
+  val currentUser by SupabaseClient.currentUser.collectAsState()
   var shopName by remember { mutableStateOf(application.shopName) }
   var slug by remember { mutableStateOf(application.slug) }
   var vendorType by remember { mutableStateOf(application.vendorType) }
@@ -61,7 +63,8 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Selected file could not be read.")
         require(bytes.size <= 10 * 1024 * 1024) { "Verification files must be 10 MB or smaller." }
         val ext = when (mime) { "application/pdf" -> "pdf"; "image/jpeg" -> "jpg"; "image/png" -> "png"; else -> "webp" }
-        val path = "${application.id}/${documentKind}-${System.currentTimeMillis()}.$ext"
+        val ownerId = currentUser?.id ?: error("Please sign in again.")
+        val path = "${ownerId}/${documentKind}-${System.currentTimeMillis()}.$ext"
         val uploaded = VendorService.uploadPrivateDocument(path, bytes, mime)
         when (documentKind) { "cnic-front" -> frontPath = uploaded; "cnic-back" -> backPath = uploaded; else -> documentPath = uploaded }
         info = "Private verification file uploaded securely."
@@ -118,7 +121,7 @@ fun VendorShopSettingsScreen(application: VendorApplication, accountEmail: Strin
         saving = true; errorMessage = ""; info = ""
         try {
           require(shopName.trim().length >= 2 && slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid shop name and URL slug." }
-          require(accountEmail.isNotBlank() && accountEmail.equals(accountEmail.trim(), true)) { "Your signed-in account email is required." }
+          require(accountEmail.isNotBlank() && accountEmail.trim().equals(currentUser?.email?.trim(), true)) { "Use the same verified email as your signed-in JTBazar account." }
           require(ownerName.trim().length >= 3 && cnic.matches(Regex("[0-9]{13}"))) { "Enter the owner's legal name and 13-digit CNIC." }
           require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani mobile number." }
           require(description.trim().length >= 10 && currentAddress.trim().length >= 3 && completeAddress.trim().length >= 10 && locationText.trim().length >= 10) { "Complete all required shop details." }
