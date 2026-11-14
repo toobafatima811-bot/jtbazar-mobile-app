@@ -724,7 +724,7 @@ private fun VendorDashboardHero(shopName: String, onRefresh: () -> Unit, refresh
     shape = RoundedCornerShape(24.dp),
     colors = CardDefaults.cardColors(containerColor = Color(0xFF243B5A)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
   ) {
-    Box(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF17243A), Color(0xFF29486B), Color(0xFF17243A))), RoundedCornerShape(24.dp))) {
       Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Surface(color = Color(0x33FFFFFF), shape = RoundedCornerShape(50)) {
@@ -789,8 +789,9 @@ private fun VendorMetricCard(title: String, value: String, detail: String, icon:
   Card(
     modifier = modifier,
     shape = RoundedCornerShape(18.dp),
-    colors = CardDefaults.cardColors(containerColor = Color.White),
-    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE9EDF3))
+    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.76f)),
+    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
   ) {
     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
       Box(Modifier.size(36.dp).background(Color(0xFFFFF0E7), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
