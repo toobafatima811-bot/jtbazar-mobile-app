@@ -95,12 +95,13 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
     if (selected.size > remaining) errorMessage = "A product can have up to 8 images total."
   }
 
-  Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+  Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Text("Edit product", style = MaterialTheme.typography.headlineSmall)
       TextButton(onClick = onBack, enabled = !saving) { Text("Back") }
     }
     Text("Changes are sent through JTBazar product moderation. Stock remains managed separately in Inventory.", style = MaterialTheme.typography.bodySmall)
+    Text("PRODUCT DETAILS", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     EditProductField("Product name", name) { name = it }
     EditProductField("URL slug", slug) { slug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
     EditProductField("SKU", sku) { sku = it }
@@ -190,16 +191,20 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
       Text("No saved product images yet. Add images to attach them to this listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
+    Text("DESCRIPTION", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     EditProductField("Short description", shortDescription, 2) { shortDescription = it }
     EditProductField("Full description", description, 4) { description = it }
+    Text("PRICING & MARGIN", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     EditProductField("Vendor base price (PKR)", price) { price = it.filter { ch -> ch.isDigit() || ch == '.' } }
     EditProductField("Discount (%)", discount) { discount = it.filter { ch -> ch.isDigit() || ch == '.' } }
     EditProductField("Supplier cost (private PKR)", supplierCost) { supplierCost = it.filter { ch -> ch.isDigit() || ch == '.' } }
     EditProductField("Fulfilment expense (PKR)", fulfilment) { fulfilment = it.filter { ch -> ch.isDigit() || ch == '.' } }
     EditProductField("Minimum profit (PKR)", minimumProfit) { minimumProfit = it.filter { ch -> ch.isDigit() || ch == '.' } }
     EditProductField("Shipping weight (grams)", weight) { weight = it.filter(Char::isDigit) }
+    Text("PRODUCT ATTRIBUTES", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     EditProductField("Specifications (JSON array)", specs, 3) { specs = it }
     EditProductField("Dimensions (JSON object)", dimensions, 3) { dimensions = it }
+    Text("SEARCH APPEARANCE", color = JTOrange, style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     EditProductField("SEO title", seoTitle) { seoTitle = it }
     EditProductField("SEO description", seoDescription, 2) { seoDescription = it }
     if (showFoodFields) {
@@ -326,5 +331,5 @@ private fun categoryTreeContainsFood(categories: JSONArray, selectedId: String):
 
 @Composable
 private fun EditProductField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
-  OutlinedTextField(value, onChange, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1)
+  OutlinedTextField(value, onChange, label = { Text(label, style = MaterialTheme.typography.bodySmall) }, modifier = Modifier.fillMaxWidth(), minLines = lines, singleLine = lines == 1, shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = JTOrange, focusedLabelColor = JTOrange))
 }
