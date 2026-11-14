@@ -309,13 +309,21 @@ private fun ListingField(label: String, value: String, lines: Int = 1, onChange:
 private fun categoryTreeContainsFood(categories: JSONArray, selectedId: String): Boolean {
   if (selectedId.isBlank()) return false
   val rows = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
-  val byId = rows.associateBy { it.optString("id") }
-  var current = byId[selectedId]
+  fun isFood(row: JSONObject): Boolean {
+    val slug = row.optString("slug").trim().lowercase(Locale.ROOT)
+    val name = row.optString("name").trim().lowercase(Locale.ROOT)
+    val flag = row.opt("is_food_category")
+    return row.optBoolean("is_food_category") || flag?.toString()?.equals("true", true) == true ||
+      slug in setOf("food-groceries", "food-and-groceries", "food-grocery") ||
+      name in setOf("food & groceries", "food and groceries", "home & kitchen")
+  }
+  val byId = rows.associateBy { it.optString("id").trim().lowercase(Locale.ROOT) }
+  var current = byId[selectedId.trim().lowercase(Locale.ROOT)]
   val visited = mutableSetOf<String>()
   while (current != null) {
-    if (current.optBoolean("is_food_category") || current.optString("slug").equals("food-groceries", true)) return true
-    val parentId = current.optString("parent_id")
-    if (parentId.isBlank() || !visited.add(parentId)) break
+    if (isFood(current)) return true
+    val parentId = current.optString("parent_id").trim().lowercase(Locale.ROOT)
+    if (parentId.isBlank() || parentId == "null" || !visited.add(parentId)) break
     current = byId[parentId]
   }
   return false
