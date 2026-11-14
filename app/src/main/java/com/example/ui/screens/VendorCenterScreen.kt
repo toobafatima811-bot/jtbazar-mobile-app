@@ -193,6 +193,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
             )
             when (vendorTab) {
               "cases" -> VendorCasesScreen()
+              "shop_settings" -> VendorShopSettingsScreen(application!!, user?.email.orEmpty()) { refresh() }
               "product_edit" -> {
                 val selected = editingProduct
                 if (selected != null) {
@@ -656,7 +657,8 @@ private fun VendorDashboardTabs(selected: String, onSelect: (String) -> Unit) {
     "inventory" to ("Inventory" to Icons.Default.Inventory2),
     "fulfilment" to ("Orders" to Icons.Default.LocalShipping),
     "cases" to ("Cases" to Icons.Default.ReceiptLong),
-    "tools" to ("Shop tools" to Icons.Default.TrendingUp)
+    "shop_settings" to ("Shop settings" to Icons.Default.Storefront),
+    "tools" to ("More tools" to Icons.Default.TrendingUp)
   )
   ScrollableTabRow(
     selectedTabIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0),
