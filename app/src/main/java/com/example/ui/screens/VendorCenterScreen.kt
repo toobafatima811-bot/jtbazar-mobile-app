@@ -159,7 +159,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
     }
   }
 
-  Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFF5F7FC), Color(0xFFEAF0F8), Color(0xFFF7F9FC)))) {
+  Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFF5F7FC), Color(0xFFEAF0F8), Color(0xFFF7F9FC))))) {
     Row(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.68f), RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp)).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
       IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
       Column(Modifier.weight(1f)) {
