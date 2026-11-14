@@ -15,6 +15,7 @@ import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import org.osmdroid.util.GeoPoint
 
 @Composable
 fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onRefresh: suspend () -> Unit) {
@@ -33,6 +34,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   var locationText by remember { mutableStateOf(application.shopLocationText) }
   var shopImageUrl by remember { mutableStateOf(application.shopImageUrl) }
   var showShopOnMap by remember { mutableStateOf(application.showShopOnMap) }
+  var showShopMapPicker by remember { mutableStateOf(false) }
   var shopLat by remember { mutableStateOf(application.shopLat?.toString().orEmpty()) }
   var shopLng by remember { mutableStateOf(application.shopLng?.toString().orEmpty()) }
   var shopIsOpen by remember { mutableStateOf(application.shopIsOpen) }
@@ -144,8 +146,13 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
         Text("Show shop on public map")
       }
       if (showShopOnMap) {
-        VendorAdvancedField("Shop latitude", shopLat) { shopLat = it }
-        VendorAdvancedField("Shop longitude", shopLng) { shopLng = it }
+        Text(
+          if (shopLat.isNotBlank() && shopLng.isNotBlank()) "Pinned shop location: $shopLat, $shopLng" else "Choose the exact shop location on the map.",
+          style = MaterialTheme.typography.bodySmall
+        )
+        OutlinedButton(enabled = !saving, onClick = { showShopMapPicker = true }, modifier = Modifier.fillMaxWidth()) {
+          Text(if (shopLat.isNotBlank() && shopLng.isNotBlank()) "Change shop location on map" else "Choose shop location on map")
+        }
       }
       Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         Checkbox(checked = shopIsOpen, onCheckedChange = { shopIsOpen = it })
@@ -440,6 +447,18 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       }
     }
     OutlinedButton(onClick = { reload() }, modifier = Modifier.fillMaxWidth()) { Text("Refresh vendor tools") }
+  }
+  if (showShopMapPicker) {
+    ShopLocationPickerDialog(
+      initialLatitude = shopLat.toDoubleOrNull(),
+      initialLongitude = shopLng.toDoubleOrNull(),
+      onDismiss = { showShopMapPicker = false },
+      onConfirm = { point: GeoPoint ->
+        shopLat = String.format(java.util.Locale.US, "%.6f", point.latitude)
+        shopLng = String.format(java.util.Locale.US, "%.6f", point.longitude)
+        showShopMapPicker = false
+      }
+    )
   }
 }
 
