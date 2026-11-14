@@ -54,6 +54,20 @@ fun VendorInventoryPanel() {
       TextButton(onClick = { refresh() }) { Text("Refresh") }
     }
     Text("Manage live product and variant quantities. Every adjustment is recorded in inventory history.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF718096))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      Card(Modifier.weight(1f), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))) {
+        Column(Modifier.padding(14.dp)) {
+          Text("Stock records", color = Color(0xFF718096), style = MaterialTheme.typography.labelSmall)
+          Text(rows.length().toString(), color = Color(0xFF17243A), style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+      }
+      Card(Modifier.weight(1f), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))) {
+        Column(Modifier.padding(14.dp)) {
+          Text("Total units", color = Color(0xFF718096), style = MaterialTheme.typography.labelSmall)
+          Text((0 until rows.length()).sumOf { rows.optJSONObject(it)?.optInt("quantity") ?: 0 }.toString(), color = Color(0xFF17243A), style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+      }
+    }
     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (info.isNotBlank()) Text(info, color = MaterialTheme.colorScheme.primary)
     if (loading) CircularProgressIndicator(color = JTOrange)
