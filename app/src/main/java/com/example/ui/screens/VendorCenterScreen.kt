@@ -192,6 +192,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               onSelect = { vendorTab = it }
             )
             when (vendorTab) {
+              "cases" -> VendorCasesScreen()
               "product_edit" -> {
                 val selected = editingProduct
                 if (selected != null) {
@@ -654,7 +655,8 @@ private fun VendorDashboardTabs(selected: String, onSelect: (String) -> Unit) {
     "listings" to ("Products" to Icons.Default.ShoppingBag),
     "inventory" to ("Inventory" to Icons.Default.Inventory2),
     "fulfilment" to ("Orders" to Icons.Default.LocalShipping),
-    "tools" to ("More tools" to Icons.Default.TrendingUp)
+    "cases" to ("Cases" to Icons.Default.ReceiptLong),
+    "tools" to ("Shop tools" to Icons.Default.TrendingUp)
   )
   ScrollableTabRow(
     selectedTabIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0),
