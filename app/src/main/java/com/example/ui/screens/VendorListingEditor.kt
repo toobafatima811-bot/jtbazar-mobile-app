@@ -257,6 +257,15 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
             seoDescription.trim().ifBlank { null }, trackInventory
           )
           createdProductId = id
+          // Save the selected images immediately after product creation. This keeps image
+          // persistence independent from optional food/variant metadata calls.
+          images.forEachIndexed { index, uri ->
+            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+              ?: error("Image ${index + 1} could not be read from the selected file.")
+            require(bytes.size <= 10 * 1024 * 1024) { "Image ${index + 1} must be 10 MB or smaller." }
+            VendorService.uploadProductImage(id, bytes, mime, name)
+          }
           if (isFoodCategory) {
             VendorService.updateFoodProductDetails(
               id, foodUnit, foodUnitPriceValue,
@@ -267,12 +276,6 @@ fun VendorListingEditor(onCancel: () -> Unit, onSaved: suspend (String) -> Unit)
             )
           }
           if (variantJson.length() > 0) VendorService.saveVariants(id, variantJson)
-          images.forEachIndexed { index, uri ->
-            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Image could not be read.")
-            require(bytes.size <= 10 * 1024 * 1024) { "Each image must be 10 MB or smaller." }
-            VendorService.uploadProductImage(id, bytes, mime, name)
-          }
           message = "Listing submitted for moderation."
           onSaved(message)
         } catch (e: Exception) {
