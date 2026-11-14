@@ -91,15 +91,17 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val isCatalogLoading by MarketplaceRepository.isLoading.collectAsState()
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
-  val isGlobalLoading by GlobalLoadingState.active.collectAsState()
   val hasInternet by NetworkConnectivity.isOnline.collectAsState()
   val context = LocalContext.current
   DisposableEffect(context) {
     NetworkConnectivity.start(context)
     onDispose { NetworkConnectivity.stop(context) }
   }
+  // Keep routine POST/RPC operations from covering the whole screen. Forms and
+  // action buttons own their local progress indicators; only checkout and the
+  // initial empty-catalog load use the blocking app-wide loader.
   val showGlobalLoader = hasInternet != false &&
-    (isGlobalLoading || isPlacingOrder || (isCatalogLoading && products.isEmpty()))
+    (isPlacingOrder || (isCatalogLoading && products.isEmpty()))
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(lifecycleOwner) {
     lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
