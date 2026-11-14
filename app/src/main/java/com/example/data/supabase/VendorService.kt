@@ -262,7 +262,22 @@ object VendorService {
     require(payload.optDouble("p_price") >= supplierCost + fulfilment + profit) {
       "Selling price must cover supplier cost, fulfilment expense and minimum profit."
     }
-    fail(SupabaseClient.rpc("vendor_update_product", payload.put("p_product_id", productId).toString()))
+    try {
+      val ownedRows = JSONArray(fail(SupabaseClient.rpc("vendor_list_products")))
+      val isOwned = (0 until ownedRows.length()).any { ownedRows.optJSONObject(it)?.optString("id") == productId }
+      if (!isOwned) throw IOException("Access denied: this listing is not linked to the currently signed-in vendor account. Refresh Listings and make sure you are signed in with the account that owns this product.")
+      fail(SupabaseClient.rpc("vendor_update_product", payload.put("p_product_id", productId).toString()))
+    } catch (e: Exception) {
+      val detail = e.message.orEmpty()
+      when {
+        detail.contains("authenticator verification", ignoreCase = true) ->
+          throw IOException("JTBazar authenticator verification is required. Complete the verification challenge, then try saving again.", e)
+        detail.contains("Product access was denied", ignoreCase = true) ||
+          detail.contains("not available to your vendor account", ignoreCase = true) ->
+          throw IOException("Access denied: this product does not belong to the currently signed-in vendor account, or the vendor account is not approved. Refresh Listings and sign in with the correct vendor account.", e)
+        else -> throw e
+      }
+    }
   }
 
   suspend fun updateProduct(productId: String, name: String, description: String, price: Int, stock: Int) {
