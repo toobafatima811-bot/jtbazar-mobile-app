@@ -77,20 +77,8 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   }
 
   val totalImages = existingImageUrls.size + newImages.size
-  fun isFoodCategory(categoryId: String): Boolean {
-    var currentId: String? = categoryId.takeIf { it.isNotBlank() }
-    val visited = mutableSetOf<String>()
-    while (currentId != null && visited.add(currentId)) {
-      val row = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
-        .firstOrNull { it.optSafeString("id") == currentId } ?: return false
-      if (row.optBoolean("is_food_category") || row.optSafeString("is_food_category").equals("true", true) ||
-        row.optSafeString("slug").lowercase() in setOf("food-groceries", "food-and-groceries", "food-grocery") ||
-        row.optSafeString("name").trim().lowercase() in setOf("food & groceries", "food and groceries", "home & kitchen")) return true
-      currentId = row.optSafeString("parent_id").takeIf { it.isNotBlank() && it != "null" }
-    }
-    return false
-  }
-  val showFoodFields = isFoodCategory(category) || product.vendorEditCleanString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
+  val showFoodFields = categoryTreeContainsFood(categories, category) ||
+    product.vendorEditCleanString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
     val remaining = (8 - existingImageUrls.size - newImages.size).coerceAtLeast(0)
     newImages = (newImages + selected.take(remaining)).distinct().take((8 - existingImageUrls.size).coerceAtLeast(0))
@@ -125,7 +113,7 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
           val row = categories.optJSONObject(i) ?: continue
           DropdownMenuItem(text = { Text(row.optSafeString("name")) }, onClick = {
             category = row.optSafeString("id")
-            if (row.optBoolean("is_food_category") || row.optSafeString("slug") == "food-groceries") {
+            if (categoryTreeContainsFood(categories, row.optSafeString("id"))) {
               if (foodUnit.isBlank()) foodUnit = "kg"
               if (foodStep.isBlank()) foodStep = if (foodUnit == "kg" || foodUnit == "l") "250" else "1"
             }
@@ -279,6 +267,26 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
 
 private fun JSONObject.optSafeString(key: String, fallback: String = ""): String =
   optString(key, fallback).takeUnless { it == "null" } ?: fallback
+
+
+private fun categoryTreeContainsFood(categories: JSONArray, selectedId: String): Boolean {
+  if (selectedId.isBlank()) return false
+  val rows = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
+  val byId = rows.associateBy { it.optSafeString("id").trim().lowercase(Locale.ROOT) }
+  var current = byId[selectedId.trim().lowercase(Locale.ROOT)]
+  val visited = mutableSetOf<String>()
+  while (current != null) {
+    val slug = current.optSafeString("slug").trim().lowercase(Locale.ROOT)
+    val name = current.optSafeString("name").trim().lowercase(Locale.ROOT)
+    val foodFlag = current.opt("is_food_category")?.toString()?.equals("true", true) == true
+    if (foodFlag || slug in setOf("food-groceries", "food-and-groceries", "food-grocery", "home-kitchen") ||
+      name in setOf("food & groceries", "food and groceries", "home & kitchen")) return true
+    val parentId = current.optSafeString("parent_id").trim().lowercase(Locale.ROOT)
+    if (parentId.isBlank() || parentId == "null" || !visited.add(parentId)) break
+    current = byId[parentId]
+  }
+  return false
+}
 
 @Composable
 private fun EditProductField(label: String, value: String, lines: Int = 1, onChange: (String) -> Unit) {
