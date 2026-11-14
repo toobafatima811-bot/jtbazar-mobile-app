@@ -24,6 +24,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.LocalShipping
@@ -331,18 +336,24 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                       color = when { rejected -> Color(0xFFB91C1C); hidden -> Color.Gray; moderation == "approved" -> Color(0xFF16803C); else -> Color(0xFF9A6700) }
                     )
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { viewingProduct = p; vendorTab = "product_details" }) { Text("Details", color = Color(0xFF64748B)) }
-                    TextButton(onClick = { editingProduct = p; vendorTab = "product_edit" }) { Text("Edit", color = JTOrange) }
+                    IconButton(onClick = { viewingProduct = p; vendorTab = "product_details" }) {
+                      Icon(Icons.Default.Inventory2, contentDescription = "View product details", tint = Color(0xFF64748B))
+                    }
+                    IconButton(onClick = { editingProduct = p; vendorTab = "product_edit" }) {
+                      Icon(Icons.Default.Edit, contentDescription = "Edit product", tint = JTOrange)
+                    }
                     if (moderation == "approved") {
-                      TextButton(onClick = {
+                      IconButton(onClick = {
                         scope.launch { saving = true; actionErrorMessage = ""; try { VendorService.setProductVisibility(id, !hidden); products = VendorService.listProducts() } catch (e: Exception) { actionErrorMessage = e.message ?: "Visibility update failed." } finally { saving = false } }
-                      }, enabled = !saving) { Text(if (hidden) "Show" else "Hide") }
+                      }, enabled = !saving) {
+                        Icon(if (hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = if (hidden) "Show product" else "Hide product", tint = Color(0xFF64748B))
+                      }
                     }
                     if (deletionStatus == "pending") {
                       Text("Deletion requested", color = Color(0xFF9A6700), style = MaterialTheme.typography.labelSmall)
                     } else {
-                      TextButton(onClick = { deletionTarget = p; deletionReason = "" }, enabled = !saving) {
-                        Text(if (deletionStatus == "rejected") "Request again" else "Request deletion", color = Color(0xFFB91C1C))
+                      IconButton(onClick = { deletionTarget = p; deletionReason = "" }, enabled = !saving) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = if (deletionStatus == "rejected") "Request deletion again" else "Request product deletion", tint = Color(0xFFB91C1C))
                       }
                     }
                   }
