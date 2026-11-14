@@ -73,6 +73,22 @@ object VendorService {
   }
 
   suspend fun listProducts(): JSONArray = JSONArray(fail(SupabaseClient.rpc("vendor_list_products")))
+
+  suspend fun listProductImageUrls(productId: String): List<String> {
+    val raw = fail(SupabaseClient.get("product_images?product_id=eq.$productId&select=image_url,storage_path&order=sort_order.asc&limit=8"))
+    val rows = JSONArray(raw)
+    return (0 until rows.length()).mapNotNull { index ->
+      val row = rows.optJSONObject(index) ?: return@mapNotNull null
+      val direct = text(row, "image_url")
+      if (direct.isNotBlank()) direct else {
+        val path = text(row, "storage_path")
+        if (path.isBlank()) null else {
+          val encoded = path.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+          "${SupabaseConfig.storageUrl}/object/public/product-images/$encoded"
+        }
+      }
+    }
+  }
   suspend fun listOrders(page: Int = 0, search: String = "", status: String = "all"): JSONArray =
     JSONArray(fail(SupabaseClient.rpc("vendor_order_items_page", JSONObject()
       .put("p_limit", 12).put("p_offset", page.coerceAtLeast(0) * 12)
