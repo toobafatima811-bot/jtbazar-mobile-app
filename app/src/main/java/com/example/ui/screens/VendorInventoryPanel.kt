@@ -18,6 +18,7 @@ fun VendorInventoryPanel() {
   val scope = rememberCoroutineScope()
   var rows by remember { mutableStateOf(JSONArray()) }
   var quantities by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+  var adjustmentReasons by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
   var loading by remember { mutableStateOf(true) }
   var savingId by remember { mutableStateOf<String?>(null) }
   var errorMessage by remember { mutableStateOf("") }
@@ -70,6 +71,13 @@ fun VendorInventoryPanel() {
           Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(label, style = MaterialTheme.typography.titleMedium)
             Text("Current stock: ${row.optInt("quantity")} • Low stock threshold: ${row.optInt("low_stock_threshold")}", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(
+              value = adjustmentReasons[key].orEmpty(),
+              onValueChange = { value -> adjustmentReasons = adjustmentReasons.toMutableMap().also { it[key] = value.take(240) } },
+              label = { Text("Adjustment reason / note *") },
+              modifier = Modifier.fillMaxWidth(),
+              minLines = 2
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               OutlinedTextField(
                 value = quantities[key] ?: row.optInt("quantity").toString(),
@@ -81,10 +89,13 @@ fun VendorInventoryPanel() {
               Button(enabled = savingId != key && !loading, onClick = {
                 val quantity = quantities[key]?.toIntOrNull()
                 if (quantity == null) { errorMessage = "Enter a valid stock quantity."; return@Button }
+                val reason = adjustmentReasons[key]?.trim().orEmpty()
+                if (reason.length < 3) { errorMessage = "Add a reason for this stock adjustment."; return@Button }
                 scope.launch {
                   savingId = key; errorMessage = ""; info = ""
                   try {
-                    VendorService.setVariantInventory(productId, variantId, quantity)
+                    VendorService.setVariantInventory(productId, variantId, quantity, reason)
+                    adjustmentReasons = adjustmentReasons.toMutableMap().also { it.remove(key) }
                     info = "Stock updated for $label."
                     refresh()
                   } catch (e: Exception) { errorMessage = e.message ?: "Stock update failed." }
