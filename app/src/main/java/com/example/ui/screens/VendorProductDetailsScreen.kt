@@ -34,7 +34,7 @@ fun VendorProductDetailsScreen(product: JSONObject, onBack: () -> Unit, onEdit: 
   val navy = Color(0xFF17243A)
   val muted = Color(0xFF718096)
   val name = product.optString("name", "Product")
-  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+  Column(Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.70f), RoundedCornerShape(26.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       TextButton(onClick = onBack) {
         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -70,8 +70,8 @@ fun VendorProductDetailsScreen(product: JSONObject, onBack: () -> Unit, onEdit: 
     Card(
       Modifier.fillMaxWidth(),
       shape = RoundedCornerShape(22.dp),
-      colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.96f)),
-      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))
+      colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.72f)),
+      border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.95f)), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
       Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = navy)
@@ -107,7 +107,7 @@ private fun DetailSection(title: String, value: String) {
   Card(
     Modifier.fillMaxWidth(),
     shape = RoundedCornerShape(18.dp),
-    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.94f)),
+    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.70f)),
     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE8ECF2))
   ) {
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
