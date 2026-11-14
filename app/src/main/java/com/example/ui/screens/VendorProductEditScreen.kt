@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +35,8 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   val id = product.vendorEditCleanString("id")
   var categories by remember { mutableStateOf(JSONArray()) }
   var existingImageUrls by remember(id) { mutableStateOf<List<String>>(emptyList()) }
+  var imagesLoading by remember(id) { mutableStateOf(true) }
+  var imageLoadError by remember(id) { mutableStateOf("") }
   var newImages by remember(id) { mutableStateOf<List<Uri>>(emptyList()) }
   var name by remember(id) { mutableStateOf(product.vendorEditCleanString("name")) }
   var slug by remember(id) { mutableStateOf(product.vendorEditCleanString("slug")) }
@@ -73,13 +76,19 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
   LaunchedEffect(id) {
     runCatching { VendorService.listCategories() }.onSuccess { categories = it }
     if (id.isNotBlank()) {
-      runCatching { VendorService.listProductImageUrls(id) }.onSuccess { existingImageUrls = it }
-    }
+      imagesLoading = true
+      imageLoadError = ""
+      runCatching { VendorService.listProductImageUrls(id) }
+        .onSuccess { existingImageUrls = it }
+        .onFailure { imageLoadError = it.message ?: "Product images could not be loaded." }
+      imagesLoading = false
+    } else imagesLoading = false
   }
 
   val totalImages = existingImageUrls.size + newImages.size
-  val showFoodFields = categoryTreeContainsFood(categories, category) ||
-    product.vendorEditCleanString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
+  // Food controls depend only on the currently selected category.
+  // Legacy food metadata must not keep food fields active after category change.
+  val showFoodFields = remember(categories, category) { categoryTreeContainsFood(categories, category) }
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
     val remaining = (8 - existingImageUrls.size - newImages.size).coerceAtLeast(0)
     newImages = (newImages + selected.take(remaining)).distinct().take((8 - existingImageUrls.size).coerceAtLeast(0))
@@ -114,9 +123,12 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
           val row = categories.optJSONObject(i) ?: continue
           DropdownMenuItem(text = { Text(row.optSafeString("name")) }, onClick = {
             category = row.optSafeString("id")
-            if (categoryTreeContainsFood(categories, row.optSafeString("id"))) {
+            val selectedIsFood = categoryTreeContainsFood(categories, row.optSafeString("id"))
+            if (selectedIsFood) {
               if (foodUnit.isBlank()) foodUnit = "kg"
               if (foodStep.isBlank()) foodStep = if (foodUnit == "kg" || foodUnit == "l") "250" else "1"
+            } else {
+              dailyItem = false
             }
             categoryExpanded = false
           })
@@ -128,33 +140,54 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
       Text("Product images ($totalImages/8)", style = MaterialTheme.typography.titleMedium)
       TextButton(enabled = totalImages < 8 && !saving, onClick = { imagePicker.launch("image/*") }) { Text("Add images") }
     }
-    if (existingImageUrls.isNotEmpty() || newImages.isNotEmpty()) {
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        existingImageUrls.take(4).forEach { url ->
-          AsyncImage(
-            model = url,
-            contentDescription = name,
-            modifier = Modifier.size(68.dp).clip(RoundedCornerShape(10.dp)),
-            contentScale = ContentScale.Crop
-          )
-        }
+    if (imagesLoading) {
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        Spacer(Modifier.width(8.dp))
+        Text("Loading saved images…", style = MaterialTheme.typography.bodySmall)
       }
-      newImages.forEachIndexed { index, uri ->
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-          Row(Modifier.padding(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    }
+    if (imageLoadError.isNotBlank()) {
+      Text(imageLoadError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    }
+    if (existingImageUrls.isNotEmpty() || newImages.isNotEmpty()) {
+      Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        existingImageUrls.forEachIndexed { index, url ->
+          Column(Modifier.width(104.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             AsyncImage(
-              model = uri,
-              contentDescription = "New product image ${index + 1}",
-              modifier = Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)),
-              contentScale = ContentScale.Crop
+              model = url,
+              contentDescription = "Saved product image ${index + 1}",
+              modifier = Modifier.size(104.dp).clip(RoundedCornerShape(12.dp)),
+              contentScale = ContentScale.Crop,
+              onError = { imageLoadError = "A saved product image could not be displayed. Check its Supabase Storage URL and bucket access." }
             )
-            Column(Modifier.weight(1f)) {
-              Text("New image ${index + 1}", style = MaterialTheme.typography.labelLarge)
-              TextButton(enabled = !saving, onClick = { newImages = newImages.filterIndexed { i, _ -> i != index } }) { Text("Remove") }
+            Text(if (index == 0) "Main image" else "Saved image ${index + 1}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+          }
+        }
+        newImages.forEachIndexed { index, uri ->
+          Card(Modifier.width(104.dp), shape = RoundedCornerShape(12.dp)) {
+            Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+              AsyncImage(
+                model = uri,
+                contentDescription = "New product image ${index + 1}",
+                modifier = Modifier.size(90.dp).clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop
+              )
+              Text("New ${index + 1}", style = MaterialTheme.typography.labelSmall)
+              TextButton(
+                enabled = !saving,
+                onClick = { newImages = newImages.filterIndexed { i, _ -> i != index } },
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+              ) { Text("Remove") }
             }
           }
         }
       }
+    } else if (!imagesLoading && imageLoadError.isBlank()) {
+      Text("No saved product images yet. Add images to attach them to this listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     EditProductField("Short description", shortDescription, 2) { shortDescription = it }
@@ -254,7 +287,9 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
             require(bytes.size <= 10 * 1024 * 1024) { "Each image must be 10 MB or smaller." }
             VendorService.uploadProductImage(id, bytes, mime, name.trim())
           }
-          message = "Product details saved."
+          existingImageUrls = VendorService.listProductImageUrls(id)
+          newImages = emptyList()
+          message = "Product details and images saved."
           onSaved()
         } catch (e: Exception) { errorMessage = e.message ?: "Product could not be updated." }
         finally { saving = false }
