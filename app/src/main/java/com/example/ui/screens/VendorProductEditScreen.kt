@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -196,9 +197,24 @@ fun VendorProductEditScreen(product: JSONObject, onBack: () -> Unit, onSaved: su
       EditProductField("Customer quantity step (${if (foodUnit == "kg") "grams" else if (foodUnit == "l") "ml" else "units"})", foodStep) { foodStep = it.filter(Char::isDigit) }
       Text("For kg/litre the step is grams/ml; for dozen, piece and pack it is units.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       EditProductField("Minimum purchase steps", foodMinimum) { foodMinimum = it.filter(Char::isDigit) }
-      Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Checkbox(checked = dailyItem, onCheckedChange = { dailyItem = it })
-        Text("Manage as a daily dish / daily food item")
+      Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth().clickable { dailyItem = !dailyItem }.padding(horizontal = 12.dp, vertical = 6.dp),
+          verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+          Checkbox(checked = dailyItem, onCheckedChange = { dailyItem = it })
+          Text(
+            "Manage as a daily dish / daily food item",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium
+          )
+        }
       }
       var statusExpanded by remember(id) { mutableStateOf(false) }
       val statuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
