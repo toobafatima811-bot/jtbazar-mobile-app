@@ -51,6 +51,8 @@ import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ActiveProductCampaign
+import com.example.data.supabase.SupabasePromotionDto
+import coil.compose.AsyncImage
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.MarketplaceHero
@@ -73,12 +75,24 @@ fun HomeScreen(
   val trustedShops by MarketplaceRepository.shops.collectAsState()
   val categories by MarketplaceRepository.categories.collectAsState()
   val homepageHeroes by MarketplaceRepository.homepageHeroes.collectAsState()
+  val homepagePromotions by MarketplaceRepository.homepagePromotions.collectAsState()
   val activeProductCampaigns by MarketplaceRepository.activeProductCampaigns.collectAsState()
   val isLoading by MarketplaceRepository.isLoading.collectAsState()
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
+
+  fun activePromotionPlacements(position: String): List<SupabasePromotionDto> {
+    val now = System.currentTimeMillis()
+    return homepagePromotions.filter { promotion ->
+      val platformMatches = promotion.targetPlatform == "android" || promotion.targetPlatform == "both"
+      val positionMatches = promotion.displayPosition == position
+      val timeMatches = (promotion.startsAt.isNullOrBlank() || runCatching { java.time.Instant.parse(promotion.startsAt).toEpochMilli() <= now }.getOrDefault(false)) &&
+        (promotion.endsAt.isNullOrBlank() || runCatching { java.time.Instant.parse(promotion.endsAt).toEpochMilli() >= now }.getOrDefault(false))
+      platformMatches && positionMatches && promotion.campaignType == "banner" && !promotion.showOnLaunch && timeMatches
+    }
+  }
 
   var showAddressDialog by remember { mutableStateOf(false) }
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
@@ -198,6 +212,7 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp)
       ) {
+      item { PromotionPlacementCards(activePromotionPlacements("top_promo")) }
       // 1. Search Bar with voice search
       item {
         SearchInputBar(
@@ -221,6 +236,9 @@ fun HomeScreen(
       }
 
       if (searchQuery.isBlank()) {
+
+        // Admin-managed hero banner placement
+        item { PromotionPlacementCards(activePromotionPlacements("hero_banner")) }
 
         // Website Parity: Full Homepage Hero Section
         item {
@@ -448,6 +466,10 @@ fun HomeScreen(
         }
       }
 
+      item { PromotionPlacementCards(activePromotionPlacements("category_feature")) }
+      item { PromotionPlacementCards(activePromotionPlacements("before_popular_products")) }
+      item { PromotionPlacementCards(activePromotionPlacements("product_strip")) }
+
       // 5. Popular Products Section Header
       item {
         Spacer(modifier = Modifier.height(18.dp))
@@ -653,6 +675,9 @@ fun HomeScreen(
           }
         }
       }
+
+      item { PromotionPlacementCards(activePromotionPlacements("after_new_arrivals")) }
+      item { PromotionPlacementCards(activePromotionPlacements("offer_section")) }
 
       // 8. Trust Badges
       item {
@@ -1503,5 +1528,53 @@ private fun CountdownTimeUnit(value: String, label: String, modifier: Modifier =
   ) {
     Text(value, color = Color.White, fontSize = 19.sp, lineHeight = 21.sp, fontWeight = FontWeight.ExtraBold)
     Text(label, color = Color.White.copy(alpha = 0.88f), fontSize = 7.sp, fontWeight = FontWeight.Bold)
+  }
+}
+
+
+@Composable
+private fun PromotionPlacementCards(promotions: List<SupabasePromotionDto>) {
+  if (promotions.isEmpty()) return
+  val context = LocalContext.current
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp)
+  ) {
+    promotions.forEach { promotion ->
+      val image = promotion.bannerImageUrls.firstOrNull() ?: promotion.bannerImageUrl
+      if (!image.isNullOrBlank()) {
+        Card(
+          modifier = Modifier.fillMaxWidth().then(
+            if (!promotion.ctaDestination.isNullOrBlank()) Modifier.clickable {
+              val destination = promotion.ctaDestination
+              runCatching {
+                val uri = if (destination.startsWith("http")) Uri.parse(destination) else Uri.parse("https://jtbazar.vercel.app" + if (destination.startsWith("/")) destination else "/$destination")
+                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+              }
+            } else Modifier
+          ),
+          shape = RoundedCornerShape(16.dp),
+          colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+          Column {
+            AsyncImage(
+              model = image,
+              contentDescription = promotion.title,
+              modifier = Modifier.fillMaxWidth().heightIn(min = 110.dp, max = 210.dp),
+              contentScale = ContentScale.Crop
+            )
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+              Text(promotion.title, fontWeight = FontWeight.Bold, color = JTTextPrimary, fontSize = 15.sp)
+              promotion.description?.takeIf { it.isNotBlank() }?.let {
+                Text(it, color = JTTextSecondary, fontSize = 12.sp)
+              }
+              promotion.ctaText?.takeIf { it.isNotBlank() }?.let {
+                Text(it, color = JTOrangeDark, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
