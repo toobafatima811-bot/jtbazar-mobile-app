@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -20,6 +21,7 @@ fun VendorInventoryPanel() {
   var savingId by remember { mutableStateOf<String?>(null) }
   var errorMessage by remember { mutableStateOf("") }
   var info by remember { mutableStateOf("") }
+  var editingKey by remember { mutableStateOf<String?>(null) }
 
   fun refresh() {
     scope.launch {
@@ -73,39 +75,58 @@ fun VendorInventoryPanel() {
               HorizontalDivider()
               Text(label, style = MaterialTheme.typography.titleSmall)
               Text("Current stock: ${row.optInt("quantity")} • Low stock threshold: ${row.optInt("low_stock_threshold")}", style = MaterialTheme.typography.bodySmall)
-              OutlinedTextField(
-                value = adjustmentReasons[key].orEmpty(),
-                onValueChange = { value -> adjustmentReasons = adjustmentReasons.toMutableMap().also { it[key] = value.take(240) } },
-                label = { Text("Adjustment reason / note *") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-              )
-              Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                  value = quantities[key] ?: row.optInt("quantity").toString(),
-                  onValueChange = { value -> quantities = quantities.toMutableMap().also { it[key] = value.filter(Char::isDigit).take(9) } },
-                  label = { Text("New quantity") },
-                  modifier = Modifier.weight(1f),
-                  singleLine = true
+              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(enabled = savingId != key, onClick = {
+                  quantities = quantities.toMutableMap().also { it[key] = row.optInt("quantity").toString() }
+                  editingKey = key
+                }) { Text("Edit stock") }
+              }
+              if (editingKey == key) {
+                AlertDialog(
+                  onDismissRequest = { if (savingId != key) editingKey = null },
+                  title = { Text("Edit inventory — $label") },
+                  text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                      Text("Current stock: ${row.optInt("quantity")} • Low stock threshold: ${row.optInt("low_stock_threshold")}")
+                      OutlinedTextField(
+                        value = quantities[key] ?: row.optInt("quantity").toString(),
+                        onValueChange = { value -> quantities = quantities.toMutableMap().also { it[key] = value.filter(Char::isDigit).take(9) } },
+                        label = { Text("New quantity") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                      )
+                      OutlinedTextField(
+                        value = adjustmentReasons[key].orEmpty(),
+                        onValueChange = { value -> adjustmentReasons = adjustmentReasons.toMutableMap().also { it[key] = value.take(240) } },
+                        label = { Text("Adjustment reason / note *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                      )
+                    }
+                  },
+                  confirmButton = {
+                    Button(enabled = savingId != key, onClick = {
+                      val quantity = quantities[key]?.toIntOrNull()
+                      if (quantity == null) { errorMessage = "Enter a valid stock quantity."; return@Button }
+                      val reason = adjustmentReasons[key]?.trim().orEmpty()
+                      if (reason.length < 3) { errorMessage = "Add a reason for this stock adjustment."; return@Button }
+                      scope.launch {
+                        savingId = key; errorMessage = ""; info = ""
+                        try {
+                          VendorService.setVariantInventory(productId, variantId, quantity, reason)
+                          adjustmentReasons = adjustmentReasons.toMutableMap().also { it.remove(key) }
+                          editingKey = null
+                          info = "Stock updated for $label."
+                          refresh()
+                        } catch (e: Exception) { errorMessage = e.message ?: "Stock update failed." }
+                        finally { savingId = null }
+                      }
+                    }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
+                      Text(if (savingId == key) "Saving" else "Save changes")
+                    }
+                  },
+                  dismissButton = { TextButton(enabled = savingId != key, onClick = { editingKey = null }) { Text("Cancel") } }
                 )
-                Button(enabled = savingId != key && !loading, onClick = {
-                  val quantity = quantities[key]?.toIntOrNull()
-                  if (quantity == null) { errorMessage = "Enter a valid stock quantity."; return@Button }
-                  val reason = adjustmentReasons[key]?.trim().orEmpty()
-                  if (reason.length < 3) { errorMessage = "Add a reason for this stock adjustment."; return@Button }
-                  scope.launch {
-                    savingId = key; errorMessage = ""; info = ""
-                    try {
-                      VendorService.setVariantInventory(productId, variantId, quantity, reason)
-                      adjustmentReasons = adjustmentReasons.toMutableMap().also { it.remove(key) }
-                      info = "Stock updated for $label."
-                      refresh()
-                    } catch (e: Exception) { errorMessage = e.message ?: "Stock update failed." }
-                    finally { savingId = null }
-                  }
-                }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
-                  Text(if (savingId == key) "Saving" else "Save")
-                }
               }
             }
           }
