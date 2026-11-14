@@ -31,6 +31,7 @@ data class SupabaseProductDto(
   val id: String,
   val title: String,
   val vendor: String = "",
+  val createdAt: String = "",
   val categoryId: String = "",
   val category: String,
   val price: Int,
@@ -244,3 +245,12 @@ data class SupabasePromotionDto(
   val discountPercent: Double? = null
 )
 
+
+
+data class SupabaseProductVideoDto(
+  val id: String,
+  val productId: String,
+  val videoUrl: String,
+  val durationSeconds: Int,
+  val createdAt: String
+)
