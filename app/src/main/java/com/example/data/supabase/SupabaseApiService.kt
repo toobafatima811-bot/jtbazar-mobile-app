@@ -1,7 +1,11 @@
 package com.example.data.supabase
 
 import android.util.Log
+import com.example.data.model.ShopRecord
+import com.example.data.repository.ProductSortOption
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -13,6 +17,21 @@ import java.net.URLEncoder
  */
 object SupabaseApiService {
   private const val TAG = "SupabaseApiService"
+  private const val METADATA_CACHE_TTL_MS = 60_000L
+  private val categoryCacheMutex = Mutex()
+  @Volatile private var cachedCategories: List<SupabaseCategoryDto>? = null
+  @Volatile private var cachedCategoriesAtMs: Long = 0L
+
+  private val shopCacheMutex = Mutex()
+  @Volatile private var cachedShops: List<ShopRecord>? = null
+  @Volatile private var cachedShopsAtMs: Long = 0L
+
+  fun clearCaches() {
+    cachedCategories = null
+    cachedCategoriesAtMs = 0L
+    cachedShops = null
+    cachedShopsAtMs = 0L
+  }
 
   // ----------------------------------------------------
   // PRODUCTS
@@ -32,118 +51,213 @@ object SupabaseApiService {
     } catch (e: Exception) { Result.failure(e) }
   }
 
-  suspend fun fetchProducts(category: String? = null, isFeatured: Boolean? = null, limit: Int = 50): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
+  private const val PRODUCT_SELECT_COLUMNS =
+    "id,category_id,seller_id,name,slug,sku,short_description,description,price,discount_percent,food_selling_unit,food_unit_price,food_quantity_increment,food_minimum_quantity,is_daily_item,daily_available_quantity,daily_minimum_quantity,daily_available_on,daily_status,currency,specifications,publication_status,moderation_status,stock_verification_status,is_featured,track_inventory,seo_title,seo_description,created_at"
+
+  suspend fun fetchProductsPage(
+    page: Int = 0,
+    pageSize: Int = 12,
+    categoryIds: List<String> = emptyList(),
+    isFeatured: Boolean? = null,
+    searchQuery: String? = null,
+    sortBy: ProductSortOption = ProductSortOption.NEWEST,
+    maxPrice: Int? = null
+  ): Result<PaginatedProductsDto> = withContext(Dispatchers.IO) {
     try {
-      // Match the website catalog service: fetch public product rows first, then
-      // load images, variants, categories and public inventory independently.
-      // Embedded PostgREST joins were preventing the Android catalog from loading
-      // when relationship metadata differed from the website's explicit queries.
+      val safePage = page.coerceAtLeast(0)
+      val safeSize = pageSize.coerceIn(1, 50)
+      val fetchLimit = safeSize + 1
+      val offset = safePage * safeSize
+
       val params = mutableListOf(
-        "select=id,category_id,seller_id,name,slug,sku,short_description,description,price,discount_percent,food_selling_unit,food_unit_price,food_quantity_increment,food_minimum_quantity,is_daily_item,daily_available_quantity,daily_minimum_quantity,daily_available_on,daily_status,currency,specifications,publication_status,moderation_status,stock_verification_status,is_featured,track_inventory,seo_title,seo_description,created_at",
+        "select=$PRODUCT_SELECT_COLUMNS",
         "publication_status=eq.published",
         "moderation_status=eq.approved",
         "vendor_hidden=eq.false",
         "stock_verification_status=neq.paused",
-        "order=created_at.desc",
-        "limit=${limit.coerceIn(1, 100)}"
+        "order=${sortBy.orderParam}",
+        "limit=$fetchLimit",
+        "offset=$offset"
       )
-      if (!category.isNullOrBlank()) params.add("category_id=eq.${URLEncoder.encode(category.trim(), "UTF-8")}")
-      if (isFeatured == true) params.add("is_featured=eq.true")
+
+      val cleanCatIds = categoryIds.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+      if (cleanCatIds.size == 1) {
+        params.add("category_id=eq.${URLEncoder.encode(cleanCatIds.first(), "UTF-8")}")
+      } else if (cleanCatIds.size > 1) {
+        val joined = cleanCatIds.joinToString(",") { URLEncoder.encode(it, "UTF-8") }
+        params.add("category_id=in.($joined)")
+      }
+      if (isFeatured == true) {
+        params.add("is_featured=eq.true")
+      }
+      if (maxPrice != null && maxPrice >= 0) {
+        params.add("or=(food_unit_price.lte.$maxPrice,and(food_unit_price.is.null,price.lte.$maxPrice))")
+      }
+
+      val sanitizedSearch = searchQuery
+        ?.trim()
+        ?.replace("*", "")
+        ?.replace(",", " ")
+        ?.replace("(", " ")
+        ?.replace(")", " ")
+        ?.replace(Regex("\\s+"), " ")
+        ?.trim()
+        .orEmpty()
+      if (sanitizedSearch.isNotBlank()) {
+        val encoded = URLEncoder.encode(sanitizedSearch, "UTF-8").replace("+", "%20")
+        params.add("or=(name.ilike.*$encoded*,short_description.ilike.*$encoded*,description.ilike.*$encoded*)")
+      }
 
       val productJson = SupabaseClient.get("products?${params.joinToString("&")}").getOrThrow()
-      val products = JSONArray(productJson)
-      if (products.length() == 0) return@withContext Result.success(emptyList())
-
-      val ids = (0 until products.length()).mapNotNull { index ->
-        products.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
-      }
-      val idFilter = ids.joinToString(",")
-
-      // Resolve seller identity from the public shop directory, matching website seller_id joins.
-      val sellerIds = (0 until products.length()).mapNotNull { index ->
-        products.optJSONObject(index)?.optString("seller_id")?.takeIf { it.isNotBlank() && it != "null" }
-      }.toSet()
-      val publicShops = SupabaseClient.rpc("list_public_shops").getOrNull()?.let(::JSONArray)
-      val shopsById = mutableMapOf<String, JSONObject>()
-      if (publicShops != null) for (shopIndex in 0 until publicShops.length()) {
-        val shop = publicShops.optJSONObject(shopIndex) ?: continue
-        val shopId = shop.optString("id")
-        if (shopId in sellerIds) shopsById[shopId] = shop
-      }
-      for (productIndex in 0 until products.length()) {
-        val product = products.optJSONObject(productIndex) ?: continue
-        val sellerId = product.optString("seller_id")
-        val shop = shopsById[sellerId] ?: continue
-        product.put("seller", JSONObject().put("shop_name", shop.optString("shop_name", "")))
-      }
-      // Product media and variants are optional enrichment. A failure in one
-      // enrichment endpoint must not hide the published product catalog.
-      val imageJson = SupabaseClient.get(
-        "product_images?select=product_id,image_url,storage_path,is_primary,sort_order&product_id=in.($idFilter)&order=sort_order.asc"
-      ).getOrNull() ?: "[]"
-      val variantJson = SupabaseClient.get(
-        "product_variants?select=id,product_id,option_label,option_value,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
-      ).getOrNull() ?: "[]"
-      val categoryJson = SupabaseClient.get(
-        "categories?select=id,name&is_active=eq.true"
-      ).getOrNull() ?: "[]"
-
-      val images = JSONArray(imageJson)
-      val variants = JSONArray(variantJson)
-      val categories = JSONArray(categoryJson)
-      val categoriesById = mutableMapOf<String, JSONObject>()
-      for (i in 0 until categories.length()) {
-        val row = categories.optJSONObject(i) ?: continue
-        categoriesById[row.optString("id")] = JSONObject().put("id", row.optString("id")).put("name", row.optString("name"))
-      }
-      val imagesByProduct = mutableMapOf<String, JSONArray>()
-      for (i in 0 until images.length()) {
-        val row = images.optJSONObject(i) ?: continue
-        val id = row.optString("product_id")
-        imagesByProduct.getOrPut(id) { JSONArray() }.put(row)
-      }
-      val variantsByProduct = mutableMapOf<String, JSONArray>()
-      for (i in 0 until variants.length()) {
-        val row = variants.optJSONObject(i) ?: continue
-        val id = row.optString("product_id")
-        variantsByProduct.getOrPut(id) { JSONArray() }.put(row)
+      val rawProducts = JSONArray(productJson)
+      val hasMore = rawProducts.length() > safeSize
+      val slicedCount = minOf(rawProducts.length(), safeSize)
+      if (slicedCount == 0) {
+        return@withContext Result.success(PaginatedProductsDto(items = emptyList(), page = safePage, hasMore = false))
       }
 
-      for (i in 0 until products.length()) {
-        val row = products.optJSONObject(i) ?: continue
-        val id = row.optString("id")
-        row.put("images", imagesByProduct[id] ?: JSONArray())
-        row.put("variants", variantsByProduct[id] ?: JSONArray())
-        row.put("category", categoriesById[row.optString("category_id")] ?: JSONObject())
+      val products = JSONArray()
+      for (i in 0 until slicedCount) {
+        products.put(rawProducts.getJSONObject(i))
       }
 
-      val request = JSONObject().put("product_ids", JSONArray(ids)).toString()
-      val inventory = SupabaseClient.rpc("get_public_inventory", request).getOrNull()?.let(::JSONArray)
-      val availability = SupabaseClient.rpc("get_public_availability", request).getOrNull()?.let(::JSONArray)
-      val quantities = mutableMapOf<String, Int>()
-      if (inventory != null) for (i in 0 until inventory.length()) {
-        val row = inventory.getJSONObject(i)
-        val id = row.optString("product_id")
-        quantities[id] = (quantities[id] ?: 0) + row.optInt("available_quantity", 0)
-      }
-      val available = mutableMapOf<String, Boolean>()
-      if (availability != null) for (i in 0 until availability.length()) {
-        val row = availability.getJSONObject(i)
-        val id = row.optString("product_id")
-        available[id] = (available[id] ?: false) || row.optBoolean("is_available", false)
-      }
-      Result.success(parseProductsJson(products.toString(), quantities, available, availability != null, availability))
+      val enriched = enrichProductRows(products)
+      Result.success(PaginatedProductsDto(items = enriched, page = safePage, hasMore = hasMore))
     } catch (e: Exception) {
-      Log.e(TAG, "fetchProducts error", e)
+      runCatching { Log.e(TAG, "fetchProductsPage error", e) }
       Result.failure(e)
     }
   }
 
-  suspend fun searchProducts(query:String):Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO){
-    try{val q=URLEncoder.encode(query.trim(),"UTF-8");val url="products?select=*,category:categories(id,name),images:product_images(image_url,storage_path,is_primary,sort_order),variants:product_variants(id,option_label,option_value,is_active,sort_order),seller:seller_profiles(shop_name)&publication_status=eq.published&moderation_status=eq.approved&vendor_hidden=eq.false&or=(name.ilike.*$q*,description.ilike.*$q*,short_description.ilike.*$q*)&limit=30";SupabaseClient.get(url).mapCatching{parseProductsJson(it)}}catch(e:Exception){Result.failure(e)}
+  suspend fun fetchProducts(category: String? = null, isFeatured: Boolean? = null, limit: Int = 50): Result<List<SupabaseProductDto>> {
+    return fetchProductsPage(
+      page = 0,
+      pageSize = limit.coerceIn(1, 50),
+      categoryIds = if (category.isNullOrBlank()) emptyList() else listOf(category),
+      isFeatured = isFeatured
+    ).map { it.items }
   }
 
-  suspend fun fetchProductById(id:String):Result<SupabaseProductDto> = fetchProducts(limit=100).mapCatching{it.firstOrNull{p->p.id==id}?:throw IOException("Product not found")}
+  suspend fun searchProducts(query: String): Result<List<SupabaseProductDto>> {
+    return fetchProductsPage(
+      page = 0,
+      pageSize = 12,
+      searchQuery = query
+    ).map { it.items }
+  }
+
+  suspend fun fetchProductById(id: String): Result<SupabaseProductDto> = withContext(Dispatchers.IO) {
+    try {
+      val cleanId = id.trim()
+      if (cleanId.isBlank()) throw IOException("Product not found")
+      val encodedId = URLEncoder.encode(cleanId, "UTF-8")
+      val url = "products?select=$PRODUCT_SELECT_COLUMNS&id=eq.$encodedId&publication_status=eq.published&moderation_status=eq.approved&vendor_hidden=eq.false&limit=1"
+      val body = SupabaseClient.get(url).getOrThrow()
+      val rows = JSONArray(body)
+      if (rows.length() == 0) throw IOException("Product not found")
+      val enriched = enrichProductRows(rows)
+      Result.success(enriched.firstOrNull() ?: throw IOException("Product not found"))
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+  }
+
+  suspend fun fetchProductsByIds(ids: List<String>): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
+    try {
+      val cleanIds = ids.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+      if (cleanIds.isEmpty()) return@withContext Result.success(emptyList())
+
+      val aggregated = mutableListOf<SupabaseProductDto>()
+      cleanIds.chunked(40).forEach { chunk ->
+        val encoded = chunk.joinToString(",") { URLEncoder.encode(it, "UTF-8") }
+        val url = "products?select=$PRODUCT_SELECT_COLUMNS&id=in.($encoded)&publication_status=eq.published&moderation_status=eq.approved&vendor_hidden=eq.false&limit=${chunk.size}"
+        val body = SupabaseClient.get(url).getOrThrow()
+        val rows = JSONArray(body)
+        if (rows.length() > 0) {
+          aggregated.addAll(enrichProductRows(rows))
+        }
+      }
+      Result.success(aggregated)
+    } catch (e: Exception) {
+      runCatching { Log.e(TAG, "fetchProductsByIds error", e) }
+      Result.failure(e)
+    }
+  }
+
+  private suspend fun enrichProductRows(products: JSONArray): List<SupabaseProductDto> {
+    if (products.length() == 0) return emptyList()
+
+    val ids = (0 until products.length()).mapNotNull { index ->
+      products.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
+    }
+    if (ids.isEmpty()) return emptyList()
+    val idFilter = ids.joinToString(",")
+
+    // Reuse short-TTL cached shop & category metadata instead of re-fetching on every scroll page.
+    val shopsList = fetchShops(forceRefresh = false).getOrNull().orEmpty()
+    val shopsById = shopsList.associateBy { it.id }
+    val categoriesList = fetchCategories(forceRefresh = false).getOrNull().orEmpty()
+    val categoriesById = categoriesList.associate {
+      it.id to JSONObject().put("id", it.id).put("name", it.title)
+    }
+
+    for (productIndex in 0 until products.length()) {
+      val product = products.optJSONObject(productIndex) ?: continue
+      val sellerId = product.optString("seller_id")
+      val shop = shopsById[sellerId]
+      if (shop != null) {
+        product.put("seller", JSONObject().put("shop_name", shop.name))
+      }
+    }
+
+    // Fetch media, variants, and inventory/availability ONLY for this page's product IDs.
+    val imageJson = SupabaseClient.get(
+      "product_images?select=product_id,image_url,storage_path,is_primary,sort_order&product_id=in.($idFilter)&order=sort_order.asc"
+    ).getOrNull() ?: "[]"
+    val variantJson = SupabaseClient.get(
+      "product_variants?select=id,product_id,option_label,option_value,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
+    ).getOrNull() ?: "[]"
+
+    val images = JSONArray(imageJson)
+    val variants = JSONArray(variantJson)
+    val imagesByProduct = mutableMapOf<String, JSONArray>()
+    for (i in 0 until images.length()) {
+      val row = images.optJSONObject(i) ?: continue
+      val pid = row.optString("product_id")
+      imagesByProduct.getOrPut(pid) { JSONArray() }.put(row)
+    }
+    val variantsByProduct = mutableMapOf<String, JSONArray>()
+    for (i in 0 until variants.length()) {
+      val row = variants.optJSONObject(i) ?: continue
+      val pid = row.optString("product_id")
+      variantsByProduct.getOrPut(pid) { JSONArray() }.put(row)
+    }
+
+    for (i in 0 until products.length()) {
+      val row = products.optJSONObject(i) ?: continue
+      val pid = row.optString("id")
+      row.put("images", imagesByProduct[pid] ?: JSONArray())
+      row.put("variants", variantsByProduct[pid] ?: JSONArray())
+      row.put("category", categoriesById[row.optString("category_id")] ?: JSONObject())
+    }
+
+    val request = JSONObject().put("product_ids", JSONArray(ids)).toString()
+    val inventory = SupabaseClient.rpc("get_public_inventory", request).getOrNull()?.let(::JSONArray)
+    val availability = SupabaseClient.rpc("get_public_availability", request).getOrNull()?.let(::JSONArray)
+    val quantities = mutableMapOf<String, Int>()
+    if (inventory != null) for (i in 0 until inventory.length()) {
+      val row = inventory.getJSONObject(i)
+      val pid = row.optString("product_id")
+      quantities[pid] = (quantities[pid] ?: 0) + row.optInt("available_quantity", 0)
+    }
+    val available = mutableMapOf<String, Boolean>()
+    if (availability != null) for (i in 0 until availability.length()) {
+      val row = availability.getJSONObject(i)
+      val pid = row.optString("product_id")
+      available[pid] = (available[pid] ?: false) || row.optBoolean("is_available", false)
+    }
+    return parseProductsJson(products.toString(), quantities, available, availability != null, availability)
+  }
 
   private fun parseProductsJson(jsonStr: String, quantities: Map<String, Int> = emptyMap(), availability: Map<String, Boolean> = emptyMap(), availabilityKnown: Boolean = false, availabilityRows: JSONArray? = null): List<SupabaseProductDto> {
     val rows = JSONArray(jsonStr)
@@ -326,8 +440,48 @@ object SupabaseApiService {
   // CATEGORIES
   // ----------------------------------------------------
 
-  suspend fun fetchCategories():Result<List<SupabaseCategoryDto>> = withContext(Dispatchers.IO){
-    try{SupabaseClient.get("categories?select=id,name,description,image_url,sort_order,is_coming_soon&is_active=eq.true&order=sort_order.asc").mapCatching{json->val a=JSONArray(json);(0 until a.length()).mapNotNull{i->val o=a.optJSONObject(i)?:return@mapNotNull null;SupabaseCategoryDto(id=o.optString("id"),title=o.optString("name"),countText="",sampleItems=o.optString("description",""),imageUrl=if(o.isNull("image_url"))null else o.optString("image_url"),badge=if(o.optBoolean("is_coming_soon"))"Coming soon" else null,displayOrder=o.optInt("sort_order",i))}}}catch(e:Exception){Log.e(TAG,"fetchCategories error",e);Result.failure(e)}
+  suspend fun fetchCategories(forceRefresh: Boolean = false): Result<List<SupabaseCategoryDto>> = withContext(Dispatchers.IO) {
+    val now = System.currentTimeMillis()
+    val cached = cachedCategories
+    if (!forceRefresh && cached != null && (now - cachedCategoriesAtMs) < METADATA_CACHE_TTL_MS) {
+      return@withContext Result.success(cached)
+    }
+    categoryCacheMutex.withLock {
+      val latestCached = cachedCategories
+      if (!forceRefresh && latestCached != null && (System.currentTimeMillis() - cachedCategoriesAtMs) < METADATA_CACHE_TTL_MS) {
+        return@withContext Result.success(latestCached)
+      }
+      try {
+        val result = SupabaseClient.get(
+          "categories?select=id,name,slug,description,image_url,sort_order,is_coming_soon,parent_id,is_food_category&is_active=eq.true&order=sort_order.asc"
+        ).mapCatching { json ->
+          val arr = JSONArray(json)
+          (0 until arr.length()).mapNotNull { i ->
+            val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+            SupabaseCategoryDto(
+              id = obj.optString("id"),
+              title = obj.optString("name"),
+              slug = obj.optCleanString("slug") ?: "",
+              countText = "",
+              sampleItems = obj.optCleanString("description") ?: "",
+              imageUrl = obj.optCleanString("image_url"),
+              badge = if (obj.optBoolean("is_coming_soon")) "Coming soon" else null,
+              displayOrder = obj.optInt("sort_order", i),
+              parentId = obj.optCleanString("parent_id"),
+              isFoodCategory = obj.optBoolean("is_food_category", false)
+            )
+          }
+        }
+        result.onSuccess { list ->
+          cachedCategories = list
+          cachedCategoriesAtMs = System.currentTimeMillis()
+        }
+        result
+      } catch (e: Exception) {
+        runCatching { Log.e(TAG, "fetchCategories error", e) }
+        Result.failure(e)
+      }
+    }
   }
 
   // CART
@@ -741,45 +895,58 @@ object SupabaseApiService {
   // SHOPS & NEARBY VENDORS
   // ----------------------------------------------------
 
-  suspend fun fetchShops(): Result<List<com.example.data.model.ShopRecord>> = withContext(Dispatchers.IO) {
-    try {
-      val res = SupabaseClient.rpc("list_public_shops")
-      res.fold(
-        onSuccess = { jsonStr ->
-          val arr = JSONArray(jsonStr)
-          val list = mutableListOf<com.example.data.model.ShopRecord>()
-          for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            val name = obj.optString("shop_name", "").takeIf { it.isNotBlank() } ?: continue
-            list.add(
-              com.example.data.model.ShopRecord(
-                id = obj.optString("id", "").takeIf { it.isNotBlank() } ?: continue,
-                name = name,
-                slug = obj.optString("slug", ""),
-                productCount = obj.optInt("product_count", 0),
-                description = obj.optString("description", ""),
-                logoUrl = obj.optString("shop_image_url").takeIf { it.startsWith("http") },
-                bannerUrl = null,
-                city = obj.optString("shop_location_label", ""),
-                address = obj.optString("shop_location_label", ""),
-                latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 0.0) else 0.0,
-                longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 0.0) else 0.0,
-                isVerified = obj.optBoolean("is_verified", false),
-                phone = "",
-                deliveryRadiusKm = obj.optDouble("delivery_radius_km", 0.0)
+  suspend fun fetchShops(forceRefresh: Boolean = false): Result<List<ShopRecord>> = withContext(Dispatchers.IO) {
+    val now = System.currentTimeMillis()
+    val cached = cachedShops
+    if (!forceRefresh && cached != null && (now - cachedShopsAtMs) < METADATA_CACHE_TTL_MS) {
+      return@withContext Result.success(cached)
+    }
+    shopCacheMutex.withLock {
+      val latestCached = cachedShops
+      if (!forceRefresh && latestCached != null && (System.currentTimeMillis() - cachedShopsAtMs) < METADATA_CACHE_TTL_MS) {
+        return@withContext Result.success(latestCached)
+      }
+      try {
+        val res = SupabaseClient.rpc("list_public_shops")
+        res.fold(
+          onSuccess = { jsonStr ->
+            val arr = JSONArray(jsonStr)
+            val list = mutableListOf<ShopRecord>()
+            for (i in 0 until arr.length()) {
+              val obj = arr.optJSONObject(i) ?: continue
+              val name = obj.optString("shop_name", "").takeIf { it.isNotBlank() } ?: continue
+              list.add(
+                ShopRecord(
+                  id = obj.optString("id", "").takeIf { it.isNotBlank() } ?: continue,
+                  name = name,
+                  slug = obj.optString("slug", ""),
+                  productCount = obj.optInt("product_count", 0),
+                  description = obj.optString("description", ""),
+                  logoUrl = obj.optString("shop_image_url").takeIf { it.startsWith("http") },
+                  bannerUrl = null,
+                  city = obj.optString("shop_location_label", ""),
+                  address = obj.optString("shop_location_label", ""),
+                  latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 0.0) else 0.0,
+                  longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 0.0) else 0.0,
+                  isVerified = obj.optBoolean("is_verified", false),
+                  phone = "",
+                  deliveryRadiusKm = obj.optDouble("delivery_radius_km", 0.0)
+                )
               )
-            )
+            }
+            cachedShops = list
+            cachedShopsAtMs = System.currentTimeMillis()
+            Result.success(list)
+          },
+          onFailure = {
+            runCatching { Log.w(TAG, "Public shop directory: ${it.message}") }
+            Result.success(cachedShops ?: emptyList())
           }
-          Result.success(list)
-        },
-        onFailure = {
-          Log.w(TAG, "Public shop directory: ${it.message}")
-          Result.success(emptyList())
-        }
-      )
-    } catch (e: Exception) {
-      Log.e(TAG, "fetchShops error", e)
-      Result.success(emptyList())
+        )
+      } catch (e: Exception) {
+        runCatching { Log.e(TAG, "fetchShops error", e) }
+        Result.success(cachedShops ?: emptyList())
+      }
     }
   }
 }

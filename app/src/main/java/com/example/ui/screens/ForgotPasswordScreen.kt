@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -200,7 +202,7 @@ fun ForgotPasswordScreen(
             if (result.isSuccess) {
               successMessage = "Password reset link sent! Check your inbox."
             } else {
-              errorMessage = result.exceptionOrNull()?.message ?: "Failed to send reset instructions."
+              errorMessage = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.AUTH)
             }
           }
         },

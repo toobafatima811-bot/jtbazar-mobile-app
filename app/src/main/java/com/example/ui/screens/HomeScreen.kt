@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import coil.compose.AsyncImage
@@ -8,8 +7,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,15 +18,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.Checkroom
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.DirectionsCar
+import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.SportsSoccer
+import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -45,26 +55,35 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.window.Dialog
 import com.example.R
+import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.model.ShopRecord
+import com.example.data.repository.CatalogQuery
+import com.example.data.repository.FoodCategoryResolver
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ActiveProductCampaign
 import com.example.data.repository.BannerPlacement
 import com.example.data.repository.PromotionCampaignFilter
 import com.example.ui.components.AddressSelectionSheet
+import com.example.ui.components.FriendlyEmptyState
+import com.example.ui.components.FriendlyErrorState
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.MarketplaceHero
+import com.example.ui.components.PaginationFooter
+import com.example.ui.components.ProductSkeletonGrid
 import com.example.ui.components.PromotionBannerSection
 import com.example.ui.components.rememberAdaptiveColumnCount
+import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.components.TrustBadgesRow
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
+  listState: LazyListState = rememberLazyListState(),
   onProductClick: (Product) -> Unit,
+  onCategoryClick: (CategoryItem) -> Unit = { _ -> },
   onExploreCategoriesClick: () -> Unit,
   onCartClick: () -> Unit,
   onAccountClick: () -> Unit,
@@ -112,11 +131,42 @@ fun HomeScreen(
   var showAddressDialog by remember { mutableStateOf(false) }
   LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
   var searchQuery by remember { mutableStateOf("") }
-  var isSearching by remember { mutableStateOf(false) }
+  val homePaginator = MarketplaceRepository.homePaginator
+  val feedState by homePaginator.state.collectAsState()
+
+  LaunchedEffect(searchQuery) {
+    val trimmed = searchQuery.trim()
+    if (trimmed.isNotEmpty()) {
+      delay(350L)
+      homePaginator.resetAndLoad(CatalogQuery(searchQuery = trimmed))
+    } else if (!feedState.hasLoadedOnce || feedState.query.searchQuery.isNotBlank()) {
+      homePaginator.resetAndLoad(CatalogQuery())
+    }
+  }
+
+  val shouldLoadMore by remember {
+    derivedStateOf {
+      val layoutInfo = listState.layoutInfo
+      val totalItems = layoutInfo.totalItemsCount
+      val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+      totalItems > 0 && lastVisible >= totalItems - 4
+    }
+  }
+  LaunchedEffect(shouldLoadMore, feedState.hasMore, feedState.isLoadingMore, feedState.isInitialLoading, feedState.paginationError) {
+    if (shouldLoadMore &&
+      !feedState.isInitialLoading &&
+      !feedState.isLoadingMore &&
+      feedState.hasMore &&
+      feedState.paginationError == null
+    ) {
+      homePaginator.loadNextPage()
+    }
+  }
+
   val voiceSearchLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
     if (result.resultCode == android.app.Activity.RESULT_OK) {
       val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-      if (spoken.isNotBlank()) { searchQuery = spoken; isSearching = true }
+      if (spoken.isNotBlank()) { searchQuery = spoken }
     }
   }
 
@@ -141,26 +191,6 @@ fun HomeScreen(
     }
   }
 
-  val infiniteAnim = rememberInfiniteTransition(label = "home_ambient_anim")
-  val orb1OffsetY by infiniteAnim.animateFloat(
-    initialValue = -14f,
-    targetValue = 22f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(4500, easing = EaseInOutSine),
-      repeatMode = RepeatMode.Reverse
-    ),
-    label = "orb1_y"
-  )
-  val orb2OffsetX by infiniteAnim.animateFloat(
-    initialValue = 18f,
-    targetValue = -18f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(5500, easing = EaseInOutSine),
-      repeatMode = RepeatMode.Reverse
-    ),
-    label = "orb2_x"
-  )
-
   Scaffold(
     containerColor = Color(0xFFFCFAF7),
     topBar = {
@@ -179,53 +209,12 @@ fun HomeScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .background(
-          brush = Brush.verticalGradient(
-            listOf(
-              Color(0xFFFFF9F2),
-              Color(0xFFFFF5EB),
-              Color(0xFFFCFAF7)
-            )
-          )
-        )
+        .background(Color(0xFFFCFAF7))
     ) {
-      // Ambient floating glowing orange orbs in background
-      Box(
-        modifier = Modifier
-          .align(Alignment.TopEnd)
-          .offset(x = (60 + orb2OffsetX).dp, y = ((-25) + orb1OffsetY).dp)
-          .size(240.dp)
-          .clip(CircleShape)
-          .background(
-            Brush.radialGradient(
-              listOf(
-                Color(0xFFFF8000).copy(alpha = 0.14f),
-                Color(0xFFFFB366).copy(alpha = 0.05f),
-                Color.Transparent
-              )
-            )
-          )
-      )
-      Box(
-        modifier = Modifier
-          .align(Alignment.TopStart)
-          .offset(x = ((-60) - orb2OffsetX * 0.5f).dp, y = (70 + orb1OffsetY).dp)
-          .size(210.dp)
-          .clip(CircleShape)
-          .background(
-            Brush.radialGradient(
-              listOf(
-                Color(0xFFFF6600).copy(alpha = 0.11f),
-                Color(0xFFFFCA80).copy(alpha = 0.04f),
-                Color.Transparent
-              )
-            )
-          )
-      )
-
       LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        state = listState,
+        modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
+        contentPadding = PaddingValues(bottom = 28.dp)
       ) {
       item {
         PromotionBannerSection(
@@ -235,13 +224,10 @@ fun HomeScreen(
         )
       }
       // 1. Search Bar with voice search
-      item {
+      item(key = "home_search_bar") {
         SearchInputBar(
           query = searchQuery,
-          onQueryChange = {
-            searchQuery = it
-            isSearching = it.isNotBlank()
-          },
+          onQueryChange = { searchQuery = it },
           onVoiceSearch = {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
               putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -355,31 +341,16 @@ fun HomeScreen(
                   horizontalAlignment = Alignment.CenterHorizontally,
                   modifier = Modifier
                     .width(76.dp)
-                    .clickable { onExploreCategoriesClick() }
+                    .clickable { onCategoryClick(category) }
+                    .testTag("home_category_chip_${category.id}")
                 ) {
-                  Box(
+                  CategoryVisualThumbnail(
+                    category = category,
+                    allCategories = categories,
                     modifier = Modifier
                       .size(58.dp)
                       .clip(RoundedCornerShape(16.dp))
-                      .background(JTSurfaceVariant),
-                    contentAlignment = Alignment.Center
-                  ) {
-                    if (!category.imageUrl.isNullOrBlank()) {
-                      AsyncImage(
-                        model = category.imageUrl?.takeIf { it.isNotBlank() } ?: category.drawableRes,
-                        contentDescription = category.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                      )
-                    } else {
-                      AsyncImage(
-                        model = category.drawableRes,
-                        contentDescription = category.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                      )
-                    }
-                  }
+                  )
                   Spacer(modifier = Modifier.height(6.dp))
                   Text(
                     text = category.title,
@@ -521,167 +492,167 @@ fun HomeScreen(
         }
       }
 
-      // 5. Popular Products Section Header
-      item {
-        Spacer(modifier = Modifier.height(18.dp))
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-              modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(JTRedContainer),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = Icons.Filled.LocalFireDepartment,
-                contentDescription = null,
-                tint = JTRed,
-                modifier = Modifier.size(18.dp)
+      if (searchQuery.isNotBlank()) {
+        item(key = "search_header") {
+          Spacer(modifier = Modifier.height(10.dp))
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text(
+              text = "Search Results",
+              fontWeight = FontWeight.Bold,
+              fontSize = 16.sp,
+              color = JTTextPrimary
+            )
+            TextButton(onClick = { searchQuery = "" }) {
+              Text("Clear", color = JTOrange, fontWeight = FontWeight.SemiBold)
+            }
+          }
+        }
+
+        when {
+          feedState.isInitialLoading && feedState.items.isEmpty() -> {
+            item(key = "search_skeleton") {
+              ProductSkeletonGrid(columns = productGridColumns, rows = 3)
+            }
+          }
+          feedState.initialError != null && feedState.items.isEmpty() -> {
+            item(key = "search_error") {
+              FriendlyErrorState(
+                title = "Search failed",
+                message = feedState.initialError ?: "Products load nahi ho sake. Please try again.",
+                onRetry = { homePaginator.retry() }
               )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
+          }
+          feedState.items.isEmpty() -> {
+            item(key = "search_empty") {
+              FriendlyEmptyState(
+                title = "No matching products found",
+                message = "Try searching with another product name or browse our categories.",
+                actionLabel = "Clear Search",
+                onAction = { searchQuery = "" }
+              )
+            }
+          }
+          else -> {
+            val chunkedSearch = feedState.items.chunked(productGridColumns)
+            items(
+              items = chunkedSearch,
+              key = { row -> "search_${row.firstOrNull()?.id ?: row.hashCode()}" }
+            ) { rowItems ->
+              Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                ProductGridRow(
+                  rowItems = rowItems,
+                  columns = productGridColumns,
+                  onProductClick = onProductClick,
+                  onAddToCart = { MarketplaceRepository.addToCart(it) },
+                  onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
+                )
+              }
+            }
+            item(key = "search_pagination_footer") {
+              PaginationFooter(
+                isLoadingMore = feedState.isLoadingMore,
+                paginationError = feedState.paginationError,
+                hasMore = feedState.hasMore,
+                itemCount = feedState.items.size,
+                onRetry = { homePaginator.retry() }
+              )
+            }
+          }
+        }
+      } else {
+        // 5. Popular Products Section Header
+        item(key = "popular_header") {
+          Spacer(modifier = Modifier.height(18.dp))
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(28.dp)
+                  .clip(RoundedCornerShape(8.dp))
+                  .background(JTRedContainer),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.LocalFireDepartment,
+                  contentDescription = null,
+                  tint = JTRed,
+                  modifier = Modifier.size(18.dp)
+                )
+              }
+              Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = if (searchQuery.isBlank()) "Popular Products" else "Search Results",
+                text = "Popular Products",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = JTTextPrimary
               )
-
             }
-          }
 
-          Text(
-            text = "View All >",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = JTPurplePrimary,
-            modifier = Modifier
-              .clickable { onExploreCategoriesClick() }
-              .padding(4.dp)
-          )
-        }
-      }
-
-      // 6. 2x2 Grid of Popular Products
-      item {
-        Spacer(modifier = Modifier.height(10.dp))
-        val homeProducts = products.filter { it.isFeatured }.ifEmpty { products }
-        val displayProducts = if (searchQuery.isBlank()) {
-          homeProducts.take(4)
-        } else {
-          products.filter {
-            it.title.contains(searchQuery.trim(), ignoreCase = true) ||
-              it.category.contains(searchQuery.trim(), ignoreCase = true) ||
-              it.vendor.contains(searchQuery.trim(), ignoreCase = true) ||
-              it.craftStory.contains(searchQuery.trim(), ignoreCase = true)
+            Text(
+              text = "View All >",
+              fontSize = 13.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = JTPurplePrimary,
+              modifier = Modifier
+                .clickable { onExploreCategoriesClick() }
+                .padding(4.dp)
+            )
           }
         }
 
-        if (isLoading) {
-          Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(vertical = 32.dp),
-            contentAlignment = Alignment.Center
-          ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-              CircularProgressIndicator(color = JTPurplePrimary, modifier = Modifier.size(36.dp))
-              Spacer(modifier = Modifier.height(10.dp))
-              Text("Loading live JTBazar catalog...", fontSize = 12.sp, color = JTTextSecondary)
+        // 6. Grid of Popular Products (first 4 items)
+        item(key = "popular_grid") {
+          Spacer(modifier = Modifier.height(10.dp))
+          val homeProducts = products.filter { it.isFeatured }.ifEmpty { products }
+          val displayProducts = homeProducts.take(4)
+
+          when {
+            isLoading && products.isEmpty() -> {
+              ProductSkeletonGrid(columns = productGridColumns, rows = 2)
             }
-          }
-        } else if (displayProducts.isEmpty()) {
-          Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = JTSurfaceVariant,
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 16.dp, vertical = 8.dp)
-          ) {
-            Column(
-              modifier = Modifier.padding(24.dp),
-              horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-              Icon(
-                imageVector = Icons.Filled.ShoppingBag,
-                contentDescription = null,
-                tint = JTPurplePrimary,
-                modifier = Modifier.size(36.dp)
+            displayProducts.isEmpty() -> {
+              FriendlyErrorState(
+                title = "Products load nahi ho sake",
+                message = "Please check your internet connection and tap retry.",
+                actionLabel = "Refresh Catalog",
+                onRetry = { MarketplaceRepository.refreshLiveCatalog() }
               )
-              Spacer(modifier = Modifier.height(10.dp))
-              Text(
-                text = if (searchQuery.isNotBlank()) "No matching products found" else "No live products available",
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                color = JTTextPrimary
-              )
-              Spacer(modifier = Modifier.height(4.dp))
-              Text(
-                text = if (searchQuery.isNotBlank()) "Try searching for another keyword or browse categories." else "Please check your network connection or tap retry.",
-                fontSize = 12.sp,
-                color = JTTextSecondary,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-              )
-              Spacer(modifier = Modifier.height(14.dp))
-              Button(
-                onClick = { MarketplaceRepository.refreshLiveCatalog() },
-                colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
-                shape = RoundedCornerShape(8.dp)
-              ) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Refresh Catalog", fontWeight = FontWeight.Bold)
-              }
             }
-          }
-        } else {
-          Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-          ) {
-            val chunked = displayProducts.chunked(productGridColumns)
-            chunked.forEach { rowItems ->
-              Row(
-                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            else -> {
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
               ) {
-                rowItems.forEach { product ->
-                  Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    ProductCard(
-                      product = product,
-                      onProductClick = { onProductClick(product) },
-                      onAddToCart = {
-                        MarketplaceRepository.addToCart(product)
-                      },
-                      onToggleWishlist = {
-                        MarketplaceRepository.toggleWishlist(product.id)
-                      },
-                      modifier = Modifier.fillMaxHeight()
-                    )
-                  }
-                }
-                repeat((productGridColumns - rowItems.size).coerceAtLeast(0)) {
-                  Spacer(modifier = Modifier.weight(1f))
+                displayProducts.chunked(productGridColumns).forEach { rowItems ->
+                  ProductGridRow(
+                    rowItems = rowItems,
+                    columns = productGridColumns,
+                    onProductClick = onProductClick,
+                    onAddToCart = { MarketplaceRepository.addToCart(it) },
+                    onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
+                  )
                 }
               }
             }
           }
         }
-      }
 
-
-      if (searchQuery.isBlank()) {
-        item {
+        item(key = "product_strip_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.PRODUCT_STRIP,
             promotions = promotionsFor(BannerPlacement.PRODUCT_STRIP),
@@ -690,121 +661,274 @@ fun HomeScreen(
         }
       }
 
-      // New arrivals: same latest-published catalog ordering as the website.
-      item {
-        val newArrivals = products.take(4)
-        Column(modifier = Modifier.fillMaxWidth().padding(top = 22.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column {
-              Text("NEW ARRIVALS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
-              Text("Fresh additions to the store.", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
-              Text("Recently added live listings.", fontSize = 11.sp, color = JTTextSecondary)
-            }
-            Text(
-              "Browse catalog  →",
-              fontSize = 11.sp,
-              fontWeight = FontWeight.SemiBold,
-              color = JTOrangeDark,
-              modifier = Modifier.clickable { onExploreCategoriesClick() }.padding(4.dp)
-            )
-          }
-          Spacer(Modifier.height(10.dp))
-          if (newArrivals.isNotEmpty()) {
-            Column(
+      // New arrivals: only shown when not actively searching.
+      if (searchQuery.isBlank()) {
+        item(key = "new_arrivals_section") {
+          val newArrivals = products.take(4)
+          Column(modifier = Modifier.fillMaxWidth().padding(top = 22.dp)) {
+            Row(
               modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-              verticalArrangement = Arrangement.spacedBy(12.dp)
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
             ) {
-              newArrivals.chunked(productGridColumns).forEach { rowItems ->
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                  rowItems.forEach { product ->
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                      ProductCard(
-                        product = product,
-                        onProductClick = { onProductClick(product) },
-                        onAddToCart = { MarketplaceRepository.addToCart(product) },
-                        onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
-                        modifier = Modifier.fillMaxHeight()
-                      )
-                    }
-                  }
-                  repeat((productGridColumns - rowItems.size).coerceAtLeast(0)) {
-                    Spacer(Modifier.weight(1f))
-                  }
+              Column {
+                Text("NEW ARRIVALS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
+                Text("Fresh additions to the store.", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+                Text("Recently added live listings.", fontSize = 11.sp, color = JTTextSecondary)
+              }
+              Text(
+                "Browse catalog  →",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = JTOrangeDark,
+                modifier = Modifier.clickable { onExploreCategoriesClick() }.padding(4.dp)
+              )
+            }
+            Spacer(Modifier.height(10.dp))
+            if (newArrivals.isNotEmpty()) {
+              Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+              ) {
+                newArrivals.chunked(productGridColumns).forEach { rowItems ->
+                  ProductGridRow(
+                    rowItems = rowItems,
+                    columns = productGridColumns,
+                    onProductClick = onProductClick,
+                    onAddToCart = { MarketplaceRepository.addToCart(it) },
+                    onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
+                  )
                 }
               }
             }
           }
         }
-      }
 
-      if (searchQuery.isBlank()) {
-        item {
+        item(key = "below_new_arrivals_banners") {
           PromotionBannerSection(
             placement = BannerPlacement.BELOW_NEW_ARRIVALS,
             promotions = promotionsFor(BannerPlacement.BELOW_NEW_ARRIVALS),
             onDestinationClick = handleBannerClick
           )
         }
-        item {
+        item(key = "offer_section_banners") {
           PromotionBannerSection(
             placement = BannerPlacement.OFFER_SECTION,
             promotions = promotionsFor(BannerPlacement.OFFER_SECTION),
             onDestinationClick = handleBannerClick
           )
         }
-      }
 
-      // 8. Trust Badges
-      item {
-        Spacer(modifier = Modifier.height(8.dp))
-        TrustBadgesRow()
-      }
+        // 8. Trust Badges
+        item(key = "trust_badges") {
+          Spacer(modifier = Modifier.height(8.dp))
+          TrustBadgesRow()
+        }
 
-      // 9. Budget Shopping Callout Banner
-      item {
-        Surface(
-          shape = RoundedCornerShape(16.dp),
-          color = Color(0xFFFEF3C7),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clickable { onBudgetClick() }
-            .testTag("home_budget_banner")
-        ) {
-          Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // 9. Budget Shopping Callout Banner
+        item(key = "budget_banner") {
+          Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFFFEF3C7),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 8.dp)
+              .clickable { onBudgetClick() }
+              .testTag("home_budget_banner")
           ) {
-            Box(
-              modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFFFDE68A)),
-              contentAlignment = Alignment.Center
+            Row(
+              modifier = Modifier.padding(16.dp),
+              verticalAlignment = Alignment.CenterVertically
             ) {
-              Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = JTAmberDark, modifier = Modifier.size(24.dp))
+              Box(
+                modifier = Modifier
+                  .size(42.dp)
+                  .clip(RoundedCornerShape(10.dp))
+                  .background(Color(0xFFFDE68A)),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = JTAmberDark, modifier = Modifier.size(24.dp))
+              }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column(modifier = Modifier.weight(1f)) {
+                Text("Budget Shopping Corner", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF92400E))
+                Text("Explore products under Rs. 500, 1,000 & 2,000", fontSize = 11.sp, color = Color(0xFFB45309))
+              }
+              Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFF92400E), modifier = Modifier.size(16.dp))
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-              Text("Budget Shopping Corner", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF92400E))
-              Text("Explore products under Rs. 500, 1,000 & 2,000", fontSize = 11.sp, color = Color(0xFFB45309))
+          }
+        }
+
+        // 10. Social Media Links Section
+        item(key = "social_media_section") {
+          SocialMediaSection()
+        }
+
+        // 11. Infinite Scroll Paginated Full Catalog (12 items per page)
+        item(key = "all_products_header") {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 8.dp)
+          ) {
+            Text("EXPLORE JTBazar", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
+            Text("More Products For You", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+          }
+        }
+
+        if (feedState.isInitialLoading && feedState.items.isEmpty()) {
+          item(key = "home_feed_skeleton") {
+            ProductSkeletonGrid(columns = productGridColumns, rows = 2)
+          }
+        } else if (feedState.initialError != null && feedState.items.isEmpty()) {
+          item(key = "home_feed_error") {
+            FriendlyErrorState(
+              title = "Products load nahi ho sake",
+              message = feedState.initialError ?: "Please check your connection and try again.",
+              onRetry = { homePaginator.retry() }
+            )
+          }
+        } else {
+          val chunkedAll = feedState.items.chunked(productGridColumns)
+          items(
+            items = chunkedAll,
+            key = { row -> "all_${row.firstOrNull()?.id ?: row.hashCode()}" }
+          ) { rowItems ->
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+              ProductGridRow(
+                rowItems = rowItems,
+                columns = productGridColumns,
+                onProductClick = onProductClick,
+                onAddToCart = { MarketplaceRepository.addToCart(it) },
+                onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
+              )
             }
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFF92400E), modifier = Modifier.size(16.dp))
+          }
+          item(key = "home_feed_pagination_footer") {
+            PaginationFooter(
+              isLoadingMore = feedState.isLoadingMore,
+              paginationError = feedState.paginationError,
+              hasMore = feedState.hasMore,
+              itemCount = feedState.items.size,
+              onRetry = { homePaginator.retry() }
+            )
           }
         }
       }
+    }
+    }
+  }
+}
 
-      // 10. Social Media Links Section (AT THE VERY END OF HOME SCREEN)
-      item {
-        SocialMediaSection()
+@Composable
+fun ProductGridRow(
+  rowItems: List<Product>,
+  columns: Int,
+  onProductClick: (Product) -> Unit,
+  onAddToCart: (Product) -> Unit,
+  onToggleWishlist: (Product) -> Unit,
+  campaignStyle: Boolean = false
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+    horizontalArrangement = Arrangement.spacedBy(12.dp)
+  ) {
+    rowItems.forEach { product ->
+      Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        ProductCard(
+          product = product,
+          onProductClick = { onProductClick(product) },
+          onAddToCart = { onAddToCart(product) },
+          onToggleWishlist = { onToggleWishlist(product) },
+          modifier = Modifier.fillMaxHeight(),
+          campaignStyle = campaignStyle
+        )
       }
     }
+    repeat((columns - rowItems.size).coerceAtLeast(0)) {
+      Spacer(modifier = Modifier.weight(1f))
     }
+  }
+}
+
+@Composable
+fun CategoryVisualThumbnail(
+  category: CategoryItem,
+  allCategories: List<CategoryItem>,
+  modifier: Modifier = Modifier
+) {
+  val remoteUrl = category.imageUrl?.takeIf { it.isNotBlank() }
+  val foodDrawable = if (remoteUrl == null) {
+    FoodCategoryResolver.resolveFoodDrawableOrNull(category, allCategories)
+  } else {
+    null
+  }
+  Box(
+    modifier = modifier.background(JTSurfaceVariant),
+    contentAlignment = Alignment.Center
+  ) {
+    when {
+      remoteUrl != null -> {
+        AsyncImage(
+          model = rememberSizedImageRequest(data = remoteUrl, widthPx = 320, heightPx = 320),
+          contentDescription = category.title,
+          contentScale = ContentScale.Crop,
+          modifier = Modifier.fillMaxSize()
+        )
+      }
+      foodDrawable != null -> {
+        Image(
+          painter = painterResource(id = foodDrawable),
+          contentDescription = category.title,
+          contentScale = ContentScale.Crop,
+          modifier = Modifier.fillMaxSize()
+        )
+      }
+      else -> {
+        val (icon, tint, bg) = resolveNonFoodCategoryVisual(category.title, category.slug)
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .background(bg),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = icon,
+            contentDescription = category.title,
+            tint = tint,
+            modifier = Modifier.size(28.dp)
+          )
+        }
+      }
+    }
+  }
+}
+
+private fun resolveNonFoodCategoryVisual(
+  title: String,
+  slug: String
+): Triple<androidx.compose.ui.graphics.vector.ImageVector, Color, Color> {
+  val key = "$title $slug".lowercase()
+  return when {
+    key.contains("electronic") || key.contains("phone") || key.contains("tech") || key.contains("gadget") ->
+      Triple(Icons.Rounded.Devices, Color(0xFF1D4ED8), Color(0xFFEFF6FF))
+    key.contains("fashion") || key.contains("cloth") || key.contains("apparel") || key.contains("bag") ->
+      Triple(Icons.Rounded.Checkroom, Color(0xFF9333EA), Color(0xFFFAF5FF))
+    key.contains("beauty") || key.contains("cosmetic") || key.contains("skin") ->
+      Triple(Icons.Rounded.Face, Color(0xFFDB2777), Color(0xFFFDF2F8))
+    key.contains("home") || key.contains("living") || key.contains("furniture") || key.contains("decor") ->
+      Triple(Icons.Rounded.Home, Color(0xFF0D9488), Color(0xFFF0FDFA))
+    key.contains("book") || key.contains("station") ->
+      Triple(Icons.Rounded.MenuBook, Color(0xFFD97706), Color(0xFFFFFBEB))
+    key.contains("sport") || key.contains("fitness") ->
+      Triple(Icons.Rounded.SportsSoccer, Color(0xFF16A34A), Color(0xFFF0FDF4))
+    key.contains("auto") || key.contains("car") || key.contains("bike") ->
+      Triple(Icons.Rounded.DirectionsCar, Color(0xFF475569), Color(0xFFF1F5F9))
+    key.contains("food") || key.contains("grocer") ->
+      Triple(Icons.Rounded.Restaurant, JTOrangeDark, JTOrangeContainer)
+    else ->
+      Triple(Icons.Rounded.Category, JTOrangeDark, JTOrangeContainer)
   }
 }
 
@@ -1096,23 +1220,6 @@ fun ProductCard(
   val cartItems by MarketplaceRepository.cartItems.collectAsState()
   val hasVariants = product.palettes.isNotEmpty() || product.sizes.isNotEmpty()
   val isInCart = cartItems.any { it.product.id == product.id }
-  // Match the website's restrained 7.2s shine sweep without affecting card interaction.
-  val shineTransition = rememberInfiniteTransition(label = "product_card_shine")
-  val shineProgress by shineTransition.animateFloat(
-    initialValue = 1.4f,
-    targetValue = -1.4f,
-    animationSpec = infiniteRepeatable(
-      animation = keyframes {
-        durationMillis = 7200
-        1.4f at 0
-        1.4f at 5500
-        -1.4f at 6800
-        1.4f at 7200
-      },
-      repeatMode = RepeatMode.Restart
-    ),
-    label = "product_card_shine_progress"
-  )
 
   val cardRadius = if (campaignStyle) 14.dp else 16.dp
   Card(
@@ -1124,44 +1231,42 @@ fun ProductCard(
       .clickable(onClick = onProductClick)
       .testTag("product_card_${product.id}")
   ) {
-    Box(
+    Column(
       modifier = Modifier
         .fillMaxSize()
         .clip(RoundedCornerShape(cardRadius))
-        .drawWithCache {
-          val sweep = Brush.linearGradient(
-            colors = listOf(
-              Color.Transparent,
-              Color.White.copy(alpha = 0.035f),
-              Color.White.copy(alpha = 0.20f),
-              Color.White.copy(alpha = 0.035f),
-              Color.Transparent
-            ),
-            start = Offset(size.width * shineProgress, 0f),
-            end = Offset(size.width * (shineProgress + 0.42f), size.height)
-          )
-          onDrawWithContent {
-            drawContent()
-            drawRect(sweep)
-          }
-        }
-    ) {
-    Column(
-      modifier = Modifier.fillMaxSize()
     ) {
       // Image Box with Badge & Heart
       Box(
         modifier = Modifier
           .fillMaxWidth()
           .aspectRatio(1.08f)
-          .background(if (campaignStyle) Color(0xFFFFF7ED) else JTSurfaceVariant)
+          .background(if (campaignStyle) Color(0xFFFFF7ED) else JTSurfaceVariant),
+        contentAlignment = Alignment.Center
       ) {
-        AsyncImage(
-          model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
-          contentDescription = product.title,
-          contentScale = if (campaignStyle) ContentScale.Fit else ContentScale.Crop,
-          modifier = Modifier.fillMaxSize().then(if (campaignStyle) Modifier.padding(8.dp) else Modifier)
-        )
+        val remoteUrl = product.imageUrl?.takeIf { it.isNotBlank() }
+        if (remoteUrl != null) {
+          AsyncImage(
+            model = rememberSizedImageRequest(data = remoteUrl, widthPx = 420, heightPx = 420),
+            contentDescription = product.title,
+            contentScale = if (campaignStyle) ContentScale.Fit else ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().then(if (campaignStyle) Modifier.padding(8.dp) else Modifier)
+          )
+        } else if (product.drawableRes != 0) {
+          Image(
+            painter = painterResource(id = product.drawableRes),
+            contentDescription = product.title,
+            contentScale = if (campaignStyle) ContentScale.Fit else ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().then(if (campaignStyle) Modifier.padding(8.dp) else Modifier)
+          )
+        } else {
+          Icon(
+            imageVector = Icons.Outlined.ShoppingBag,
+            contentDescription = product.title,
+            tint = JTTextTertiary,
+            modifier = Modifier.size(36.dp)
+          )
+        }
 
         // Discount tag top left
         if (product.badge != null) {
@@ -1187,7 +1292,7 @@ fun ProductCard(
           modifier = Modifier
             .align(Alignment.TopEnd)
             .padding(6.dp)
-            .size(28.dp)
+            .size(30.dp)
             .clickable(onClick = onToggleWishlist)
             .testTag("wishlist_toggle_${product.id}")
         ) {
@@ -1251,6 +1356,18 @@ fun ProductCard(
             lineHeight = 15.sp,
             modifier = Modifier.fillMaxWidth()
           )
+
+          if (!product.foodSellingUnit.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              text = product.foodSellingUnit,
+              fontSize = 11.sp,
+              color = JTTextSecondary,
+              fontWeight = FontWeight.Medium,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
 
           Spacer(modifier = Modifier.height(4.dp))
 
@@ -1366,7 +1483,6 @@ fun ProductCard(
           }
         }
       }
-    }
     }
   }
 }

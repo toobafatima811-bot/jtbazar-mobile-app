@@ -27,6 +27,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -226,7 +228,7 @@ fun ResetPasswordScreen(
               onResetSuccess()
             } else {
               isLoading = false
-              errorMessage = verifyRes.exceptionOrNull()?.message ?: "Reset code is invalid or has expired."
+              errorMessage = AppErrorMapper.toCustomerMessage(verifyRes.exceptionOrNull(), ErrorContext.AUTH)
             }
           }
         },

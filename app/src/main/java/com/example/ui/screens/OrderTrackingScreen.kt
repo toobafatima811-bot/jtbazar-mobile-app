@@ -36,6 +36,8 @@ import com.example.R
 import com.example.data.model.OrderRecord
 import com.example.data.model.StepState
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.theme.*
 
@@ -52,6 +54,7 @@ fun OrderTrackingScreen(
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
 
   var showInvoiceDialog by remember { mutableStateOf(false) }
+  var isCancelling by remember { mutableStateOf(false) }
 
   if (showInvoiceDialog && activeOrder != null) {
     InvoiceDialog(
@@ -583,28 +586,41 @@ fun OrderTrackingScreen(
           if (activeOrder.orderStatus == "PENDING" || activeOrder.orderStatus == "CONFIRMED") {
             OutlinedButton(
               onClick = {
-                MarketplaceRepository.cancelOrder(activeOrder.orderId) { success ->
-                  val message = if (success) "Order #" + activeOrder.orderNumber + " cancelled" else "The server could not cancel this order."
+                if (isCancelling) return@OutlinedButton
+                isCancelling = true
+                val started = MarketplaceRepository.cancelOrder(activeOrder.orderId) { success ->
+                  isCancelling = false
+                  val message = if (success) {
+                    "Order #" + activeOrder.orderNumber + " cancelled"
+                  } else {
+                    AppErrorMapper.defaultMessageFor(ErrorContext.ORDER_CANCEL)
+                  }
                   Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
+                if (!started) isCancelling = false
               },
+              enabled = !isCancelling,
               shape = RoundedCornerShape(12.dp),
               colors = ButtonDefaults.outlinedButtonColors(contentColor = JTRed),
               border = androidx.compose.foundation.BorderStroke(1.dp, JTRed),
               modifier = Modifier
                 .fillMaxWidth()
-                .height(46.dp)
+                .height(48.dp)
                 .testTag("cancel_order_button")
             ) {
-              Icon(
-                imageVector = Icons.Filled.Cancel,
-                contentDescription = null,
-                tint = JTRed,
-                modifier = Modifier.size(18.dp)
-              )
+              if (isCancelling) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = JTRed, strokeWidth = 2.dp)
+              } else {
+                Icon(
+                  imageVector = Icons.Filled.Cancel,
+                  contentDescription = null,
+                  tint = JTRed,
+                  modifier = Modifier.size(18.dp)
+                )
+              }
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = "Cancel Order",
+                text = if (isCancelling) "Cancelling..." else "Cancel Order",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
               )

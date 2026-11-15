@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,14 +18,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.JTBazarTopBar
+import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
 
 @Composable
@@ -37,7 +37,10 @@ fun WishlistScreen(
   modifier: Modifier = Modifier
 ) {
   val products by MarketplaceRepository.products.collectAsState()
-  val wishlisted = products.filter { it.isWishlisted }
+  val hydratedWishlist by MarketplaceRepository.wishlistedProducts.collectAsState()
+  val wishlisted = remember(hydratedWishlist, products) {
+    (hydratedWishlist + products.filter { it.isWishlisted }).distinctBy { it.id }
+  }
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
 
@@ -103,7 +106,7 @@ fun WishlistScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
       ) {
-        items(wishlisted) { product ->
+        items(wishlisted, key = { it.id }) { product ->
           Surface(
             shape = RoundedCornerShape(16.dp),
             color = JTCardBg,
@@ -120,15 +123,36 @@ fun WishlistScreen(
                 modifier = Modifier
                   .size(72.dp)
                   .clip(RoundedCornerShape(12.dp))
-                  .background(JTSurfaceVariant)
+                  .background(JTSurfaceVariant),
+                contentAlignment = Alignment.Center
               ) {
-                // Coil handles both remote URLs and bundled drawable fallbacks safely.
-                coil.compose.AsyncImage(
-                  model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
-                  contentDescription = product.title,
-                  contentScale = ContentScale.Crop,
-                  modifier = Modifier.fillMaxSize()
-                )
+                val remoteUrl = product.imageUrl?.takeIf { it.isNotBlank() }
+                when {
+                  remoteUrl != null -> {
+                    AsyncImage(
+                      model = rememberSizedImageRequest(data = remoteUrl, widthPx = 220, heightPx = 220),
+                      contentDescription = product.title,
+                      contentScale = ContentScale.Crop,
+                      modifier = Modifier.fillMaxSize()
+                    )
+                  }
+                  product.drawableRes != 0 -> {
+                    Image(
+                      painter = painterResource(id = product.drawableRes),
+                      contentDescription = product.title,
+                      contentScale = ContentScale.Crop,
+                      modifier = Modifier.fillMaxSize()
+                    )
+                  }
+                  else -> {
+                    Icon(
+                      imageVector = Icons.Outlined.ShoppingBag,
+                      contentDescription = product.title,
+                      tint = JTTextTertiary,
+                      modifier = Modifier.size(28.dp)
+                    )
+                  }
+                }
               }
 
               Spacer(modifier = Modifier.width(12.dp))
@@ -160,7 +184,7 @@ fun WishlistScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
               ) {
                 IconButton(
-                  onClick = { MarketplaceRepository.toggleWishlist(product.id) },
+                  onClick = { MarketplaceRepository.toggleWishlist(product.id, product) },
                   modifier = Modifier.size(32.dp)
                 ) {
                   Icon(

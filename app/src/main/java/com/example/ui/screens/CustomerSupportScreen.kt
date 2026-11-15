@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -189,7 +191,11 @@ fun CustomerSupportScreen(
               subject = ""
               message = ""
             } else {
-              Toast.makeText(context, "Could not submit request: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+              Toast.makeText(
+                context,
+                AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.SUPPORT),
+                Toast.LENGTH_LONG
+              ).show()
             }
           }
         },

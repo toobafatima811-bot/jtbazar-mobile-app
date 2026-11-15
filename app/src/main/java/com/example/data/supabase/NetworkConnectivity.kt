@@ -17,6 +17,17 @@ object NetworkConnectivity {
   private val _isOnline = MutableStateFlow<Boolean?>(null)
   val isOnline: StateFlow<Boolean?> = _isOnline.asStateFlow()
 
+  @Volatile internal var isOnlineOverride: Boolean? = null
+
+  fun currentOnlineState(): Boolean? = isOnlineOverride ?: _isOnline.value
+
+  internal fun setOnlineOverrideForTest(online: Boolean?) {
+    isOnlineOverride = online
+    if (online != null) {
+      _isOnline.value = online
+    }
+  }
+
   @Volatile private var connectivityManager: ConnectivityManager? = null
   @Volatile private var callback: ConnectivityManager.NetworkCallback? = null
 

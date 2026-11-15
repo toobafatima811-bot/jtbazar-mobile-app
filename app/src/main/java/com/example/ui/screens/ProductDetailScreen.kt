@@ -38,6 +38,7 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
+import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
 
 @Composable
@@ -305,14 +306,14 @@ fun ProductDetailScreen(
 
             IconButton(
               onClick = {
-                MarketplaceRepository.toggleWishlist(product.id)
+                MarketplaceRepository.toggleWishlist(liveProduct.id, liveProduct)
               },
-              modifier = Modifier.size(36.dp)
+              modifier = Modifier.size(48.dp)
             ) {
               Icon(
-                imageVector = if (product.isWishlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                imageVector = if (liveProduct.isWishlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                 contentDescription = "Favorite",
-                tint = if (product.isWishlisted) JTRed else JTTextPrimary,
+                tint = if (liveProduct.isWishlisted) JTRed else JTTextPrimary,
                 modifier = Modifier.size(20.dp)
               )
             }
@@ -328,16 +329,36 @@ fun ProductDetailScreen(
             .padding(horizontal = 16.dp)
             .aspectRatio(1f)
             .clip(RoundedCornerShape(20.dp))
-            .background(JTSurfaceVariant)
+            .background(JTSurfaceVariant),
+          contentAlignment = Alignment.Center
         ) {
-          // Load remote and bundled fallback images with Coil to avoid eager
-          // painterResource() calls during composition.
-          AsyncImage(
-            model = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.drawableRes,
-            contentDescription = product.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-          )
+          val remoteUrl = liveProduct.imageUrl?.takeIf { it.isNotBlank() }
+          when {
+            remoteUrl != null -> {
+              AsyncImage(
+                model = rememberSizedImageRequest(data = remoteUrl, widthPx = 900, heightPx = 900),
+                contentDescription = liveProduct.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+              )
+            }
+            liveProduct.drawableRes != 0 -> {
+              Image(
+                painter = painterResource(id = liveProduct.drawableRes),
+                contentDescription = liveProduct.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+              )
+            }
+            else -> {
+              Icon(
+                imageVector = Icons.Outlined.ShoppingBag,
+                contentDescription = liveProduct.title,
+                tint = JTTextTertiary,
+                modifier = Modifier.size(64.dp)
+              )
+            }
+          }
 
           // Discount Tag
           Column(

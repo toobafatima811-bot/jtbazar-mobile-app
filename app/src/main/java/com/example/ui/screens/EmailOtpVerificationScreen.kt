@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
@@ -239,7 +241,7 @@ fun EmailOtpVerificationScreen(
               Toast.makeText(context, "Account verified successfully! Welcome to JTBazar.", Toast.LENGTH_SHORT).show()
               onVerified()
             } else {
-              errorMessage = result.exceptionOrNull()?.message ?: "Invalid or expired verification code."
+              errorMessage = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.AUTH)
             }
           }
         },
@@ -288,7 +290,7 @@ fun EmailOtpVerificationScreen(
                   if (res.isSuccess) {
                     successMessage = "A new verification code has been sent to your email."
                   } else {
-                    errorMessage = res.exceptionOrNull()?.message ?: "Failed to resend code."
+                    errorMessage = AppErrorMapper.toCustomerMessage(res.exceptionOrNull(), ErrorContext.AUTH)
                   }
                   while (resendCountdown > 0) {
                     delay(1000L)

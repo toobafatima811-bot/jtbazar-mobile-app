@@ -70,6 +70,7 @@ import com.example.data.supabase.SupabaseProductVideoDto
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.JTBazarTopBar
+import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
 import com.example.location.AddressReverseGeocoder
 import kotlinx.coroutines.launch
@@ -297,7 +298,7 @@ fun DiscoverScreen(
               Toast.makeText(context, "Added ${prod.title} to cart!", Toast.LENGTH_SHORT).show()
             },
             onToggleWishlist = { prod ->
-              MarketplaceRepository.toggleWishlist(prod.id)
+              MarketplaceRepository.toggleWishlist(prod.id, prod)
             },
             onShare = { prod ->
               val sendIntent = Intent().apply {
@@ -786,12 +787,22 @@ private fun ProductsFeedReelsView(
             )
           }
         } else {
-          AsyncImage(
-            model = product.imageUrl?.takeIf { it.isNotBlank() } ?: R.drawable.ic_launcher_background,
-            contentDescription = product.title,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize().align(Alignment.Center)
-          )
+          val remoteUrl = product.imageUrl?.takeIf { it.isNotBlank() }
+          if (remoteUrl != null) {
+            AsyncImage(
+              model = rememberSizedImageRequest(data = remoteUrl, widthPx = 900, heightPx = 1200),
+              contentDescription = product.title,
+              contentScale = ContentScale.Fit,
+              modifier = Modifier.fillMaxSize().align(Alignment.Center)
+            )
+          } else {
+            Icon(
+              imageVector = Icons.Outlined.ShoppingBag,
+              contentDescription = product.title,
+              tint = JTTextTertiary,
+              modifier = Modifier.size(72.dp).align(Alignment.Center)
+            )
+          }
         }
 
         // Bottom Gradient Overlay for text contrast

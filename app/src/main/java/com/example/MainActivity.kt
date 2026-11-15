@@ -23,7 +23,9 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import coil.Coil
 import com.example.ui.NotificationNavigation
+import com.example.ui.components.JTBazarImageLoader
 import com.example.ui.theme.JTBazarTheme
 
 class MainActivity : ComponentActivity() {
@@ -39,7 +41,8 @@ class MainActivity : ComponentActivity() {
     FirebasePushManager.ensureInitialized(this)
     FirebasePushManager.ensureNotificationChannel(applicationContext)
 
-    // Initialize Supabase session persistence before starting token registration.
+    // Initialize Supabase session persistence and shared Coil image cache before UI composition.
+    Coil.setImageLoader { JTBazarImageLoader.get(applicationContext) }
     com.example.data.supabase.SupabaseAuthService.init(applicationContext)
 
     // Generate the FCM installation token immediately on app launch, even before sign-in

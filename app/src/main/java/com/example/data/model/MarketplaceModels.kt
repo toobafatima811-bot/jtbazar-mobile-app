@@ -27,7 +27,7 @@ data class Product(
   val discountPercent: Int,
   val rating: Double,
   val reviewCount: Int,
-  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.ic_launcher_background,
+  @param:DrawableRes val drawableRes: Int = 0,
   val imageUrl: String? = null,
   val badge: String? = null,
   val inStockText: String = "Availability not verified",
@@ -78,9 +78,13 @@ data class CategoryItem(
   val title: String,
   val countText: String,
   val sampleItems: String,
-  @param:DrawableRes val drawableRes: Int = com.example.R.drawable.ic_launcher_background,
+  @param:DrawableRes val drawableRes: Int = 0,
   val imageUrl: String? = null,
-  val badge: String? = null
+  val badge: String? = null,
+  val slug: String = "",
+  val parentId: String? = null,
+  val isFoodCategory: Boolean = false,
+  val displayOrder: Int = 0
 )
 
 data class QuickHubTile(

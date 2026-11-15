@@ -44,6 +44,14 @@ object MarketplaceRepository {
   private val _errorMessage = MutableStateFlow<String?>(null)
   val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+  fun clearErrorMessage() {
+    _errorMessage.value = null
+  }
+
+  private val cartAddInFlight = mutableSetOf<String>()
+  private val wishlistInFlight = mutableSetOf<String>()
+  private val cancelInFlight = mutableSetOf<String>()
+
   private val _deliveryFee = MutableStateFlow(0)
   val deliveryFee: StateFlow<Int> = _deliveryFee.asStateFlow()
   private val _freeDeliveryEnabled = MutableStateFlow(false)
@@ -96,8 +104,100 @@ object MarketplaceRepository {
   private val _products = MutableStateFlow<List<Product>>(emptyList())
   val products: StateFlow<List<Product>> = _products.asStateFlow()
 
+  private val _wishlistedIds = MutableStateFlow<Set<String>>(emptySet())
+  val wishlistedIds: StateFlow<Set<String>> = _wishlistedIds.asStateFlow()
+  private val _wishlistedProducts = MutableStateFlow<List<Product>>(emptyList())
+  val wishlistedProducts: StateFlow<List<Product>> = _wishlistedProducts.asStateFlow()
+
   private val _selectedProduct = MutableStateFlow<Product?>(null)
   val selectedProduct: StateFlow<Product?> = _selectedProduct.asStateFlow()
+
+  val homePaginator: CatalogPaginator by lazy {
+    CatalogPaginator(
+      scope = scope,
+      pageSize = CatalogPaginator.DEFAULT_PAGE_SIZE,
+      errorContext = ErrorContext.PRODUCT_LOAD,
+      fetcher = ::fetchCatalogPage
+    )
+  }
+
+  fun createCatalogPaginator(
+    paginatorScope: kotlinx.coroutines.CoroutineScope,
+    errorContext: ErrorContext = ErrorContext.PRODUCT_LOAD
+  ): CatalogPaginator {
+    return CatalogPaginator(
+      scope = paginatorScope,
+      pageSize = CatalogPaginator.DEFAULT_PAGE_SIZE,
+      errorContext = errorContext,
+      fetcher = ::fetchCatalogPage
+    )
+  }
+
+  suspend fun fetchCatalogPage(
+    query: CatalogQuery,
+    page: Int,
+    pageSize: Int = CatalogPaginator.DEFAULT_PAGE_SIZE
+  ): Result<PaginatedProductsPage> {
+    val wishlistSet = _wishlistedIds.value
+    return SupabaseApiService.fetchProductsPage(
+      page = page,
+      pageSize = pageSize,
+      categoryIds = query.categoryIds,
+      isFeatured = query.isFeatured,
+      searchQuery = query.searchQuery.takeIf { it.isNotBlank() },
+      sortBy = query.sortBy,
+      maxPrice = query.maxPrice
+    ).map { dtoPage ->
+      val mapped = dtoPage.items.map { mapDtoToProduct(it, wishlistSet) }
+      PaginatedProductsPage(
+        items = mapped,
+        page = dtoPage.page,
+        hasMore = dtoPage.hasMore
+      )
+    }
+  }
+
+  fun mapDtoToProduct(dto: SupabaseProductDto, wishlistedIds: Set<String> = _wishlistedIds.value): Product {
+    return Product(
+      id = dto.id,
+      sellerId = dto.sellerId,
+      title = dto.title,
+      vendor = dto.vendor,
+      createdAt = dto.createdAt,
+      category = dto.category,
+      categoryId = dto.categoryId,
+      price = dto.price,
+      originalPrice = dto.originalPrice,
+      discountPercent = dto.discountPercent,
+      rating = dto.rating,
+      reviewCount = dto.reviewCount,
+      drawableRes = resolveDrawable(dto.category, dto.id),
+      imageUrl = dto.imageUrl,
+      badge = dto.badge,
+      inStockText = dto.inStockText,
+      savingsText = dto.savingsText,
+      vendorVerified = dto.vendorVerified,
+      vendorRating = dto.vendorRating,
+      vendorSales = dto.vendorSales,
+      vendorAvatarText = dto.vendorAvatarText,
+      deliveryText = dto.deliveryText,
+      paymentInfo = dto.paymentInfo,
+      craftStory = dto.craftStory,
+      highlights = dto.highlights,
+      palettes = dto.palettes.map { PaletteOption(it, 0xFF1E40AF) },
+      sizes = dto.sizes.map { SizeOption(it, "Option") },
+      variantIds = dto.variantIds,
+      isArtisanCollection = dto.isArtisanCollection,
+      isFeatured = dto.isFeatured,
+      isNewArrival = dto.isNewArrival,
+      isWishlisted = wishlistedIds.contains(dto.id),
+      isAvailable = dto.inStock,
+      availabilityKnown = dto.availabilityKnown,
+      dailyStatus = dto.dailyStatus,
+      foodSellingUnit = dto.foodSellingUnit,
+      variantAvailability = dto.variantAvailability
+    )
+  }
 
   private fun applyProductReviewAggregate(productId: String, rows: List<SupabaseReviewDto>) {
     val validRatings = rows.map { it.rating }.filter { it in 1..5 }
@@ -119,9 +219,8 @@ object MarketplaceRepository {
       SupabaseApiService.fetchProductReviews(product.id).onSuccess { rows ->
         _reviews.update { current -> current.filterNot { it.productId == product.id } + rows }
         applyProductReviewAggregate(product.id, rows)
-      }.onFailure {
-        _errorMessage.value = it.message
-        // Do not present cached or guessed ratings when live reviews cannot be verified.
+      }.onFailure { err ->
+        Log.w(TAG, "Product reviews unavailable for ${product.id}: ${err.message}")
         applyProductReviewAggregate(product.id, emptyList())
       }
     }
@@ -178,7 +277,26 @@ object MarketplaceRepository {
     if (restored.isNotEmpty()) { _cartItems.value = (restored + _cartItems.value).distinctBy { it.product.id to it.variantId }; updateCartCount() }
     val wishlistRows = JSONArray(prefs.getString(GUEST_WISHLIST, "[]") ?: "[]")
     val ids = (0 until wishlistRows.length()).mapNotNull { wishlistRows.optString(it).takeIf(String::isNotBlank) }.toSet()
-    if (ids.isNotEmpty()) _products.update { list -> list.map { it.copy(isWishlisted = it.id in ids) } }
+    if (ids.isNotEmpty()) {
+      _wishlistedIds.value = ids
+      _products.update { list -> list.map { it.copy(isWishlisted = it.id in ids) } }
+      homePaginator.syncWishlistStates(ids)
+      scope.launch { hydrateWishlistedProducts(ids) }
+    }
+  }
+
+  private suspend fun hydrateWishlistedProducts(ids: Set<String>) {
+    if (ids.isEmpty()) {
+      _wishlistedProducts.value = emptyList()
+      return
+    }
+    val localById = _products.value.associateBy { it.id }
+    val missingIds = ids.filter { it !in localById }
+    val fetched = if (missingIds.isNotEmpty()) {
+      SupabaseApiService.fetchProductsByIds(missingIds).getOrNull().orEmpty().map { mapDtoToProduct(it, ids) }
+    } else emptyList()
+    val allById = localById + fetched.associateBy { it.id }
+    _wishlistedProducts.value = ids.mapNotNull { id -> allById[id]?.copy(isWishlisted = true) }
   }
   private suspend fun mergeGuestShoppingData(userId: String) {
     val prefs = guestPrefs() ?: return
@@ -229,12 +347,15 @@ object MarketplaceRepository {
   fun addToCart(product: Product, quantity: Int = 1, palette: String? = null, size: String? = null) {
     val latestProduct = _products.value.firstOrNull { it.id == product.id } ?: product
     if (!canAddProductToCart(latestProduct, palette, size)) {
-      _errorMessage.value = "${latestProduct.title} is out of stock or unavailable."
+      _errorMessage.value = "This item is currently out of stock or unavailable."
       return
     }
     val productToAdd = latestProduct
     val variantId = if (!size.isNullOrBlank()) productToAdd.variantIds["size:" + size]
       else if (!palette.isNullOrBlank()) productToAdd.variantIds["color:" + palette] else null
+    val opKey = "${productToAdd.id}_${variantId.orEmpty()}"
+    if (!cartAddInFlight.add(opKey)) return
+
     var localId = ""
     _cartItems.update { current ->
       val existingIndex = current.indexOfFirst {
@@ -261,13 +382,23 @@ object MarketplaceRepository {
     }
     updateCartCount()
     val userId = SupabaseClient.currentUserId
-    if (userId == null) persistGuestCart()
-    if (userId != null) scope.launch {
-      SupabaseApiService.addToCart(userId, productToAdd.id, quantity, variantId)
-        .onSuccess { remoteId ->
-          _cartItems.update { rows -> rows.map { if (it.id == localId) it.copy(id = remoteId) else it } }
+    if (userId == null) {
+      persistGuestCart()
+      cartAddInFlight.remove(opKey)
+    } else {
+      scope.launch {
+        try {
+          SupabaseApiService.addToCart(userId, productToAdd.id, quantity, variantId)
+            .onSuccess { remoteId ->
+              _cartItems.update { rows -> rows.map { if (it.id == localId) it.copy(id = remoteId) else it } }
+            }
+            .onFailure {
+              _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.CART_ADD)
+            }
+        } finally {
+          cartAddInFlight.remove(opKey)
         }
-        .onFailure { _errorMessage.value = it.message }
+      }
     }
   }
 
@@ -288,7 +419,8 @@ object MarketplaceRepository {
     val userId = SupabaseClient.currentUserId
     if (userId == null) persistGuestCart()
     if (userId != null && !itemId.startsWith("cart_")) scope.launch {
-      SupabaseApiService.updateCartQuantity(itemId, quantity).onFailure { _errorMessage.value = it.message }
+      SupabaseApiService.updateCartQuantity(itemId, quantity)
+        .onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.CART_UPDATE) }
     }
   }
 
@@ -298,7 +430,8 @@ object MarketplaceRepository {
     val userId = SupabaseClient.currentUserId
     if (userId == null) persistGuestCart()
     if (userId != null && !itemId.startsWith("cart_")) scope.launch {
-      SupabaseApiService.removeCartItem(itemId).onFailure { _errorMessage.value = it.message }
+      SupabaseApiService.removeCartItem(itemId)
+        .onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.CART_UPDATE) }
     }
   }
 
@@ -308,51 +441,69 @@ object MarketplaceRepository {
     val userId = SupabaseClient.currentUserId
     if (userId == null) persistGuestCart()
     if (userId != null) scope.launch {
-      SupabaseApiService.clearCart(userId).onFailure { _errorMessage.value = it.message }
+      SupabaseApiService.clearCart(userId)
+        .onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.CART_UPDATE) }
     }
   }
 
   // ----------------------------------------------------
   // WISHLIST
   // ----------------------------------------------------
-  fun toggleWishlist(productId: String) {
-    var newWishlistedState = false
+  fun toggleWishlist(productId: String, productHint: Product? = null) {
+    if (!wishlistInFlight.add(productId)) return
+    val currentSet = _wishlistedIds.value
+    val newWishlistedState = productId !in currentSet
+    val updatedSet = if (newWishlistedState) currentSet + productId else currentSet - productId
+    _wishlistedIds.value = updatedSet
+
     _products.update { list ->
-      list.map { prod ->
-        if (prod.id == productId) {
-          val updated = !prod.isWishlisted
-          newWishlistedState = updated
-          prod.copy(isWishlisted = updated)
-        } else {
-          prod
+      list.map { prod -> if (prod.id == productId) prod.copy(isWishlisted = newWishlistedState) else prod }
+    }
+    if (newWishlistedState) {
+      val source = productHint ?: _products.value.firstOrNull { it.id == productId } ?: _selectedProduct.value?.takeIf { it.id == productId }
+      if (source != null) {
+        _wishlistedProducts.update { list ->
+          (list.filterNot { it.id == productId } + source.copy(isWishlisted = true))
         }
       }
+    } else {
+      _wishlistedProducts.update { list -> list.filterNot { it.id == productId } }
     }
     if (_selectedProduct.value?.id == productId) {
       _selectedProduct.update { it?.copy(isWishlisted = newWishlistedState) }
     }
+    homePaginator.updateSingleWishlist(productId, newWishlistedState)
 
     val userId = SupabaseClient.currentUserId
-    if (userId == null) persistGuestWishlist()
-    if (userId != null) {
+    if (userId == null) {
+      persistGuestWishlist()
+      wishlistInFlight.remove(productId)
+    } else {
       scope.launch {
-        val result = if (newWishlistedState) {
-          SupabaseApiService.addToWishlist(userId, productId)
-        } else {
-          SupabaseApiService.removeFromWishlist(userId, productId).map { "removed" }
-        }
-        result.onFailure { error ->
-          // Roll back the optimistic UI update when Supabase rejects the change.
-          _products.update { list ->
-            list.map { product ->
-              if (product.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+        try {
+          val result = if (newWishlistedState) {
+            SupabaseApiService.addToWishlist(userId, productId)
+          } else {
+            SupabaseApiService.removeFromWishlist(userId, productId).map { "removed" }
+          }
+          result.onFailure { error ->
+            // Roll back optimistic UI update when Supabase rejects the change.
+            _wishlistedIds.value = currentSet
+            _products.update { list ->
+              list.map { product ->
+                if (product.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+              }
             }
+            _selectedProduct.update { product ->
+              if (product?.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+            }
+            homePaginator.updateSingleWishlist(productId, !newWishlistedState)
+            scope.launch { hydrateWishlistedProducts(currentSet) }
+            _errorMessage.value = AppErrorMapper.toCustomerMessage(error, ErrorContext.WISHLIST)
+            Log.e(TAG, "Wishlist update failed for product $productId", error)
           }
-          _selectedProduct.update { product ->
-            if (product?.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
-          }
-          _errorMessage.value = "Wishlist update failed: ${error.message ?: "Please try again."}"
-          Log.e(TAG, "Wishlist update failed for product $productId", error)
+        } finally {
+          wishlistInFlight.remove(productId)
         }
       }
     }
@@ -402,7 +553,7 @@ object MarketplaceRepository {
             latitude = newAddress.latitude,
             longitude = newAddress.longitude
           )
-        ).onSuccess { loadUserData(userId) }.onFailure { _errorMessage.value = it.message }
+        ).onSuccess { loadUserData(userId) }.onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.ADDRESS) }
       }
     }
   }
@@ -412,7 +563,7 @@ object MarketplaceRepository {
     if (_selectedAddress.value?.id == addressId) _selectedAddress.value = _addresses.value.firstOrNull()
     val userId = SupabaseClient.currentUserId
     if (userId != null && !addressId.startsWith("addr_")) scope.launch {
-      SupabaseApiService.deleteAddress(addressId, userId).onFailure { _errorMessage.value = it.message }
+      SupabaseApiService.deleteAddress(addressId, userId).onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.ADDRESS) }
     }
   }
 
@@ -451,7 +602,7 @@ object MarketplaceRepository {
       true
     } catch (e: Exception) {
       Log.e(TAG, "Backend sync error: ${e.message}", e)
-      _errorMessage.value = e.message
+      _errorMessage.value = AppErrorMapper.toCustomerMessage(e, ErrorContext.PRODUCT_LOAD)
       false
     } finally {
       if (showLoading) _isLoading.value = false
@@ -513,7 +664,37 @@ object MarketplaceRepository {
         _codEnabled.value = it.codEnabled
         _returnWindowDays.value = it.returnWindowDays
       }
-    }.onFailure { _errorMessage.value = it.message }
+    }.onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.STORE_SETTINGS) }
+
+    // Fetch live categories first so Food-only resolution & tree lookups are ready.
+    val categoryResult = SupabaseApiService.fetchCategories(forceRefresh = true)
+    if (categoryResult.isSuccess) {
+      val catDtoList = categoryResult.getOrNull().orEmpty()
+      val draftCategories = catDtoList.map { dto ->
+        CategoryItem(
+          id = dto.id,
+          title = dto.title,
+          countText = dto.countText,
+          sampleItems = dto.sampleItems,
+          drawableRes = 0,
+          imageUrl = dto.imageUrl,
+          badge = dto.badge,
+          slug = dto.slug,
+          parentId = dto.parentId,
+          isFoodCategory = dto.isFoodCategory,
+          displayOrder = dto.displayOrder
+        )
+      }
+      val mappedCategories = draftCategories.map { item ->
+        item.copy(
+          drawableRes = FoodCategoryResolver.resolveFoodDrawableOrNull(item, draftCategories) ?: 0
+        )
+      }
+      _categories.value = mappedCategories
+      Log.d(TAG, "Loaded ${mappedCategories.size} categories from Supabase")
+    } else if (_categories.value.isEmpty()) {
+      _errorMessage.value = AppErrorMapper.toCustomerMessage(categoryResult.exceptionOrNull(), ErrorContext.CATEGORY_LOAD)
+    }
 
     // Fetch the same published homepage content used by the website.
     SupabaseApiService.fetchHomepageHeroes()
@@ -526,134 +707,85 @@ object MarketplaceRepository {
       }
       .onFailure { Log.w(TAG, "Homepage promotions unavailable: ${it.message}") }
 
-        // 1. Fetch live products from Supabase
-        val productResult = SupabaseApiService.fetchProducts(limit = 100)
-        if (productResult.isSuccess) {
-          val dtoList = productResult.getOrNull().orEmpty()
-          val previousWishlist = _products.value.associate { it.id to it.isWishlisted }
-          val mappedProducts = dtoList.map { dto ->
-            Product(
-              id = dto.id,
-              sellerId = dto.sellerId,
-              title = dto.title,
-              vendor = dto.vendor,
-              createdAt = dto.createdAt,
-              category = dto.category,
-              categoryId = dto.categoryId,
-              price = dto.price,
-              originalPrice = dto.originalPrice,
-              discountPercent = dto.discountPercent,
-              rating = dto.rating,
-              reviewCount = dto.reviewCount,
-              drawableRes = resolveDrawable(dto.category, dto.id),
-              imageUrl = dto.imageUrl,
-              badge = dto.badge,
-              inStockText = dto.inStockText,
-              savingsText = dto.savingsText,
-              vendorVerified = dto.vendorVerified,
-              vendorRating = dto.vendorRating,
-              vendorSales = dto.vendorSales,
-              vendorAvatarText = dto.vendorAvatarText,
-              deliveryText = dto.deliveryText,
-              paymentInfo = dto.paymentInfo,
-              craftStory = dto.craftStory,
-              highlights = dto.highlights,
-              palettes = dto.palettes.map { PaletteOption(it, 0xFF1E40AF) },
-              sizes = dto.sizes.map { SizeOption(it, "Option") },
-              variantIds = dto.variantIds,
-              isArtisanCollection = dto.isArtisanCollection,
-              isFeatured = dto.isFeatured,
-              isNewArrival = dto.isNewArrival,
-              isWishlisted = previousWishlist[dto.id] ?: false,
-              isAvailable = dto.inStock,
-              availabilityKnown = dto.availabilityKnown,
-              dailyStatus = dto.dailyStatus,
-              foodSellingUnit = dto.foodSellingUnit,
-              variantAvailability = dto.variantAvailability
-            )
-          }
-          if (_products.value != mappedProducts) {
-            _products.value = mappedProducts
-            val selectedProductId = _selectedProduct.value?.id
-            _selectedProduct.value = if (selectedProductId == null) mappedProducts.firstOrNull() else mappedProducts.firstOrNull { it.id == selectedProductId }
-            _cartItems.update { cart -> cart.map { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } ?: item } }
-            updateCartCount()
-          }
-          if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
-          Log.d(TAG, "Loaded ${mappedProducts.size} live products from Supabase")
+    // 1. Fetch initial live product page (pageSize = 12 for fast load on 10k+ catalogs)
+    val productResult = SupabaseApiService.fetchProductsPage(
+      page = 0,
+      pageSize = CatalogPaginator.DEFAULT_PAGE_SIZE
+    )
+    if (productResult.isSuccess) {
+      val dtoList = productResult.getOrNull()?.items.orEmpty()
+      val wishlistSet = _wishlistedIds.value + _products.value.filter { it.isWishlisted }.map { it.id }
+      _wishlistedIds.value = wishlistSet
+      val mappedProducts = dtoList.map { mapDtoToProduct(it, wishlistSet) }
+      if (_products.value != mappedProducts) {
+        _products.value = mappedProducts
+        val selectedProductId = _selectedProduct.value?.id
+        if (selectedProductId != null) {
+          mappedProducts.firstOrNull { it.id == selectedProductId }?.let { _selectedProduct.value = it }
+        }
+        _cartItems.update { cart -> cart.map { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } ?: item } }
+        updateCartCount()
+      }
+      if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
+      Log.d(TAG, "Loaded ${mappedProducts.size} live products (page 0) from Supabase")
 
-          // 1b. Fetch active product campaigns (Flash Sale, BOGO, Bundle, Seasonal, Custom)
-          val campaignResult = SupabaseApiService.fetchActiveProductCampaigns()
-          if (campaignResult.isSuccess) {
-            val activeCampaignList = campaignResult.getOrNull().orEmpty()
-            val nowTime = System.currentTimeMillis()
-            val validCampaigns = activeCampaignList.filter { camp ->
-              if (camp.endsAt.isNullOrBlank()) true
-              else {
-                runCatching {
-                  java.time.Instant.parse(camp.endsAt).toEpochMilli() > nowTime
-                }.getOrDefault(true)
-              }
-            }
-
-            val mappedCampaigns = validCampaigns.mapNotNull { camp ->
-              val campaignProductIds = camp.productIds.toSet()
-              val matchedProds = mappedProducts.filter { it.id in campaignProductIds }
-              if (matchedProds.isEmpty()) return@mapNotNull null
-
-              val enrichedProds = matchedProds.map { prod ->
-                // Only percentage-based campaigns may affect the displayed unit price.
-                // BOGO and bundle offers are informational here; server checkout remains authoritative.
-                val supportsPercentPrice = camp.campaignType in setOf("flash_sale", "seasonal", "custom")
-                if (!supportsPercentPrice || camp.discountPercent <= 0.0) {
-                  prod
-                } else {
-                  val campaignPercent = camp.discountPercent.toInt().coerceIn(0, 100)
-                  val bestDiscount = maxOf(prod.discountPercent, campaignPercent)
-                  val discountedPrice = (prod.originalPrice * (100 - bestDiscount) / 100.0).toInt()
-                  prod.copy(
-                    discountPercent = bestDiscount,
-                    price = discountedPrice,
-                    badge = "${bestDiscount}% OFF"
-                  )
-                }
-              }
-              ActiveProductCampaign(campaign = camp, products = enrichedProds)
-            }
-            _activeProductCampaigns.value = mappedCampaigns
-            Log.d(TAG, "Loaded ${mappedCampaigns.size} active product campaigns from Supabase")
-          } else {
-            _activeProductCampaigns.value = emptyList()
+      // 1b. Fetch active product campaigns & hydrate any campaign items outside page 0
+      val campaignResult = SupabaseApiService.fetchActiveProductCampaigns()
+      if (campaignResult.isSuccess) {
+        val activeCampaignList = campaignResult.getOrNull().orEmpty()
+        val nowTime = System.currentTimeMillis()
+        val validCampaigns = activeCampaignList.filter { camp ->
+          if (camp.endsAt.isNullOrBlank()) true
+          else {
+            runCatching {
+              java.time.Instant.parse(camp.endsAt).toEpochMilli() > nowTime
+            }.getOrDefault(true)
           }
-        } else {
-          _activeProductCampaigns.value = emptyList()
-          _errorMessage.value = productResult.exceptionOrNull()?.message
-          Log.w(TAG, "Catalog refresh failed; retaining last successful product data")
         }
 
-        // 2. Fetch live categories from Supabase
-        val categoryResult = SupabaseApiService.fetchCategories()
-        if (categoryResult.isSuccess) {
-          val catDtoList = categoryResult.getOrNull().orEmpty()
-          val mappedCategories = catDtoList.map { dto ->
-            CategoryItem(
-              id = dto.id,
-              title = dto.title,
-              countText = dto.countText,
-              sampleItems = dto.sampleItems,
-              drawableRes = resolveCategoryDrawable(dto.title),
-              imageUrl = dto.imageUrl,
-              badge = dto.badge
-            )
+        val loadedById = mappedProducts.associateBy { it.id }
+        val neededIds = validCampaigns.flatMap { it.productIds }.distinct().filter { it !in loadedById }
+        val extraProductsById = if (neededIds.isNotEmpty()) {
+          SupabaseApiService.fetchProductsByIds(neededIds).getOrNull().orEmpty()
+            .map { mapDtoToProduct(it, wishlistSet) }
+            .associateBy { it.id }
+        } else emptyMap()
+        val combinedById = loadedById + extraProductsById
+
+        val mappedCampaigns = validCampaigns.mapNotNull { camp ->
+          val matchedProds = camp.productIds.mapNotNull { combinedById[it] }
+          if (matchedProds.isEmpty()) return@mapNotNull null
+
+          val enrichedProds = matchedProds.map { prod ->
+            val supportsPercentPrice = camp.campaignType in setOf("flash_sale", "seasonal", "custom")
+            if (!supportsPercentPrice || camp.discountPercent <= 0.0) {
+              prod
+            } else {
+              val campaignPercent = camp.discountPercent.toInt().coerceIn(0, 100)
+              val bestDiscount = maxOf(prod.discountPercent, campaignPercent)
+              val discountedPrice = (prod.originalPrice * (100 - bestDiscount) / 100.0).toInt()
+              prod.copy(
+                discountPercent = bestDiscount,
+                price = discountedPrice,
+                badge = "${bestDiscount}% OFF"
+              )
+            }
           }
-          _categories.value = mappedCategories
-          Log.d(TAG, "Loaded ${mappedCategories.size} categories from Supabase")
-        } else {
-          _categories.value = emptyList()
-          _errorMessage.value = categoryResult.exceptionOrNull()?.message
+          ActiveProductCampaign(campaign = camp, products = enrichedProds)
         }
-        refreshShops()
-        if (refreshUserData) SupabaseClient.currentUserId?.let { loadUserData(it) }
+        _activeProductCampaigns.value = mappedCampaigns
+        Log.d(TAG, "Loaded ${mappedCampaigns.size} active product campaigns from Supabase")
+      } else {
+        _activeProductCampaigns.value = emptyList()
+      }
+    } else {
+      _activeProductCampaigns.value = emptyList()
+      _errorMessage.value = AppErrorMapper.toCustomerMessage(productResult.exceptionOrNull(), ErrorContext.PRODUCT_LOAD)
+      Log.w(TAG, "Catalog refresh failed; retaining last successful product data")
+    }
+
+    refreshShops()
+    if (refreshUserData) SupabaseClient.currentUserId?.let { loadUserData(it) }
   }
 
   // ----------------------------------------------------
@@ -687,7 +819,9 @@ object MarketplaceRepository {
     _isPlacingOrder.value = true
     scope.launch {
       try {
-        val latestProducts = SupabaseApiService.fetchProducts(limit = 100).getOrThrow().associateBy { it.id }
+        val latestProducts = SupabaseApiService.fetchProductsByIds(items.map { it.product.id }.distinct())
+          .getOrThrow()
+          .associateBy { it.id }
         val unavailable = items.firstOrNull { item ->
           val latest = latestProducts[item.product.id]
           latest == null || !latest.availabilityKnown || !latest.inStock ||
@@ -724,8 +858,6 @@ object MarketplaceRepository {
         ).getOrThrow()
         val saved = SupabaseApiService.fetchOrders(userId).getOrThrow().firstOrNull { it.id == createdId } ?: throw IllegalStateException("Order created but could not be reloaded.")
         val savedItems = SupabaseApiService.fetchOrderItems(saved.id).getOrThrow().map { line ->
-          // Use the server-calculated order-item unit price (including campaign pricing),
-          // not the pre-checkout catalog price, in the confirmation/receipt.
           val sourceProduct = items.firstOrNull { it.product.id == line.productId }?.product
           val product = sourceProduct?.copy(
             price = line.unitPrice,
@@ -743,7 +875,8 @@ object MarketplaceRepository {
         onComplete?.invoke(Result.success(record))
       } catch (e: Exception) {
         Log.e(TAG, "Secure order placement failed", e)
-        onComplete?.invoke(Result.failure(e))
+        val friendly = AppErrorMapper.toCustomerMessage(e, ErrorContext.ORDER_PLACE)
+        onComplete?.invoke(Result.failure(IllegalStateException(friendly)))
       } finally { _isPlacingOrder.value = false }
     }
     return null
@@ -754,14 +887,19 @@ object MarketplaceRepository {
       onComplete?.invoke(false)
       return false
     }
+    if (!cancelInFlight.add(orderId)) return false
     scope.launch {
-      val result = SupabaseApiService.cancelOrder(orderId)
-      if (result.isSuccess && result.getOrNull() == true) {
-        SupabaseClient.currentUserId?.let { loadUserData(it) }
-        onComplete?.invoke(true)
-      } else {
-        _errorMessage.value = result.exceptionOrNull()?.message ?: "Order cancellation was not accepted."
-        onComplete?.invoke(false)
+      try {
+        val result = SupabaseApiService.cancelOrder(orderId)
+        if (result.isSuccess && result.getOrNull() == true) {
+          SupabaseClient.currentUserId?.let { loadUserData(it) }
+          onComplete?.invoke(true)
+        } else {
+          _errorMessage.value = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.ORDER_CANCEL)
+          onComplete?.invoke(false)
+        }
+      } finally {
+        cancelInFlight.remove(orderId)
       }
     }
     return true
@@ -794,7 +932,7 @@ object MarketplaceRepository {
           }
           _errorMessage.value = "Your review has been submitted for moderation."
         }
-        .onFailure { _errorMessage.value = it.message }
+        .onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.REVIEWS) }
     }
   }
 
@@ -853,14 +991,28 @@ object MarketplaceRepository {
         // Merge anonymous shopping choices into the account before loading remote state.
         mergeGuestShoppingData(userId)
         val cartRes = SupabaseApiService.fetchCart(userId)
+        val wishlistRes = SupabaseApiService.fetchWishlist(userId)
+        val cartRows = if (cartRes.isSuccess) JSONArray(cartRes.getOrNull() ?: "[]") else JSONArray()
+        val wishlistRows = if (wishlistRes.isSuccess) JSONArray(wishlistRes.getOrNull() ?: "[]") else JSONArray()
+
+        val cartProductIds = (0 until cartRows.length()).mapNotNull { cartRows.optJSONObject(it)?.optString("product_id")?.takeIf(String::isNotBlank) }
+        val wishlistIds = (0 until wishlistRows.length()).mapNotNull { wishlistRows.optJSONObject(it)?.optString("product_id")?.takeIf(String::isNotBlank) }.toSet()
+        _wishlistedIds.value = wishlistIds
+
+        val localById = _products.value.associateBy { it.id }
+        val missingIds = (cartProductIds + wishlistIds).distinct().filter { it !in localById }
+        val fetchedMissing = if (missingIds.isNotEmpty()) {
+          SupabaseApiService.fetchProductsByIds(missingIds).getOrNull().orEmpty()
+            .map { mapDtoToProduct(it, wishlistIds) }
+            .associateBy { it.id }
+        } else emptyMap()
+        val hydratedById = localById + fetchedMissing
+
         if (cartRes.isSuccess) {
-          val rows = JSONArray(cartRes.getOrNull() ?: "[]")
-          val mappedCart = (0 until rows.length()).mapNotNull { index ->
-            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+          val mappedCart = (0 until cartRows.length()).mapNotNull { index ->
+            val row = cartRows.optJSONObject(index) ?: return@mapNotNull null
             val productId = row.optString("product_id")
-            val product = _products.value.firstOrNull { it.id == productId } ?: return@mapNotNull null
-            // JSONObject.optString() turns JSON null into the literal string "null".
-            // Never pass that text as a UUID to place_order.
+            val product = hydratedById[productId] ?: return@mapNotNull null
             val variantId = row.optString("variant_id")
               .takeIf { !row.isNull("variant_id") && it.isNotBlank() && it != "null" }
             val selectedOption = product.variantIds.entries.firstOrNull { it.value == variantId }?.key
@@ -874,11 +1026,10 @@ object MarketplaceRepository {
           _cartItems.value = mappedCart
           updateCartCount()
         }
-        val wishlistRes = SupabaseApiService.fetchWishlist(userId)
         if (wishlistRes.isSuccess) {
-          val rows = JSONArray(wishlistRes.getOrNull() ?: "[]")
-          val ids = (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("product_id") }.toSet()
-          _products.update { list -> list.map { it.copy(isWishlisted = ids.contains(it.id)) } }
+          _products.update { list -> list.map { it.copy(isWishlisted = wishlistIds.contains(it.id)) } }
+          _wishlistedProducts.value = wishlistIds.mapNotNull { id -> hydratedById[id]?.copy(isWishlisted = true) }
+          homePaginator.syncWishlistStates(wishlistIds)
         }
 
         // 1. Load addresses
@@ -972,29 +1123,18 @@ object MarketplaceRepository {
     _activeOrder.value = null
     _cartItems.value = emptyList()
     _cartCount.value = 0
+    _wishlistedIds.value = emptySet()
+    _wishlistedProducts.value = emptyList()
     _notifications.value = emptyList()
     _currentLocation.value = "Select delivery address"
   }
 
   // ----------------------------------------------------
-  // DRAWABLE ASSET RESOLUTION (FALLBACK FOR REMOTE IMAGES)
+  // DRAWABLE ASSET RESOLUTION (FOOD-ONLY LOCAL FALLBACKS)
   // ----------------------------------------------------
-  private fun resolveDrawable(category: String, id: String): Int {
-    return R.drawable.ic_launcher_background
-    /* return when {
-      id.contains("biryani", ignoreCase = true) -> R.drawable.item_biryani
-      id.contains("honey", ignoreCase = true) -> R.drawable.item_honey
-      id.contains("leather", ignoreCase = true) -> R.drawable.item_leather_bag
-      id.contains("plate", ignoreCase = true) -> R.drawable.item_ceramic_plate
-      id.contains("bowl", ignoreCase = true) -> R.drawable.item_plate_thumb
-      category.contains("food", ignoreCase = true) -> R.drawable.item_biryani
-      category.contains("living", ignoreCase = true) -> R.drawable.item_ceramic_plate
-      category.contains("bag", ignoreCase = true) -> R.drawable.item_leather_bag
-      else -> R.drawable.item_ceramic_plate
-    } */
-  }
+  private fun resolveDrawable(category: String, id: String): Int = 0
 
-  private fun resolveCategoryDrawable(title: String): Int = R.drawable.ic_launcher_background
+  private fun resolveCategoryDrawable(title: String): Int = 0
 
   init {
     updateCartCount()

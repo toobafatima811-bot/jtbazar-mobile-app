@@ -29,6 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.SupabaseProfile
@@ -211,10 +213,18 @@ fun MyProfileScreen(
                 selectedPhoto = null
                 Toast.makeText(context, "Profile saved successfully", Toast.LENGTH_SHORT).show()
               } else {
-                Toast.makeText(context, "Failed to save profile: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                  context,
+                  AppErrorMapper.toCustomerMessage(res.exceptionOrNull(), ErrorContext.GENERAL),
+                  Toast.LENGTH_LONG
+                ).show()
               }
             } catch (error: Exception) {
-              Toast.makeText(context, "Failed to update profile: ${error.message}", Toast.LENGTH_LONG).show()
+              Toast.makeText(
+                context,
+                AppErrorMapper.toCustomerMessage(error, ErrorContext.GENERAL),
+                Toast.LENGTH_LONG
+              ).show()
             } finally { isSaving = false }
           }
         },

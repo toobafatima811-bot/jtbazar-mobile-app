@@ -7,7 +7,9 @@ import com.example.BuildConfig
  * Reads credentials securely injected via BuildConfig from .env / .env.example.
  */
 object SupabaseConfig {
-  val projectUrl: String by lazy {
+  @Volatile internal var projectUrlOverride: String? = null
+
+  private val configuredProjectUrl: String by lazy {
     val raw = BuildConfig.SUPABASE_URL.trim()
     when {
       raw.isEmpty() -> "https://xrrhbnnzjqkqnqdvayjw.supabase.co"
@@ -15,6 +17,9 @@ object SupabaseConfig {
       else -> "https://${raw.removeSuffix("/")}"
     }
   }
+
+  val projectUrl: String
+    get() = projectUrlOverride?.trim()?.takeIf { it.isNotBlank() }?.removeSuffix("/") ?: configuredProjectUrl
 
   val publishableKey: String by lazy {
     val raw = BuildConfig.SUPABASE_PUBLISHABLE_KEY.trim()

@@ -66,14 +66,23 @@ data class SupabaseProductDto(
   val variantAvailability: Map<String, Boolean> = emptyMap()
 )
 
+data class PaginatedProductsDto(
+  val items: List<SupabaseProductDto>,
+  val page: Int,
+  val hasMore: Boolean
+)
+
 data class SupabaseCategoryDto(
   val id: String,
   val title: String,
+  val slug: String = "",
   val countText: String = "",
   val sampleItems: String = "",
   val imageUrl: String? = null,
   val badge: String? = null,
-  val displayOrder: Int = 0
+  val displayOrder: Int = 0,
+  val parentId: String? = null,
+  val isFoodCategory: Boolean = false
 )
 
 data class SupabaseAddressDto(

@@ -251,6 +251,7 @@ fun CategoriesScreen(
             Box(modifier = Modifier.weight(1f)) {
               CategoryCard(
                 category = cat,
+                allCategories = categories,
                 onClick = { onCategorySelect(cat) }
               )
             }
@@ -269,6 +270,7 @@ fun CategoriesScreen(
 @Composable
 fun CategoryCard(
   category: CategoryItem,
+  allCategories: List<CategoryItem> = emptyList(),
   onClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -288,12 +290,9 @@ fun CategoryCard(
           .aspectRatio(1.65f)
           .background(JTSurfaceVariant)
       ) {
-        // Use Coil for both remote category images and bundled fallback resources.
-        // This avoids painterResource() crashing on unsupported drawable assets.
-        AsyncImage(
-          model = category.imageUrl?.takeIf { it.isNotBlank() } ?: category.drawableRes,
-          contentDescription = category.title,
-          contentScale = ContentScale.Crop,
+        CategoryVisualThumbnail(
+          category = category,
+          allCategories = allCategories,
           modifier = Modifier.fillMaxSize()
         )
 

@@ -31,6 +31,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseConfig
 import com.example.ui.theme.*
@@ -59,7 +61,7 @@ fun RegistrationScreen(
   val googleOAuthStatus by SupabaseAuthService.googleOAuthStatus.collectAsState()
   LaunchedEffect(googleOAuthStatus) {
     if (googleOAuthStatus != null && googleOAuthStatus != "success") {
-      errorMessage = googleOAuthStatus
+      errorMessage = AppErrorMapper.sanitizeMessage(googleOAuthStatus, ErrorContext.AUTH)
       SupabaseAuthService.clearGoogleOAuthStatus()
     }
   }
@@ -294,7 +296,7 @@ fun RegistrationScreen(
               // Successfully triggered Supabase signup OTP
               onOtpRequired(email.trim(), fullName.trim())
             } else {
-              errorMessage = result.exceptionOrNull()?.message ?: "Registration failed. Please check details."
+              errorMessage = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.AUTH)
             }
           }
         },
@@ -343,11 +345,11 @@ fun RegistrationScreen(
               try {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
               } catch (e: Exception) {
-                errorMessage = e.message ?: "Could not open Google sign-in."
+                errorMessage = AppErrorMapper.toCustomerMessage(e, ErrorContext.AUTH)
               }
             }
             .onFailure { error ->
-              errorMessage = error.message ?: "Could not start Google sign-in."
+              errorMessage = AppErrorMapper.toCustomerMessage(error, ErrorContext.AUTH)
             }
         },
         shape = RoundedCornerShape(12.dp),

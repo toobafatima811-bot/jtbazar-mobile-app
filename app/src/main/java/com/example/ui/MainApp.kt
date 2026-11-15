@@ -19,9 +19,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
-import coil.ImageLoader
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import coil.compose.AsyncImage
-import coil.decode.GifDecoder
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,13 +40,18 @@ import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.repository.BannerDestination
 import com.example.data.repository.CampaignPopupManager
+import com.example.data.repository.CatalogPaginator
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.PromotionCampaignFilter
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
+import com.example.data.supabase.SupabaseApiService
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.GlobalLoadingState
 import com.example.data.supabase.NetworkConnectivity
 import com.example.ui.components.CampaignLaunchPopupDialog
+import com.example.ui.components.JTBazarImageLoader
 import com.example.ui.components.JTBazarPullRefresh
 import com.example.ui.screens.*
 import com.example.ui.theme.*
@@ -134,6 +139,23 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   }
 
   val accountScrollState = rememberScrollState()
+  val homeListState = rememberLazyListState()
+  val categoryListStates = remember { mutableStateMapOf<String, LazyListState>() }
+  val categoryPaginators = remember { mutableStateMapOf<String, CatalogPaginator>() }
+  val budgetListState = rememberLazyListState()
+  val snackbarHostState = remember { SnackbarHostState() }
+  val repoError by MarketplaceRepository.errorMessage.collectAsState()
+  LaunchedEffect(repoError) {
+    val msg = repoError
+    if (!msg.isNullOrBlank()) {
+      snackbarHostState.showSnackbar(
+        message = AppErrorMapper.sanitizeMessage(msg, ErrorContext.GENERAL),
+        duration = SnackbarDuration.Short
+      )
+      MarketplaceRepository.clearErrorMessage()
+    }
+  }
+
   var currentScreen by remember { mutableStateOf(AppScreen.SPLASH) }
   var isPullRefreshing by remember { mutableStateOf(false) }
   val pullRefreshScope = rememberCoroutineScope()
@@ -243,6 +265,16 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 
   Scaffold(
     containerColor = Color.White,
+    snackbarHost = {
+      SnackbarHost(hostState = snackbarHostState) { data ->
+        Snackbar(
+          snackbarData = data,
+          containerColor = JTNavyPrimary,
+          contentColor = Color.White,
+          actionColor = JTOrangeLight
+        )
+      }
+    },
     bottomBar = {
       if (isBottomBarVisible) {
         NavigationBar(
@@ -466,10 +498,15 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             MarketplaceRepository.refreshPromotions()
           }
           HomeScreen(
+            listState = homeListState,
             onProductClick = { product ->
               selectedProduct = product
               MarketplaceRepository.selectProduct(product)
               navigateTo(AppScreen.PRODUCT_DETAIL)
+            },
+            onCategoryClick = { cat ->
+              selectedCategory = cat
+              navigateTo(AppScreen.CATEGORY_PRODUCTS)
             },
             onExploreCategoriesClick = { switchRootTab(AppScreen.CATEGORIES) },
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
@@ -488,7 +525,8 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
                   val matched = MarketplaceRepository.categories.value.firstOrNull { cat ->
                     cat.id.equals(dest.query, ignoreCase = true) ||
                       cat.title.trim().lowercase() == q ||
-                      cat.title.trim().lowercase().replace(' ', '-') == dest.query.trim().lowercase()
+                      cat.title.trim().lowercase().replace(' ', '-') == dest.query.trim().lowercase() ||
+                      cat.slug.equals(dest.query.trim(), ignoreCase = true)
                   }
                   if (matched != null) {
                     selectedCategory = matched
@@ -507,7 +545,18 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
                     MarketplaceRepository.selectProduct(matched)
                     navigateTo(AppScreen.PRODUCT_DETAIL)
                   } else {
-                    switchRootTab(AppScreen.CATEGORIES)
+                    pullRefreshScope.launch {
+                      SupabaseApiService.fetchProductById(dest.productId)
+                        .onSuccess { dto ->
+                          val mapped = MarketplaceRepository.mapDtoToProduct(dto)
+                          selectedProduct = mapped
+                          MarketplaceRepository.selectProduct(mapped)
+                          navigateTo(AppScreen.PRODUCT_DETAIL)
+                        }
+                        .onFailure {
+                          switchRootTab(AppScreen.CATEGORIES)
+                        }
+                    }
                   }
                 }
                 is BannerDestination.ShopsList -> {
@@ -556,8 +605,14 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         AppScreen.CATEGORY_PRODUCTS -> {
           val category = selectedCategory
           if (category != null) {
+            val catScrollState = categoryListStates.getOrPut(category.id) { LazyListState() }
+            val catPaginator = categoryPaginators.getOrPut(category.id) {
+              MarketplaceRepository.createCatalogPaginator(pullRefreshScope, ErrorContext.PRODUCT_LOAD)
+            }
             CategoryProductsScreen(
               category = category,
+              listState = catScrollState,
+              paginator = catPaginator,
               onBack = { navigateBack() },
               onProductClick = { product ->
                 selectedProduct = product
@@ -846,6 +901,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 
         AppScreen.BUDGET_SHOPPING -> {
           BudgetShoppingScreen(
+            listState = budgetListState,
             onProductClick = { product ->
               selectedProduct = product
               MarketplaceRepository.selectProduct(product)
@@ -878,11 +934,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
 @Composable
 private fun GlobalLoadingOverlay() {
   val context = LocalContext.current
-  val gifImageLoader = remember(context) {
-    ImageLoader.Builder(context)
-      .components { add(GifDecoder.Factory()) }
-      .build()
-  }
+  val gifImageLoader = remember(context) { JTBazarImageLoader.get(context) }
 
   Box(
     modifier = Modifier

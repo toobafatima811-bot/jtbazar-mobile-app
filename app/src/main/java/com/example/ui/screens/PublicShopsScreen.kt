@@ -23,6 +23,8 @@ import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.rememberAdaptiveColumnCount
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.SellerReviewService
 import org.json.JSONArray
@@ -216,8 +218,7 @@ private fun PublicShopDetailScreen(
                   reviewOpen = false
                   reviewMessage = "Thank you! Your review has been submitted."
                 } catch (error: Exception) {
-                  reviewMessage = error.message?.takeIf { it.isNotBlank() }
-                    ?: "Your review could not be submitted. Please try again."
+                  reviewMessage = AppErrorMapper.toCustomerMessage(error, ErrorContext.REVIEWS)
                 } finally {
                   reviewSubmitting = false
                 }
@@ -252,7 +253,7 @@ private fun PublicShopDetailScreen(
                 product = product,
                 onProductClick = { onProductClick(product) },
                 onAddToCart = { MarketplaceRepository.addToCart(product) },
-                onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id) },
+                onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id, product) },
                 modifier = Modifier.weight(1f).fillMaxHeight()
               )
             }

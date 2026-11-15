@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,10 +48,13 @@ import com.example.data.model.CartItem
 import com.example.data.model.DeliveryAddress
 import com.example.data.model.OrderRecord
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseClient
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
+import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
 import com.example.location.AddressReverseGeocoder
 import com.example.location.LocationFetchResult
@@ -471,14 +475,7 @@ private fun readableOrderError(raw: String): String {
       normalized.contains("not accepting new customer orders", ignoreCase = true)) {
     return "JTBazar is currently closed and is not accepting new orders. Please try again during store opening hours."
   }
-  val messageStart = normalized.indexOf("\"message\"")
-  val backendMessage = if (messageStart >= 0) {
-    normalized.substring(messageStart).substringAfter(':', "").trim()
-      .removePrefix("\"").substringBefore("\"")
-  } else null
-  return (backendMessage?.takeIf { it.isNotBlank() }
-    ?: normalized.substringAfter(": ", normalized).takeIf { it.isNotBlank() }
-    ?: "Please check your connection and try again.").take(240)
+  return AppErrorMapper.sanitizeMessage(normalized, ErrorContext.ORDER_PLACE)
 }
 
 // ----------------------------------------------------
@@ -571,17 +568,36 @@ private fun CartView(
               modifier = Modifier
                 .size(68.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(JTSurfaceVariant)
+                .background(JTSurfaceVariant),
+              contentAlignment = Alignment.Center
             ) {
-              // Use Coil for remote and bundled images consistently. This avoids
-              // Compose painterResource decoding failures for unsupported assets.
-              AsyncImage(
-                model = item.product.imageUrl?.takeIf { it.isNotBlank() }
-                  ?: R.drawable.ic_launcher_background,
-                contentDescription = item.product.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-              )
+              val remoteUrl = item.product.imageUrl?.takeIf { it.isNotBlank() }
+              when {
+                remoteUrl != null -> {
+                  AsyncImage(
+                    model = rememberSizedImageRequest(data = remoteUrl, widthPx = 220, heightPx = 220),
+                    contentDescription = item.product.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                  )
+                }
+                item.product.drawableRes != 0 -> {
+                  Image(
+                    painter = painterResource(id = item.product.drawableRes),
+                    contentDescription = item.product.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                  )
+                }
+                else -> {
+                  Icon(
+                    imageVector = Icons.Outlined.ShoppingBag,
+                    contentDescription = item.product.title,
+                    tint = JTTextTertiary,
+                    modifier = Modifier.size(26.dp)
+                  )
+                }
+              }
             }
 
             Spacer(modifier = Modifier.width(12.dp))

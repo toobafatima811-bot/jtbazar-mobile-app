@@ -29,6 +29,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.supabase.AppErrorMapper
+import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -54,7 +56,7 @@ fun LoginScreen(
   val googleOAuthStatus by SupabaseAuthService.googleOAuthStatus.collectAsState()
   LaunchedEffect(googleOAuthStatus) {
     if (googleOAuthStatus != null && googleOAuthStatus != "success") {
-      errorMessage = googleOAuthStatus
+      errorMessage = AppErrorMapper.sanitizeMessage(googleOAuthStatus, ErrorContext.AUTH)
       SupabaseAuthService.clearGoogleOAuthStatus()
     }
   }
@@ -222,12 +224,11 @@ fun LoginScreen(
               } else {
                 // Do not leave a password-authenticated session active when the required OTP step failed.
                 SupabaseAuthService.signOut(context)
-                errorMessage = otpResult.exceptionOrNull()?.message
-                  ?: "We could not send your verification code. Please try again."
+                errorMessage = AppErrorMapper.toCustomerMessage(otpResult.exceptionOrNull(), ErrorContext.AUTH)
               }
             } else {
               isLoading = false
-              errorMessage = loginResult.exceptionOrNull()?.message ?: "Invalid email or password."
+              errorMessage = AppErrorMapper.toCustomerMessage(loginResult.exceptionOrNull(), ErrorContext.AUTH)
             }
           }
         },
@@ -276,11 +277,11 @@ fun LoginScreen(
               try {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
               } catch (e: Exception) {
-                errorMessage = e.message ?: "Could not open Google sign-in."
+                errorMessage = AppErrorMapper.toCustomerMessage(e, ErrorContext.AUTH)
               }
             }
             .onFailure { error ->
-              errorMessage = error.message ?: "Could not start Google sign-in."
+              errorMessage = AppErrorMapper.toCustomerMessage(error, ErrorContext.AUTH)
             }
         },
         shape = RoundedCornerShape(12.dp),
