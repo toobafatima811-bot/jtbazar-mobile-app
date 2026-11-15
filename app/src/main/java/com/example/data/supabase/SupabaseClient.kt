@@ -390,7 +390,9 @@ object SupabaseClient {
       val url = "${SupabaseConfig.storageUrl}/object/$bucket/$encodedPath"
       val request = Request.Builder().url(url)
         .post(bytes.toRequestBody(mimeType.toMediaType()))
-        .header("x-upsert", "true")
+        // Driver documents always upload to a unique timestamped path. Do not upsert:
+        // upsert requires Storage SELECT + UPDATE permissions, which this private
+        // bucket intentionally does not grant to driver applicants.
         .build()
       okHttpClient.newCall(request).execute().use { response ->
         val body = response.body?.string() ?: ""
