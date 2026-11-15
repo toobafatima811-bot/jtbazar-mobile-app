@@ -11,6 +11,7 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
+import okio.ByteString.Companion.decodeBase64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -54,6 +55,7 @@ object SupabaseClient {
   private const val TAG = "SupabaseClient"
   private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
+  @Volatile internal var storageUrlOverride: String? = null
   @Volatile private var appContext: Context? = null
 
   fun initialize(context: Context) { appContext = context.applicationContext }
@@ -181,7 +183,7 @@ object SupabaseClient {
           requestBuilder.header("Authorization", authHeader)
         }
 
-        if (original.header("Content-Type") == null) {
+        if (original.header("Content-Type") == null && original.body?.contentType() == null) {
           requestBuilder.header("Content-Type", "application/json")
         }
 
@@ -384,11 +386,57 @@ object SupabaseClient {
       Result.failure(e)
     }
   }
+  internal fun extractJwtSubject(accessToken: String): String? {
+    val parts = accessToken.trim().split(".")
+    if (parts.size != 3) return null
+    return try {
+      val normalized = parts[1].replace('-', '+').replace('_', '/')
+      val padded = normalized.padEnd((normalized.length + 3) / 4 * 4, '=')
+      val decoded = padded.decodeBase64()?.utf8() ?: return null
+      JSONObject(decoded).optString("sub", "").takeIf { it.isNotBlank() }
+    } catch (_: Exception) {
+      null
+    }
+  }
+
   suspend fun uploadPrivateFile(bucket: String, path: String, bytes: ByteArray, mimeType: String): Result<String> = withContext(Dispatchers.IO) {
     try {
-      val encodedPath = path.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
-      val url = "${SupabaseConfig.storageUrl}/object/$bucket/$encodedPath"
+      if (bytes.isEmpty()) {
+        return@withContext Result.failure(IllegalArgumentException("Cannot upload an empty document."))
+      }
+
+      val session = _session.value
+      val accessToken = session?.accessToken?.trim()
+      val userId = session?.user?.id?.trim()
+      if (session == null || accessToken.isNullOrBlank() || userId.isNullOrBlank()) {
+        return@withContext Result.failure(IllegalStateException("Authentication required: please sign in before uploading documents."))
+      }
+
+      val jwtParts = accessToken.split(".")
+      if (jwtParts.size == 3) {
+        val jwtSub = extractJwtSubject(accessToken)
+        if (jwtSub.isNullOrBlank() || jwtSub != userId) {
+          return@withContext Result.failure(IllegalStateException("Authenticated user session mismatch. Please sign in again."))
+        }
+      }
+
+      val cleanPath = path.trimStart('/')
+      if (cleanPath.isBlank() || cleanPath.contains("..")) {
+        return@withContext Result.failure(IllegalArgumentException("Invalid storage object path."))
+      }
+
+      if (bucket == "driver-documents") {
+        val firstFolder = cleanPath.substringBefore('/', missingDelimiterValue = "")
+        if (firstFolder != userId) {
+          return@withContext Result.failure(IllegalArgumentException("Driver documents must be uploaded under your own user folder."))
+        }
+      }
+
+      val encodedPath = cleanPath.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+      val baseStorageUrl = (storageUrlOverride ?: SupabaseConfig.storageUrl).trimEnd('/')
+      val url = "$baseStorageUrl/object/$bucket/$encodedPath"
       val request = Request.Builder().url(url)
+        .header("Authorization", "Bearer $accessToken")
         .post(bytes.toRequestBody(mimeType.toMediaType()))
         // Driver documents always upload to a unique timestamped path. Do not upsert:
         // upsert requires Storage SELECT + UPDATE permissions, which this private
@@ -396,7 +444,7 @@ object SupabaseClient {
         .build()
       okHttpClient.newCall(request).execute().use { response ->
         val body = response.body?.string() ?: ""
-        if (response.isSuccessful) Result.success(path)
+        if (response.isSuccessful) Result.success(cleanPath)
         else Result.failure(IOException("Private storage upload error ${response.code}: $body"))
       }
     } catch (e: Exception) {

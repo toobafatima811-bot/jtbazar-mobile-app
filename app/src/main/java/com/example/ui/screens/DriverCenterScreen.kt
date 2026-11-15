@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 fun driverAddressText(delivery: JSONObject): String {
@@ -93,6 +94,19 @@ enum class DriverDocType {
   CNIC_FRONT,
   CNIC_BACK,
   VEHICLE_PLATE
+}
+
+internal fun buildDriverDocumentPath(
+  userId: String,
+  docType: DriverDocType,
+  timestampMs: Long = System.currentTimeMillis()
+): String {
+  val prefix = when (docType) {
+    DriverDocType.CNIC_FRONT -> "cnic_front"
+    DriverDocType.CNIC_BACK -> "cnic_back"
+    DriverDocType.VEHICLE_PLATE -> "vehicle_plate"
+  }
+  return "${userId.trim()}/${prefix}_${timestampMs}.jpg"
 }
 
 data class DocUploadItem(
@@ -255,38 +269,67 @@ fun DriverCenterScreen(
   val isApprovedDriver = application?.optString("status") == "approved"
 
   suspend fun uploadDocBytes(docType: DriverDocType, bytes: ByteArray, uri: Uri?, bitmap: Bitmap?) {
-    val uid = user?.id ?: return
-    val prefix = when (docType) {
-      DriverDocType.CNIC_FRONT -> "cnic_front"
-      DriverDocType.CNIC_BACK -> "cnic_back"
-      DriverDocType.VEHICLE_PLATE -> "vehicle_plate"
+    fun setDocState(item: DocUploadItem) {
+      when (docType) {
+        DriverDocType.CNIC_FRONT -> cnicFrontDoc = item
+        DriverDocType.CNIC_BACK -> cnicBackDoc = item
+        DriverDocType.VEHICLE_PLATE -> plateDoc = item
+      }
+    }
+
+    val uid = SupabaseClient.currentUserId?.takeIf { it.isNotBlank() }
+      ?: user?.id?.takeIf { it.isNotBlank() }
+    if (uid == null || !SupabaseClient.isAuthenticated) {
+      val failed = DocUploadItem(
+        localUri = uri,
+        localBitmap = bitmap,
+        isUploading = false,
+        errorMessage = "Please sign in again before uploading verification documents."
+      )
+      withContext(Dispatchers.Main) {
+        setDocState(failed)
+        error = "Please sign in again before uploading verification documents."
+      }
+      return
+    }
+
+    val uploadBytes = withContext(Dispatchers.Default) {
+      val isJpeg = bytes.size >= 3 &&
+        bytes[0] == 0xFF.toByte() &&
+        bytes[1] == 0xD8.toByte() &&
+        bytes[2] == 0xFF.toByte()
+      if (isJpeg && bytes.size <= 4 * 1024 * 1024) {
+        bytes
+      } else if (bitmap != null) {
+        ByteArrayOutputStream().use { out ->
+          bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out)
+          out.toByteArray()
+        }
+      } else {
+        bytes
+      }
     }
 
     val uploadingItem = DocUploadItem(localUri = uri, localBitmap = bitmap, isUploading = true)
-    when (docType) {
-      DriverDocType.CNIC_FRONT -> cnicFrontDoc = uploadingItem
-      DriverDocType.CNIC_BACK -> cnicBackDoc = uploadingItem
-      DriverDocType.VEHICLE_PLATE -> plateDoc = uploadingItem
+    withContext(Dispatchers.Main) {
+      error = null
+      setDocState(uploadingItem)
     }
 
-    val path = "$uid/${prefix}_${System.currentTimeMillis()}.jpg"
-    val result = SupabaseClient.uploadPrivateFile("driver-documents", path, bytes, "image/jpeg")
+    val path = buildDriverDocumentPath(uid, docType)
+    val result = SupabaseClient.uploadPrivateFile("driver-documents", path, uploadBytes, "image/jpeg")
 
     result.fold(
       onSuccess = { savedPath ->
         val completed = DocUploadItem(localUri = uri, localBitmap = bitmap, storagePath = savedPath, isUploading = false)
-        when (docType) {
-          DriverDocType.CNIC_FRONT -> cnicFrontDoc = completed
-          DriverDocType.CNIC_BACK -> cnicBackDoc = completed
-          DriverDocType.VEHICLE_PLATE -> plateDoc = completed
+        withContext(Dispatchers.Main) {
+          setDocState(completed)
         }
       },
       onFailure = { err ->
         val failed = DocUploadItem(localUri = uri, localBitmap = bitmap, isUploading = false, errorMessage = err.message ?: "Upload failed")
-        when (docType) {
-          DriverDocType.CNIC_FRONT -> cnicFrontDoc = failed
-          DriverDocType.CNIC_BACK -> cnicBackDoc = failed
-          DriverDocType.VEHICLE_PLATE -> plateDoc = failed
+        withContext(Dispatchers.Main) {
+          setDocState(failed)
         }
       }
     )
@@ -304,7 +347,13 @@ fun DriverCenterScreen(
           val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
           if (bytes != null && bytes.isNotEmpty()) {
             val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            uploadDocBytes(target, bytes, uri, bmp)
+            if (bmp == null) {
+              withContext(Dispatchers.Main) { error = "Captured photo could not be decoded. Please try again." }
+            } else {
+              uploadDocBytes(target, bytes, uri, bmp)
+            }
+          } else {
+            withContext(Dispatchers.Main) { error = "Captured photo was empty. Please try again." }
           }
         } catch (e: Exception) {
           withContext(Dispatchers.Main) { error = "Could not read camera photo: ${e.message}" }
@@ -324,7 +373,13 @@ fun DriverCenterScreen(
           val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
           if (bytes != null && bytes.isNotEmpty()) {
             val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            uploadDocBytes(target, bytes, uri, bmp)
+            if (bmp == null) {
+              withContext(Dispatchers.Main) { error = "Selected file is not a valid image. Please choose a photo." }
+            } else {
+              uploadDocBytes(target, bytes, uri, bmp)
+            }
+          } else {
+            withContext(Dispatchers.Main) { error = "Selected photo was empty. Please choose another file." }
           }
         } catch (e: Exception) {
           withContext(Dispatchers.Main) { error = "Could not read selected photo: ${e.message}" }
