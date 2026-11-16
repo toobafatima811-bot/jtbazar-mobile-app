@@ -47,6 +47,7 @@ class PromotionBannersTest {
   fun setUpCoil() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val fakeLoader = ImageLoader.Builder(context)
+      .dispatcher(kotlinx.coroutines.Dispatchers.Main.immediate)
       .components {
         add(coil.intercept.Interceptor { chain ->
           val url = chain.request.data.toString()

@@ -106,10 +106,10 @@ fun HomeScreen(
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
 
-  val promotionsNowMillis by produceState(initialValue = System.currentTimeMillis()) {
-    while (true) {
-      delay(15_000L)
-      value = System.currentTimeMillis()
+  val promotionsByPlacement = remember(homepagePromotions) {
+    val now = System.currentTimeMillis()
+    BannerPlacement.entries.associateWith { placement ->
+      PromotionCampaignFilter.filterForPlacement(homepagePromotions, placement, now).take(3)
     }
   }
 
@@ -126,21 +126,34 @@ fun HomeScreen(
   }
 
   fun promotionsFor(placement: BannerPlacement) =
-    PromotionCampaignFilter.filterForPlacement(homepagePromotions, placement, promotionsNowMillis)
+    promotionsByPlacement[placement].orEmpty()
+
+  val homeCategories = remember(categories) { categories.take(12) }
+  val homeShops = remember(trustedShops) { trustedShops.take(10) }
+  val popularProducts = remember(products) {
+    products.filter { it.isFeatured }.ifEmpty { products }.take(4)
+  }
+  val newArrivals = remember(products, popularProducts) {
+    val popularIds = popularProducts.mapTo(HashSet()) { it.id }
+    products.filterNot { it.id in popularIds }.ifEmpty { products }.take(4)
+  }
 
   var showAddressDialog by remember { mutableStateOf(false) }
-  LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
   var searchQuery by remember { mutableStateOf("") }
+  val isSearching = searchQuery.trim().isNotEmpty()
   val homePaginator = MarketplaceRepository.homePaginator
   val feedState by homePaginator.state.collectAsState()
+  val chunkedFeedRows = remember(feedState.items, productGridColumns, isSearching) {
+    if (isSearching) feedState.items.chunked(productGridColumns) else emptyList()
+  }
 
   LaunchedEffect(searchQuery) {
     val trimmed = searchQuery.trim()
     if (trimmed.isNotEmpty()) {
       delay(350L)
       homePaginator.resetAndLoad(CatalogQuery(searchQuery = trimmed))
-    } else if (!feedState.hasLoadedOnce || feedState.query.searchQuery.isNotBlank()) {
-      homePaginator.resetAndLoad(CatalogQuery())
+    } else if (feedState.query.searchQuery.isNotBlank() || feedState.isInitialLoading || feedState.isLoadingMore) {
+      homePaginator.clear()
     }
   }
 
@@ -149,11 +162,12 @@ fun HomeScreen(
       val layoutInfo = listState.layoutInfo
       val totalItems = layoutInfo.totalItemsCount
       val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-      totalItems > 0 && lastVisible >= totalItems - 4
+      totalItems > 0 && listState.firstVisibleItemIndex > 0 && lastVisible >= totalItems - 3
     }
   }
-  LaunchedEffect(shouldLoadMore, feedState.hasMore, feedState.isLoadingMore, feedState.isInitialLoading, feedState.paginationError) {
-    if (shouldLoadMore &&
+  LaunchedEffect(isSearching, shouldLoadMore, feedState.hasMore, feedState.isLoadingMore, feedState.isInitialLoading, feedState.paginationError) {
+    if (isSearching &&
+      shouldLoadMore &&
       !feedState.isInitialLoading &&
       !feedState.isLoadingMore &&
       feedState.hasMore &&
@@ -185,9 +199,11 @@ fun HomeScreen(
 
   var sellerStatus by remember { mutableStateOf<String?>(null) }
   LaunchedEffect(Unit) {
-    runCatching {
-      val app = com.example.data.supabase.VendorService.getOwnApplication()
-      sellerStatus = app?.status
+    if (com.example.data.supabase.SupabaseClient.isAuthenticated) {
+      runCatching {
+        val app = com.example.data.supabase.VendorService.getOwnApplication()
+        sellerStatus = app?.status
+      }
     }
   }
 
@@ -216,7 +232,7 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize().testTag("home_lazy_column"),
         contentPadding = PaddingValues(bottom = 28.dp)
       ) {
-      item {
+      item(key = "promo_top", contentType = "promo_banner") {
         PromotionBannerSection(
           placement = BannerPlacement.TOP_PROMO,
           promotions = promotionsFor(BannerPlacement.TOP_PROMO),
@@ -224,7 +240,7 @@ fun HomeScreen(
         )
       }
       // 1. Search Bar with voice search
-      item(key = "home_search_bar") {
+      item(key = "home_search_bar", contentType = "search_bar") {
         SearchInputBar(
           query = searchQuery,
           onQueryChange = { searchQuery = it },
@@ -245,7 +261,7 @@ fun HomeScreen(
       if (searchQuery.isBlank()) {
 
         // Admin-managed hero banner placement in the hero area
-        item {
+        item(key = "promo_hero", contentType = "promo_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.HERO_BANNER,
             promotions = promotionsFor(BannerPlacement.HERO_BANNER),
@@ -254,9 +270,9 @@ fun HomeScreen(
         }
 
         // Website Parity: Full Homepage Hero Section
-        item {
-          val heroProduct = products.firstOrNull { !it.imageUrl.isNullOrBlank() }
-          val heroShop = trustedShops.firstOrNull { !it.logoUrl.isNullOrBlank() }
+        item(key = "marketplace_hero", contentType = "hero") {
+          val heroProduct = remember(products) { products.firstOrNull { !it.imageUrl.isNullOrBlank() } }
+          val heroShop = remember(trustedShops) { trustedShops.firstOrNull { !it.logoUrl.isNullOrBlank() } }
           MarketplaceHero(
             heroes = homepageHeroes,
             featuredProduct = heroProduct,
@@ -291,7 +307,7 @@ fun HomeScreen(
 
       // 4. Shop by Category (Horizontal Row)
       if (searchQuery.isBlank()) {
-      item {
+      item(key = "shop_by_category", contentType = "horizontal_strip") {
         Column(
           modifier = Modifier
             .fillMaxWidth()
@@ -324,7 +340,7 @@ fun HomeScreen(
 
           Spacer(modifier = Modifier.height(10.dp))
 
-          if (categories.isEmpty()) {
+          if (homeCategories.isEmpty()) {
             Text(
               text = "No active collections available",
               color = JTTextSecondary,
@@ -336,7 +352,7 @@ fun HomeScreen(
               contentPadding = PaddingValues(horizontal = 16.dp),
               horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-              items(categories, key = { it.id }) { category ->
+              items(homeCategories, key = { it.id }) { category ->
                 Column(
                   horizontalAlignment = Alignment.CenterHorizontally,
                   modifier = Modifier
@@ -375,7 +391,7 @@ fun HomeScreen(
 
       // 4b. Category Feature Banner connected directly with Shop by Category
       if (searchQuery.isBlank()) {
-        item {
+        item(key = "promo_category_feature", contentType = "promo_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.CATEGORY_FEATURE,
             promotions = promotionsFor(BannerPlacement.CATEGORY_FEATURE),
@@ -386,14 +402,14 @@ fun HomeScreen(
 
       // Become a Seller Banner + Approved vendor shops on the home page.
       if (searchQuery.isBlank()) {
-        item {
+        item(key = "promo_seller", contentType = "promo_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.SELLER_BANNER,
             promotions = promotionsFor(BannerPlacement.SELLER_BANNER),
             onDestinationClick = handleBannerClick
           )
         }
-        item {
+        item(key = "trusted_shops_strip", contentType = "horizontal_strip") {
           Column(
             modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -416,7 +432,7 @@ fun HomeScreen(
                 modifier = Modifier.clickable { onExploreShopsClick() }.padding(4.dp)
               )
             }
-            if (trustedShops.isEmpty()) {
+            if (homeShops.isEmpty()) {
               Text(
                 "Trusted shops will appear here when vendors are approved.",
                 fontSize = 12.sp,
@@ -428,7 +444,7 @@ fun HomeScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
               ) {
-                items(trustedShops, key = { it.id }) { shop ->
+                items(homeShops, key = { it.id }) { shop ->
                   Card(
                     shape = RoundedCornerShape(14.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
@@ -442,7 +458,7 @@ fun HomeScreen(
                     ) {
                       if (!shop.logoUrl.isNullOrBlank()) {
                         AsyncImage(
-                          model = shop.logoUrl,
+                          model = rememberSizedImageRequest(data = shop.logoUrl, widthPx = 200, heightPx = 200),
                           contentDescription = shop.name,
                           contentScale = ContentScale.Crop,
                           modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp))
@@ -471,7 +487,7 @@ fun HomeScreen(
 
       // Active product deals synced from the same Supabase campaign RPC as the website.
       if (searchQuery.isBlank() && activeProductCampaigns.isNotEmpty()) {
-        items(activeProductCampaigns, key = { "deal_${it.campaign.id}" }) { activeCampaign ->
+        items(activeProductCampaigns, key = { "deal_${it.campaign.id}" }, contentType = { "campaign_section" }) { activeCampaign ->
           ProductCampaignSection(
             activeCampaign = activeCampaign,
             productGridColumns = productGridColumns,
@@ -483,7 +499,7 @@ fun HomeScreen(
       }
 
       if (searchQuery.isBlank()) {
-        item {
+        item(key = "promo_above_popular", contentType = "promo_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.ABOVE_POPULAR_PRODUCTS,
             promotions = promotionsFor(BannerPlacement.ABOVE_POPULAR_PRODUCTS),
@@ -540,10 +556,10 @@ fun HomeScreen(
             }
           }
           else -> {
-            val chunkedSearch = feedState.items.chunked(productGridColumns)
             items(
-              items = chunkedSearch,
-              key = { row -> "search_${row.firstOrNull()?.id ?: row.hashCode()}" }
+              items = chunkedFeedRows,
+              key = { row -> "search_${row.firstOrNull()?.id ?: row.hashCode()}" },
+              contentType = { "product_row" }
             ) { rowItems ->
               Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                 ProductGridRow(
@@ -614,16 +630,17 @@ fun HomeScreen(
         }
 
         // 6. Grid of Popular Products (first 4 items)
-        item(key = "popular_grid") {
+        item(key = "popular_grid", contentType = "product_grid_block") {
           Spacer(modifier = Modifier.height(10.dp))
-          val homeProducts = products.filter { it.isFeatured }.ifEmpty { products }
-          val displayProducts = homeProducts.take(4)
+          val chunkedPopular = remember(popularProducts, productGridColumns) {
+            popularProducts.chunked(productGridColumns)
+          }
 
           when {
             isLoading && products.isEmpty() -> {
               ProductSkeletonGrid(columns = productGridColumns, rows = 2)
             }
-            displayProducts.isEmpty() -> {
+            popularProducts.isEmpty() -> {
               FriendlyErrorState(
                 title = "Products load nahi ho sake",
                 message = "Please check your internet connection and tap retry.",
@@ -638,7 +655,7 @@ fun HomeScreen(
                   .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
               ) {
-                displayProducts.chunked(productGridColumns).forEach { rowItems ->
+                chunkedPopular.forEach { rowItems ->
                   ProductGridRow(
                     rowItems = rowItems,
                     columns = productGridColumns,
@@ -652,7 +669,7 @@ fun HomeScreen(
           }
         }
 
-        item(key = "product_strip_banner") {
+        item(key = "product_strip_banner", contentType = "promo_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.PRODUCT_STRIP,
             promotions = promotionsFor(BannerPlacement.PRODUCT_STRIP),
@@ -663,8 +680,10 @@ fun HomeScreen(
 
       // New arrivals: only shown when not actively searching.
       if (searchQuery.isBlank()) {
-        item(key = "new_arrivals_section") {
-          val newArrivals = products.take(4)
+        item(key = "new_arrivals_section", contentType = "product_grid_block") {
+          val chunkedNewArrivals = remember(newArrivals, productGridColumns) {
+            newArrivals.chunked(productGridColumns)
+          }
           Column(modifier = Modifier.fillMaxWidth().padding(top = 22.dp)) {
             Row(
               modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -690,7 +709,7 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
               ) {
-                newArrivals.chunked(productGridColumns).forEach { rowItems ->
+                chunkedNewArrivals.forEach { rowItems ->
                   ProductGridRow(
                     rowItems = rowItems,
                     columns = productGridColumns,
@@ -764,57 +783,6 @@ fun HomeScreen(
         item(key = "social_media_section") {
           SocialMediaSection()
         }
-
-        // 11. Infinite Scroll Paginated Full Catalog (12 items per page)
-        item(key = "all_products_header") {
-          Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 16.dp, vertical = 8.dp)
-          ) {
-            Text("EXPLORE JTBazar", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
-            Text("More Products For You", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
-          }
-        }
-
-        if (feedState.isInitialLoading && feedState.items.isEmpty()) {
-          item(key = "home_feed_skeleton") {
-            ProductSkeletonGrid(columns = productGridColumns, rows = 2)
-          }
-        } else if (feedState.initialError != null && feedState.items.isEmpty()) {
-          item(key = "home_feed_error") {
-            FriendlyErrorState(
-              title = "Products load nahi ho sake",
-              message = feedState.initialError ?: "Please check your connection and try again.",
-              onRetry = { homePaginator.retry() }
-            )
-          }
-        } else {
-          val chunkedAll = feedState.items.chunked(productGridColumns)
-          items(
-            items = chunkedAll,
-            key = { row -> "all_${row.firstOrNull()?.id ?: row.hashCode()}" }
-          ) { rowItems ->
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-              ProductGridRow(
-                rowItems = rowItems,
-                columns = productGridColumns,
-                onProductClick = onProductClick,
-                onAddToCart = { MarketplaceRepository.addToCart(it) },
-                onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
-              )
-            }
-          }
-          item(key = "home_feed_pagination_footer") {
-            PaginationFooter(
-              isLoadingMore = feedState.isLoadingMore,
-              paginationError = feedState.paginationError,
-              hasMore = feedState.hasMore,
-              itemCount = feedState.items.size,
-              onRetry = { homePaginator.retry() }
-            )
-          }
-        }
       }
     }
     }
@@ -830,19 +798,20 @@ fun ProductGridRow(
   onToggleWishlist: (Product) -> Unit,
   campaignStyle: Boolean = false
 ) {
+  val cartProductIds by MarketplaceRepository.cartProductIds.collectAsState()
   Row(
-    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+    modifier = Modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.spacedBy(12.dp)
   ) {
     rowItems.forEach { product ->
-      Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+      Box(modifier = Modifier.weight(1f)) {
         ProductCard(
           product = product,
           onProductClick = { onProductClick(product) },
           onAddToCart = { onAddToCart(product) },
           onToggleWishlist = { onToggleWishlist(product) },
-          modifier = Modifier.fillMaxHeight(),
-          campaignStyle = campaignStyle
+          campaignStyle = campaignStyle,
+          isInCartOverride = product.id in cartProductIds
         )
       }
     }
@@ -1215,11 +1184,11 @@ fun ProductCard(
   onAddToCart: () -> Unit,
   onToggleWishlist: () -> Unit,
   modifier: Modifier = Modifier,
-  campaignStyle: Boolean = false
+  campaignStyle: Boolean = false,
+  isInCartOverride: Boolean? = null
 ) {
-  val cartItems by MarketplaceRepository.cartItems.collectAsState()
   val hasVariants = product.palettes.isNotEmpty() || product.sizes.isNotEmpty()
-  val isInCart = cartItems.any { it.product.id == product.id }
+  val isInCart = isInCartOverride ?: (product.id in MarketplaceRepository.cartProductIds.collectAsState().value)
 
   val cardRadius = if (campaignStyle) 14.dp else 16.dp
   Card(
@@ -1233,7 +1202,7 @@ fun ProductCard(
   ) {
     Column(
       modifier = Modifier
-        .fillMaxSize()
+        .fillMaxWidth()
         .clip(RoundedCornerShape(cardRadius))
     ) {
       // Image Box with Badge & Heart
@@ -1247,7 +1216,7 @@ fun ProductCard(
         val remoteUrl = product.imageUrl?.takeIf { it.isNotBlank() }
         if (remoteUrl != null) {
           AsyncImage(
-            model = rememberSizedImageRequest(data = remoteUrl, widthPx = 420, heightPx = 420),
+            model = rememberSizedImageRequest(data = remoteUrl, widthPx = 360, heightPx = 360),
             contentDescription = product.title,
             contentScale = if (campaignStyle) ContentScale.Fit else ContentScale.Crop,
             modifier = Modifier.fillMaxSize().then(if (campaignStyle) Modifier.padding(8.dp) else Modifier)
@@ -1310,7 +1279,7 @@ fun ProductCard(
       // Card Content with uniform height slots and bottom-aligned price row
       Column(
         modifier = Modifier
-          .fillMaxSize()
+          .fillMaxWidth()
           .background(if (campaignStyle) Color(0xFFFFF3E7) else Color.Transparent)
           .padding(horizontal = if (campaignStyle) 12.dp else 10.dp, vertical = if (campaignStyle) 10.dp else 8.dp),
         verticalArrangement = Arrangement.SpaceBetween
@@ -1383,8 +1352,11 @@ fun ProductCard(
               modifier = Modifier.size(12.dp)
             )
             Spacer(modifier = Modifier.width(3.dp))
+            val ratingText = remember(product.rating, product.reviewCount) {
+              "${product.rating} (${if (product.reviewCount > 999) "${product.reviewCount / 1000}k" else "${product.reviewCount}"})"
+            }
             Text(
-              text = "${product.rating} (${if (product.reviewCount > 999) "${product.reviewCount / 1000}k" else "${product.reviewCount}"})",
+              text = ratingText,
               fontSize = 11.sp,
               color = JTTextSecondary,
               fontWeight = FontWeight.Medium,
@@ -1404,12 +1376,14 @@ fun ProductCard(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
+          val priceText = remember(product.price) { "Rs. ${String.format("%,d", product.price)}" }
+          val originalPriceText = remember(product.originalPrice) { "Rs. ${String.format("%,d", product.originalPrice)}" }
           Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.Center
           ) {
             Text(
-              text = "Rs. ${String.format("%,d", product.price)}",
+              text = priceText,
               fontWeight = FontWeight.ExtraBold,
               fontSize = 12.5.sp,
               lineHeight = 15.sp,
@@ -1419,7 +1393,7 @@ fun ProductCard(
             )
             if (product.originalPrice > product.price) {
               Text(
-                text = "Rs. ${String.format("%,d", product.originalPrice)}",
+                text = originalPriceText,
                 fontSize = 10.sp,
                 lineHeight = 13.sp,
                 color = JTTextTertiary,
@@ -1598,30 +1572,22 @@ private fun ProductCampaignSection(
     else -> "Special offer"
   }
   val campaignTypeLabel = campaign.campaignType.replace('_', ' ').uppercase()
-  var remainingSeconds by remember(campaign.id, campaign.endsAt) { mutableLongStateOf(-1L) }
-
-  LaunchedEffect(campaign.id, campaign.endsAt) {
+  val isExpiredInitially = remember(campaign.id, campaign.endsAt) {
     val expiry = campaign.endsAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
-    if (expiry == null) {
-      remainingSeconds = -1L
-    } else {
-      while (true) {
-        val seconds = ((expiry - System.currentTimeMillis()) / 1000L).coerceAtLeast(0L)
-        remainingSeconds = seconds
-        if (seconds == 0L) break
-        kotlinx.coroutines.delay(1000L)
-      }
-    }
+    expiry != null && expiry <= System.currentTimeMillis()
   }
-  if (remainingSeconds == 0L) return
+  if (isExpiredInitially) return
 
   val description = campaign.description?.takeIf { it.isNotBlank() }
     ?: "Limited-time deal on selected products. Shop now before the offer ends!"
   val dealColumns = productGridColumns.coerceAtLeast(2)
+  val featuredDealProducts = remember(activeCampaign.products) { activeCampaign.products.take(4) }
+  val chunkedDealRows = remember(featuredDealProducts, dealColumns) { featuredDealProducts.chunked(dealColumns) }
+  val cartProductIds by MarketplaceRepository.cartProductIds.collectAsState()
 
   BoxWithConstraints(Modifier.fillMaxWidth()) {
     val isCompact = maxWidth < 520.dp
-    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 28.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 20.dp)) {
       Box(
         Modifier.fillMaxWidth()
           .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = Color(0x337A286F), spotColor = Color(0x337A286F))
@@ -1634,12 +1600,12 @@ private fun ProductCampaignSection(
         if (isCompact) {
           Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
             CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size, campaignTypeLabel)
-            CampaignCountdownPanel(remainingSeconds)
+            CampaignCountdownHost(campaign.id, campaign.endsAt)
           }
         } else {
           Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 22.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             Box(Modifier.weight(1f)) { CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size, campaignTypeLabel) }
-            CampaignCountdownPanel(remainingSeconds, Modifier.width(210.dp))
+            CampaignCountdownHost(campaign.id, campaign.endsAt, Modifier.width(210.dp))
           }
         }
       }
@@ -1655,20 +1621,20 @@ private fun ProductCampaignSection(
         }
         if (!isCompact) Text("Limited-time prices · While stocks last", color = JTTextSecondary, fontSize = 10.sp)
       }
-      activeCampaign.products.chunked(dealColumns).forEach { rowProducts ->
+      chunkedDealRows.forEach { rowProducts ->
         Row(
-          Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+          Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
           rowProducts.forEach { product ->
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            Box(Modifier.weight(1f)) {
               ProductCard(
                 product = if (product.badge == null) product.copy(badge = dealLabel) else product,
                 onProductClick = { onProductClick(product) },
                 onAddToCart = { onAddToCart(product) },
                 onToggleWishlist = { onToggleWishlist(product.id) },
-                modifier = Modifier.fillMaxHeight(),
-                campaignStyle = true
+                campaignStyle = true,
+                isInCartOverride = product.id in cartProductIds
               )
             }
           }
@@ -1698,6 +1664,31 @@ private fun CampaignBannerCopy(title: String, description: String, dealLabel: St
       Text("$productCount deal item${if (productCount == 1) "" else "s"} selected", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
     }
   }
+}
+
+@Composable
+private fun CampaignCountdownHost(
+  campaignId: String,
+  endsAt: String?,
+  modifier: Modifier = Modifier
+) {
+  var remainingSeconds by remember(campaignId, endsAt) { mutableLongStateOf(-1L) }
+
+  LaunchedEffect(campaignId, endsAt) {
+    val expiry = endsAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+    if (expiry == null) {
+      remainingSeconds = -1L
+    } else {
+      while (true) {
+        val seconds = ((expiry - System.currentTimeMillis()) / 1000L).coerceAtLeast(0L)
+        remainingSeconds = seconds
+        if (seconds == 0L) break
+        delay(1000L)
+      }
+    }
+  }
+
+  CampaignCountdownPanel(remainingSeconds = remainingSeconds, modifier = modifier)
 }
 
 @Composable

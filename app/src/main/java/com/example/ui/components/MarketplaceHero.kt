@@ -3,7 +3,7 @@ package com.example.ui.components
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -76,27 +76,6 @@ fun MarketplaceHero(
     }
   }
 
-  // Smooth ambient animation for glowing orange highlights
-  val infiniteTransition = rememberInfiniteTransition(label = "hero_anim")
-  val orangeGlow by infiniteTransition.animateFloat(
-    initialValue = 0.25f,
-    targetValue = 0.65f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(2800, easing = EaseInOutSine),
-      repeatMode = RepeatMode.Reverse
-    ),
-    label = "orange_glow"
-  )
-  val floatBadgeY by infiniteTransition.animateFloat(
-    initialValue = -3f,
-    targetValue = 3f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(2200, easing = EaseInOutSine),
-      repeatMode = RepeatMode.Reverse
-    ),
-    label = "float_badge"
-  )
-
   val activeHero = heroes.getOrNull(activeHeroIndex)
   val title = activeHero?.title ?: "Everything You Need,\nAll in One Place"
   val subtitle = activeHero?.subtitle ?: "Buy and sell products, discover services, find properties, and connect with trusted vendors across multiple categories."
@@ -135,8 +114,8 @@ fun MarketplaceHero(
           width = 1.2.dp,
           brush = Brush.linearGradient(
             listOf(
-              Color(0xFFFFD1A9).copy(alpha = orangeGlow + 0.35f),
-              Color(0xFFFFB380).copy(alpha = orangeGlow + 0.2f),
+              Color(0xFFFFD1A9),
+              Color(0xFFFFB380),
               Color(0xFFE5E1D8)
             )
           ),
@@ -274,12 +253,12 @@ fun MarketplaceHero(
             .background(Color(0xFFFFEDE0))
             .border(
               width = 1.dp,
-              color = Color(0xFFFFD4B3).copy(alpha = orangeGlow + 0.35f),
+              color = Color(0xFFFFCBA4),
               shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
             )
         ) {
           AsyncImage(
-            model = heroModel,
+            model = rememberSizedImageRequest(data = heroModel, widthPx = 900, heightPx = 560),
             contentDescription = activeHero?.imageAltText ?: "JTBazar Marketplace Hero",
             contentScale = ContentScale.Crop,
             placeholder = painterResource(R.drawable.img_hero_default),
@@ -327,7 +306,7 @@ fun MarketplaceHero(
               ) {
                 if (!featuredProduct.imageUrl.isNullOrBlank()) {
                   AsyncImage(
-                    model = featuredProduct.imageUrl,
+                    model = rememberSizedImageRequest(data = featuredProduct.imageUrl, widthPx = 160, heightPx = 160),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -395,7 +374,7 @@ fun MarketplaceHero(
                 ) {
                   if (!featuredShop.logoUrl.isNullOrBlank()) {
                     AsyncImage(
-                      model = featuredShop.logoUrl,
+                      model = rememberSizedImageRequest(data = featuredShop.logoUrl, widthPx = 128, heightPx = 128),
                       contentDescription = null,
                       contentScale = ContentScale.Crop,
                       modifier = Modifier.fillMaxSize().clip(CircleShape)

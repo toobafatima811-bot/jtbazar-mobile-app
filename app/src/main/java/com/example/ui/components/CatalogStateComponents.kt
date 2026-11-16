@@ -119,7 +119,8 @@ fun PaginationFooter(
   hasMore: Boolean,
   itemCount: Int,
   onRetry: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onLoadMore: (() -> Unit)? = null
 ) {
   when {
     isLoadingMore -> {
@@ -187,6 +188,31 @@ fun PaginationFooter(
             Spacer(modifier = Modifier.width(4.dp))
             Text("Retry", color = JTOrangeDark, fontWeight = FontWeight.Bold)
           }
+        }
+      }
+    }
+    hasMore && onLoadMore != null && itemCount > 0 -> {
+      Box(
+        modifier = modifier
+          .fillMaxWidth()
+          .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+      ) {
+        OutlinedButton(
+          onClick = onLoadMore,
+          shape = RoundedCornerShape(12.dp),
+          border = BorderStroke(1.dp, JTOrangeBorder),
+          colors = ButtonDefaults.outlinedButtonColors(contentColor = JTOrangeDark),
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .testTag("pagination_load_more_button")
+        ) {
+          Text(
+            text = "Load More Products",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+          )
         }
       }
     }

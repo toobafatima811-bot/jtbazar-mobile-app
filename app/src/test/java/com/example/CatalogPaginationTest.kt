@@ -441,4 +441,71 @@ class CatalogPaginationTest {
       scope.cancel()
     }
   }
+
+  @Test
+  fun seedInitialPagePopulatesPage0WithoutDuplicateFetchAndPreservesScrolledState() = runBlocking {
+    val fetchCounter = AtomicInteger(0)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    try {
+      val paginator = CatalogPaginator(scope) { query, page, pageSize ->
+        fetchCounter.incrementAndGet()
+        val start = page * pageSize + 1
+        val items = (start until start + pageSize).map { i ->
+          MarketplaceRepository.mapDtoToProduct(
+            com.example.data.supabase.SupabaseProductDto(
+              id = "seed_${query.searchQuery}_$i", title = "Item $i", vendor = "V", category = "Food",
+              price = 100, originalPrice = 100, discountPercent = 0, rating = 0.0,
+              reviewCount = 0, imageUrl = null, badge = null, inStock = true,
+              stockQuantity = 5, inStockText = "In Stock", vendorVerified = true,
+              vendorRating = "", vendorSales = "", vendorAvatarText = "",
+              deliveryText = "", paymentInfo = "", craftStory = "",
+              highlights = emptyList(), palettes = emptyList(), sizes = emptyList()
+            )
+          )
+        }
+        Result.success(com.example.data.repository.PaginatedProductsPage(items, page, hasMore = true))
+      }
+
+      val initialItems = (1..12).map { i ->
+        MarketplaceRepository.mapDtoToProduct(
+          com.example.data.supabase.SupabaseProductDto(
+            id = "page0_$i", title = "Seed Item $i", vendor = "V", category = "Food",
+            price = 100, originalPrice = 100, discountPercent = 0, rating = 0.0,
+            reviewCount = 0, imageUrl = null, badge = null, inStock = true,
+            stockQuantity = 5, inStockText = "In Stock", vendorVerified = true,
+            vendorRating = "", vendorSales = "", vendorAvatarText = "",
+            deliveryText = "", paymentInfo = "", craftStory = "",
+            highlights = emptyList(), palettes = emptyList(), sizes = emptyList()
+          )
+        )
+      }
+
+      paginator.seedInitialPage(CatalogQuery(), initialItems, hasMore = true)
+      assertEquals(0, fetchCounter.get())
+      assertTrue(paginator.state.value.hasLoadedOnce)
+      assertEquals(12, paginator.state.value.items.size)
+      assertEquals(1, paginator.state.value.nextPage)
+
+      paginator.loadNextPage()?.join()
+      assertEquals(1, fetchCounter.get())
+      assertEquals(24, paginator.state.value.items.size)
+      assertEquals(2, paginator.state.value.nextPage)
+
+      // Must NOT wipe out page 1 items when background refresh completes.
+      paginator.seedInitialPage(CatalogQuery(), initialItems.take(3), hasMore = true)
+      assertEquals(24, paginator.state.value.items.size)
+      assertEquals(2, paginator.state.value.nextPage)
+
+      paginator.clear()
+      val cleared = paginator.state.value
+      assertTrue(cleared.items.isEmpty())
+      assertEquals("", cleared.query.searchQuery)
+      assertFalse(cleared.hasLoadedOnce)
+      assertFalse(cleared.isInitialLoading)
+      assertFalse(cleared.isLoadingMore)
+      assertEquals(1, fetchCounter.get())
+    } finally {
+      scope.cancel()
+    }
+  }
 }

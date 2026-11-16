@@ -7,15 +7,19 @@ import com.example.data.supabase.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import java.util.concurrent.ConcurrentHashMap
 
 data class ActiveProductCampaign(
   val campaign: SupabaseProductCampaignDto,
@@ -29,10 +33,11 @@ data class ActiveProductCampaign(
  */
 object MarketplaceRepository {
   private const val TAG = "MarketplaceRepo"
-  // Repository state and completion callbacks are consumed by Compose UI.
-  // Keep them on Main; SupabaseApiService moves network calls to Dispatchers.IO.
-  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  // Repository background work runs on Default/IO so Main UI thread stays responsive.
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val catalogRefreshMutex = Mutex()
+  private const val PROMO_REFRESH_COOLDOWN_MS = 30_000L
+  @Volatile private var lastPromotionsSyncMs = 0L
 
   // Loading and error states
   private val _isLoading = MutableStateFlow(false)
@@ -48,9 +53,9 @@ object MarketplaceRepository {
     _errorMessage.value = null
   }
 
-  private val cartAddInFlight = mutableSetOf<String>()
-  private val wishlistInFlight = mutableSetOf<String>()
-  private val cancelInFlight = mutableSetOf<String>()
+  private val cartAddInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
+  private val wishlistInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
+  private val cancelInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
   private val _deliveryFee = MutableStateFlow(0)
   val deliveryFee: StateFlow<Int> = _deliveryFee.asStateFlow()
@@ -241,8 +246,13 @@ object MarketplaceRepository {
   private val _cartCount = MutableStateFlow(0)
   val cartCount: StateFlow<Int> = _cartCount.asStateFlow()
 
+  private val _cartProductIds = MutableStateFlow<Set<String>>(emptySet())
+  val cartProductIds: StateFlow<Set<String>> = _cartProductIds.asStateFlow()
+
   private fun updateCartCount() {
-    _cartCount.value = _cartItems.value.sumOf { it.quantity }
+    val snapshot = _cartItems.value
+    _cartCount.value = snapshot.sumOf { it.quantity }
+    _cartProductIds.value = snapshot.mapTo(HashSet()) { it.product.id }
   }
 
   private const val GUEST_PREFS = "jtbazar_guest_shopping"
@@ -612,7 +622,7 @@ object MarketplaceRepository {
 
   private val promotionsRefreshMutex = Mutex()
   private val realtimeClient = SupabaseRealtimeClient(
-    onPromotionsChanged = { refreshPromotions() },
+    onPromotionsChanged = { refreshPromotions(force = true) },
     onCatalogChanged = { refreshLiveCatalog(showLoading = false, refreshUserData = false) }
   )
 
@@ -624,24 +634,37 @@ object MarketplaceRepository {
     realtimeClient.stop()
   }
 
-  fun refreshPromotions() {
+  fun refreshPromotions(force: Boolean = false) {
     scope.launch {
-      refreshPromotionsSuspending()
+      refreshPromotionsSuspending(force = force)
     }
   }
 
-  suspend fun refreshPromotionsSuspending() {
+  suspend fun refreshPromotionsSuspending(force: Boolean = false) {
+    val now = System.currentTimeMillis()
+    if (!force && lastPromotionsSyncMs > 0L && (now - lastPromotionsSyncMs) < PROMO_REFRESH_COOLDOWN_MS) {
+      return
+    }
     if (!promotionsRefreshMutex.tryLock()) return
     try {
-      SupabaseApiService.fetchHomepageHeroes()
-        .onSuccess { if (_homepageHeroes.value != it) _homepageHeroes.value = it }
-        .onFailure { Log.w(TAG, "Homepage heroes refresh unavailable: ${it.message}") }
-      SupabaseApiService.fetchActivePromotions()
-        .onSuccess {
-          if (_homepagePromotions.value != it) _homepagePromotions.value = it
-          CampaignPopupManager.evaluateLaunchCampaign(it)
-        }
-        .onFailure { Log.w(TAG, "Homepage promotions refresh unavailable: ${it.message}") }
+      val latestNow = System.currentTimeMillis()
+      if (!force && lastPromotionsSyncMs > 0L && (latestNow - lastPromotionsSyncMs) < PROMO_REFRESH_COOLDOWN_MS) {
+        return
+      }
+      coroutineScope {
+        val heroesDeferred = async { SupabaseApiService.fetchHomepageHeroes() }
+        val promosDeferred = async { SupabaseApiService.fetchActivePromotions() }
+        heroesDeferred.await()
+          .onSuccess { if (_homepageHeroes.value != it) _homepageHeroes.value = it }
+          .onFailure { Log.w(TAG, "Homepage heroes refresh unavailable: ${it.message}") }
+        promosDeferred.await()
+          .onSuccess {
+            if (_homepagePromotions.value != it) _homepagePromotions.value = it
+            CampaignPopupManager.evaluateLaunchCampaign(it)
+            lastPromotionsSyncMs = System.currentTimeMillis()
+          }
+          .onFailure { Log.w(TAG, "Homepage promotions refresh unavailable: ${it.message}") }
+      }
     } finally {
       promotionsRefreshMutex.unlock()
     }
@@ -653,9 +676,25 @@ object MarketplaceRepository {
     }
   }
 
-  private suspend fun performLiveCatalogSync(refreshUserData: Boolean) {
-    val settings = SupabaseApiService.fetchStoreSettings()
-    settings.onSuccess {
+  private suspend fun performLiveCatalogSync(refreshUserData: Boolean) = coroutineScope {
+    // Launch independent public catalog endpoints concurrently for fast startup.
+    val settingsDeferred = async { SupabaseApiService.fetchStoreSettings() }
+    val categoryDeferred = async { SupabaseApiService.fetchCategories(forceRefresh = true) }
+    val heroesDeferred = async { SupabaseApiService.fetchHomepageHeroes() }
+    val promosDeferred = async { SupabaseApiService.fetchActivePromotions() }
+    val shopsDeferred = async { SupabaseApiService.fetchShops() }
+    val productDeferred = async {
+      SupabaseApiService.fetchProductsPage(
+        page = 0,
+        pageSize = CatalogPaginator.DEFAULT_PAGE_SIZE
+      )
+    }
+    val campaignDeferred = async { SupabaseApiService.fetchActiveProductCampaigns() }
+    val userDataDeferred = if (refreshUserData) {
+      SupabaseClient.currentUserId?.let { uid -> async { loadUserDataSuspending(uid) } }
+    } else null
+
+    settingsDeferred.await().onSuccess {
       if (_storeSettings.value != it) {
         _storeSettings.value = it
         _freeDeliveryEnabled.value = it.freeDeliveryEnabled
@@ -666,8 +705,7 @@ object MarketplaceRepository {
       }
     }.onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.STORE_SETTINGS) }
 
-    // Fetch live categories first so Food-only resolution & tree lookups are ready.
-    val categoryResult = SupabaseApiService.fetchCategories(forceRefresh = true)
+    val categoryResult = categoryDeferred.await()
     if (categoryResult.isSuccess) {
       val catDtoList = categoryResult.getOrNull().orEmpty()
       val draftCategories = catDtoList.map { dto ->
@@ -696,24 +734,26 @@ object MarketplaceRepository {
       _errorMessage.value = AppErrorMapper.toCustomerMessage(categoryResult.exceptionOrNull(), ErrorContext.CATEGORY_LOAD)
     }
 
-    // Fetch the same published homepage content used by the website.
-    SupabaseApiService.fetchHomepageHeroes()
+    heroesDeferred.await()
       .onSuccess { if (_homepageHeroes.value != it) _homepageHeroes.value = it }
       .onFailure { Log.w(TAG, "Homepage heroes unavailable: ${it.message}") }
-    SupabaseApiService.fetchActivePromotions()
+
+    promosDeferred.await()
       .onSuccess {
         if (_homepagePromotions.value != it) _homepagePromotions.value = it
         CampaignPopupManager.evaluateLaunchCampaign(it)
+        lastPromotionsSyncMs = System.currentTimeMillis()
       }
       .onFailure { Log.w(TAG, "Homepage promotions unavailable: ${it.message}") }
 
-    // 1. Fetch initial live product page (pageSize = 12 for fast load on 10k+ catalogs)
-    val productResult = SupabaseApiService.fetchProductsPage(
-      page = 0,
-      pageSize = CatalogPaginator.DEFAULT_PAGE_SIZE
-    )
+    shopsDeferred.await()
+      .onSuccess { fetchedShops -> if (_shops.value != fetchedShops) _shops.value = fetchedShops }
+      .onFailure { Log.e(TAG, "Failed to load shops: ${it.message}") }
+
+    val productResult = productDeferred.await()
     if (productResult.isSuccess) {
-      val dtoList = productResult.getOrNull()?.items.orEmpty()
+      val dtoPage = productResult.getOrNull()
+      val dtoList = dtoPage?.items.orEmpty()
       val wishlistSet = _wishlistedIds.value + _products.value.filter { it.isWishlisted }.map { it.id }
       _wishlistedIds.value = wishlistSet
       val mappedProducts = dtoList.map { mapDtoToProduct(it, wishlistSet) }
@@ -729,8 +769,7 @@ object MarketplaceRepository {
       if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
       Log.d(TAG, "Loaded ${mappedProducts.size} live products (page 0) from Supabase")
 
-      // 1b. Fetch active product campaigns & hydrate any campaign items outside page 0
-      val campaignResult = SupabaseApiService.fetchActiveProductCampaigns()
+      val campaignResult = campaignDeferred.await()
       if (campaignResult.isSuccess) {
         val activeCampaignList = campaignResult.getOrNull().orEmpty()
         val nowTime = System.currentTimeMillis()
@@ -744,7 +783,12 @@ object MarketplaceRepository {
         }
 
         val loadedById = mappedProducts.associateBy { it.id }
-        val neededIds = validCampaigns.flatMap { it.productIds }.distinct().filter { it !in loadedById }
+        // Hydrate up to 4 highlighted deals per active campaign (max 16) to keep Home fast.
+        val neededIds = validCampaigns
+          .flatMap { it.productIds.take(4) }
+          .distinct()
+          .filter { it !in loadedById }
+          .take(16)
         val extraProductsById = if (neededIds.isNotEmpty()) {
           SupabaseApiService.fetchProductsByIds(neededIds).getOrNull().orEmpty()
             .map { mapDtoToProduct(it, wishlistSet) }
@@ -779,13 +823,13 @@ object MarketplaceRepository {
         _activeProductCampaigns.value = emptyList()
       }
     } else {
+      campaignDeferred.cancel()
       _activeProductCampaigns.value = emptyList()
       _errorMessage.value = AppErrorMapper.toCustomerMessage(productResult.exceptionOrNull(), ErrorContext.PRODUCT_LOAD)
       Log.w(TAG, "Catalog refresh failed; retaining last successful product data")
     }
 
-    refreshShops()
-    if (refreshUserData) SupabaseClient.currentUserId?.let { loadUserData(it) }
+    userDataDeferred?.await()
   }
 
   // ----------------------------------------------------
@@ -872,11 +916,11 @@ object MarketplaceRepository {
         _orders.update { listOf(record) + it.filterNot { old -> old.orderId == record.orderId } }
         clearCart()
         loadUserData(userId)
-        onComplete?.invoke(Result.success(record))
+        onComplete?.let { cb -> withContext(Dispatchers.Main) { cb(Result.success(record)) } }
       } catch (e: Exception) {
         Log.e(TAG, "Secure order placement failed", e)
         val friendly = AppErrorMapper.toCustomerMessage(e, ErrorContext.ORDER_PLACE)
-        onComplete?.invoke(Result.failure(IllegalStateException(friendly)))
+        onComplete?.let { cb -> withContext(Dispatchers.Main) { cb(Result.failure(IllegalStateException(friendly))) } }
       } finally { _isPlacingOrder.value = false }
     }
     return null
@@ -893,10 +937,10 @@ object MarketplaceRepository {
         val result = SupabaseApiService.cancelOrder(orderId)
         if (result.isSuccess && result.getOrNull() == true) {
           SupabaseClient.currentUserId?.let { loadUserData(it) }
-          onComplete?.invoke(true)
+          onComplete?.let { cb -> withContext(Dispatchers.Main) { cb(true) } }
         } else {
           _errorMessage.value = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.ORDER_CANCEL)
-          onComplete?.invoke(false)
+          onComplete?.let { cb -> withContext(Dispatchers.Main) { cb(false) } }
         }
       } finally {
         cancelInFlight.remove(orderId)
@@ -980,18 +1024,37 @@ object MarketplaceRepository {
   // ----------------------------------------------------
   fun loadUserData(userId: String) {
     scope.launch {
-      _cartItems.value = emptyList()
-      _cartCount.value = 0
-      _addresses.value = emptyList()
-      _selectedAddress.value = null
-      _orders.value = emptyList()
-      _activeOrder.value = null
-      _notifications.value = emptyList()
-      try {
-        // Merge anonymous shopping choices into the account before loading remote state.
+      loadUserDataSuspending(userId)
+    }
+  }
+
+  private suspend fun loadUserDataSuspending(userId: String) = withContext(Dispatchers.IO) {
+    _cartItems.value = emptyList()
+    _cartCount.value = 0
+    _cartProductIds.value = emptySet()
+    _addresses.value = emptyList()
+    _selectedAddress.value = null
+    _orders.value = emptyList()
+    _activeOrder.value = null
+    _notifications.value = emptyList()
+    try {
+      // Fast-path skip if guest prefs contain no anonymous shopping data.
+      val prefs = guestPrefs()
+      val hasGuestCart = prefs?.getString(GUEST_CART, null).let { !it.isNullOrBlank() && it != "[]" }
+      val hasGuestWishlist = prefs?.getString(GUEST_WISHLIST, null).let { !it.isNullOrBlank() && it != "[]" }
+      if (hasGuestCart || hasGuestWishlist) {
         mergeGuestShoppingData(userId)
-        val cartRes = SupabaseApiService.fetchCart(userId)
-        val wishlistRes = SupabaseApiService.fetchWishlist(userId)
+      }
+
+      coroutineScope {
+        val cartDeferred = async { SupabaseApiService.fetchCart(userId) }
+        val wishlistDeferred = async { SupabaseApiService.fetchWishlist(userId) }
+        val addrDeferred = async { SupabaseApiService.fetchAddresses(userId) }
+        val ordersDeferred = async { SupabaseApiService.fetchOrders(userId) }
+        val notifDeferred = async { SupabaseApiService.fetchNotifications(userId) }
+
+        val cartRes = cartDeferred.await()
+        val wishlistRes = wishlistDeferred.await()
         val cartRows = if (cartRes.isSuccess) JSONArray(cartRes.getOrNull() ?: "[]") else JSONArray()
         val wishlistRows = if (wishlistRes.isSuccess) JSONArray(wishlistRes.getOrNull() ?: "[]") else JSONArray()
 
@@ -1032,8 +1095,8 @@ object MarketplaceRepository {
           homePaginator.syncWishlistStates(wishlistIds)
         }
 
-        // 1. Load addresses
-        val addrRes = SupabaseApiService.fetchAddresses(userId)
+        // 1. Apply addresses
+        val addrRes = addrDeferred.await()
         if (addrRes.isSuccess) {
           val addrList = addrRes.getOrNull().orEmpty().map { dto ->
             DeliveryAddress(
@@ -1055,19 +1118,43 @@ object MarketplaceRepository {
           _selectedAddress.value?.let { _currentLocation.value = "${it.area}, ${it.city}" }
         }
 
-        // 2. Load orders
-        val ordersRes = SupabaseApiService.fetchOrders(userId)
+        // 2. Apply orders (fetch recent order line items concurrently, avoiding N+1 startup storms)
+        val ordersRes = ordersDeferred.await()
         if (ordersRes.isSuccess) {
           val orderDtoList = ordersRes.getOrNull().orEmpty()
+          val recentDtos = orderDtoList.take(10)
+          val itemsByOrderId = recentDtos.map { dto ->
+            async {
+              dto.id to SupabaseApiService.fetchOrderItems(dto.id).getOrNull().orEmpty().map { line ->
+                val product = Product(
+                  id = line.productId,
+                  title = line.productTitle,
+                  vendor = "",
+                  category = "",
+                  price = line.unitPrice,
+                  originalPrice = line.unitPrice,
+                  discountPercent = 0,
+                  rating = 0.0,
+                  reviewCount = 0,
+                  imageUrl = line.imageUrl
+                )
+                CartItem(
+                  id = line.id,
+                  product = product,
+                  quantity = line.quantity,
+                  selectedPalette = line.selectedPalette,
+                  selectedSize = line.selectedSize
+                )
+              }
+            }
+          }.awaitAll().toMap()
+
           val mappedOrders = orderDtoList.map { dto ->
             OrderRecord(
               orderId = dto.id,
               orderNumber = dto.orderNumber,
               date = dto.createdAt,
-              items = SupabaseApiService.fetchOrderItems(dto.id).getOrNull().orEmpty().map { line ->
-                val product = Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0, imageUrl=line.imageUrl)
-                CartItem(id=line.id, product=product, quantity=line.quantity, selectedPalette=line.selectedPalette, selectedSize=line.selectedSize)
-              },
+              items = itemsByOrderId[dto.id].orEmpty(),
               subtotal = dto.subtotal,
               discount = dto.discount,
               deliveryFee = dto.deliveryFee,
@@ -1105,14 +1192,14 @@ object MarketplaceRepository {
           _activeOrder.value = mappedOrders.firstOrNull { it.orderStatus != "DELIVERED" && it.orderStatus != "CANCELLED" } ?: mappedOrders.firstOrNull()
         }
 
-        // 3. Load notifications
-        val notifRes = SupabaseApiService.fetchNotifications(userId)
+        // 3. Apply notifications
+        val notifRes = notifDeferred.await()
         if (notifRes.isSuccess) {
           _notifications.value = notifRes.getOrNull().orEmpty()
         }
-      } catch (e: Exception) {
-        Log.e(TAG, "Error loading user data for $userId", e)
       }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error loading user data for $userId", e)
     }
   }
 

@@ -133,6 +133,36 @@ class CatalogPaginator(
     return job
   }
 
+  fun seedInitialPage(query: CatalogQuery, items: List<Product>, hasMore: Boolean) {
+    synchronized(loadMoreLock) {
+      val current = _state.value
+      if (current.query != query) return
+      if (current.isInitialLoading || current.isLoadingMore) return
+      if (current.nextPage > 1 && current.items.isNotEmpty()) return
+      _state.value = CatalogFeedState(
+        query = query,
+        items = items.distinctBy { it.id },
+        nextPage = 1,
+        hasMore = hasMore,
+        isInitialLoading = false,
+        isLoadingMore = false,
+        initialError = null,
+        paginationError = null,
+        hasLoadedOnce = true
+      )
+    }
+  }
+
+  fun clear() {
+    activeJob?.cancel()
+    synchronized(loadMoreLock) {
+      generation++
+      queuedNextPage = null
+      queuedNextPageGen = -1L
+    }
+    _state.value = CatalogFeedState()
+  }
+
   fun loadNextPage(): Job? {
     val snapshot = _state.value
     if (snapshot.isInitialLoading || snapshot.isLoadingMore || !snapshot.hasMore) return null

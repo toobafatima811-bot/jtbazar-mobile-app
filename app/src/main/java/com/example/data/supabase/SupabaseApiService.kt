@@ -4,6 +4,8 @@ import android.util.Log
 import com.example.data.model.ShopRecord
 import com.example.data.repository.ProductSortOption
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -184,19 +186,44 @@ object SupabaseApiService {
     }
   }
 
-  private suspend fun enrichProductRows(products: JSONArray): List<SupabaseProductDto> {
-    if (products.length() == 0) return emptyList()
+  private suspend fun enrichProductRows(products: JSONArray): List<SupabaseProductDto> = coroutineScope {
+    if (products.length() == 0) return@coroutineScope emptyList()
 
     val ids = (0 until products.length()).mapNotNull { index ->
       products.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
     }
-    if (ids.isEmpty()) return emptyList()
+    if (ids.isEmpty()) return@coroutineScope emptyList()
     val idFilter = ids.joinToString(",")
+    val rpcRequest = JSONObject().put("product_ids", JSONArray(ids)).toString()
 
-    // Reuse short-TTL cached shop & category metadata instead of re-fetching on every scroll page.
-    val shopsList = fetchShops(forceRefresh = false).getOrNull().orEmpty()
+    // Execute all enrichment lookups concurrently to minimize page load latency.
+    val shopsDeferred = async { fetchShops(forceRefresh = false).getOrNull().orEmpty() }
+    val categoriesDeferred = async { fetchCategories(forceRefresh = false).getOrNull().orEmpty() }
+    val imagesDeferred = async {
+      SupabaseClient.get(
+        "product_images?select=product_id,image_url,storage_path,is_primary,sort_order&product_id=in.($idFilter)&order=sort_order.asc"
+      ).getOrNull() ?: "[]"
+    }
+    val variantsDeferred = async {
+      SupabaseClient.get(
+        "product_variants?select=id,product_id,option_label,option_value,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
+      ).getOrNull() ?: "[]"
+    }
+    val inventoryDeferred = async {
+      SupabaseClient.rpc("get_public_inventory", rpcRequest).getOrNull()?.let(::JSONArray)
+    }
+    val availabilityDeferred = async {
+      SupabaseClient.rpc("get_public_availability", rpcRequest).getOrNull()?.let(::JSONArray)
+    }
+
+    val shopsList = shopsDeferred.await()
+    val categoriesList = categoriesDeferred.await()
+    val imageJson = imagesDeferred.await()
+    val variantJson = variantsDeferred.await()
+    val inventory = inventoryDeferred.await()
+    val availability = availabilityDeferred.await()
+
     val shopsById = shopsList.associateBy { it.id }
-    val categoriesList = fetchCategories(forceRefresh = false).getOrNull().orEmpty()
     val categoriesById = categoriesList.associate {
       it.id to JSONObject().put("id", it.id).put("name", it.title)
     }
@@ -209,14 +236,6 @@ object SupabaseApiService {
         product.put("seller", JSONObject().put("shop_name", shop.name))
       }
     }
-
-    // Fetch media, variants, and inventory/availability ONLY for this page's product IDs.
-    val imageJson = SupabaseClient.get(
-      "product_images?select=product_id,image_url,storage_path,is_primary,sort_order&product_id=in.($idFilter)&order=sort_order.asc"
-    ).getOrNull() ?: "[]"
-    val variantJson = SupabaseClient.get(
-      "product_variants?select=id,product_id,option_label,option_value,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
-    ).getOrNull() ?: "[]"
 
     val images = JSONArray(imageJson)
     val variants = JSONArray(variantJson)
@@ -240,10 +259,6 @@ object SupabaseApiService {
       row.put("variants", variantsByProduct[pid] ?: JSONArray())
       row.put("category", categoriesById[row.optString("category_id")] ?: JSONObject())
     }
-
-    val request = JSONObject().put("product_ids", JSONArray(ids)).toString()
-    val inventory = SupabaseClient.rpc("get_public_inventory", request).getOrNull()?.let(::JSONArray)
-    val availability = SupabaseClient.rpc("get_public_availability", request).getOrNull()?.let(::JSONArray)
     val quantities = mutableMapOf<String, Int>()
     if (inventory != null) for (i in 0 until inventory.length()) {
       val row = inventory.getJSONObject(i)
@@ -256,7 +271,7 @@ object SupabaseApiService {
       val pid = row.optString("product_id")
       available[pid] = (available[pid] ?: false) || row.optBoolean("is_available", false)
     }
-    return parseProductsJson(products.toString(), quantities, available, availability != null, availability)
+    parseProductsJson(products.toString(), quantities, available, availability != null, availability)
   }
 
   private fun parseProductsJson(jsonStr: String, quantities: Map<String, Int> = emptyMap(), availability: Map<String, Boolean> = emptyMap(), availabilityKnown: Boolean = false, availabilityRows: JSONArray? = null): List<SupabaseProductDto> {
@@ -395,7 +410,7 @@ object SupabaseApiService {
   suspend fun fetchActivePromotions(position: String? = null): Result<List<SupabasePromotionDto>> = withContext(Dispatchers.IO) {
     try {
       val positionFilter = position?.takeIf { it.isNotBlank() }?.let { "&display_position=eq.${URLEncoder.encode(it, "UTF-8")}" } ?: ""
-      SupabaseClient.get("promotions?select=*&status=eq.approved&order=priority.desc,created_at.desc$positionFilter")
+      SupabaseClient.get("promotions?select=*&status=eq.approved&order=priority.desc,created_at.desc&limit=30$positionFilter")
         .mapCatching { json ->
           val rows = JSONArray(json)
           (0 until rows.length()).mapNotNull { index ->

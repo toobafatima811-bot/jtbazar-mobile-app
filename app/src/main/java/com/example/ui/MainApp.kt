@@ -119,13 +119,13 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
       MarketplaceRepository.refreshPromotionsSuspending()
       val promoPoller = launch {
         while (true) {
-          delay(15_000L)
+          delay(90_000L)
           MarketplaceRepository.refreshPromotionsSuspending()
         }
       }
       val catalogPoller = launch {
         while (true) {
-          delay(60_000L)
+          delay(180_000L)
           MarketplaceRepository.refreshLiveCatalogSuspending(showLoading = false, refreshUserData = false)
         }
       }
@@ -494,9 +494,6 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         }
 
         AppScreen.HOME -> {
-          LaunchedEffect(AppScreen.HOME) {
-            MarketplaceRepository.refreshPromotions()
-          }
           HomeScreen(
             listState = homeListState,
             onProductClick = { product ->
