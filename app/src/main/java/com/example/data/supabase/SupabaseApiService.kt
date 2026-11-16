@@ -922,17 +922,51 @@ object SupabaseApiService {
         return@withContext Result.success(latestCached)
       }
       try {
-        val res = SupabaseClient.rpc("list_public_shops")
-        res.fold(
+        val (shopsResult, ratingsResult) = coroutineScope {
+          val shopsDeferred = async { SupabaseClient.rpc("list_public_shops") }
+          val reviewsDeferred = async {
+            runCatching {
+              SupabaseClient.get("seller_reviews?status=eq.approved&select=seller_id,rating&limit=1000")
+            }.getOrNull()
+          }
+          shopsDeferred.await() to reviewsDeferred.await()
+        }
+        val ratingStatsBySeller = mutableMapOf<String, Pair<Int, Int>>()
+        val reviewsJson = ratingsResult?.getOrNull()
+        if (!reviewsJson.isNullOrBlank()) {
+          runCatching {
+            val reviewArr = JSONArray(reviewsJson)
+            for (i in 0 until reviewArr.length()) {
+              val rev = reviewArr.optJSONObject(i) ?: continue
+              val sellerId = rev.optString("seller_id", "").takeIf { it.isNotBlank() && it != "null" } ?: continue
+              val ratingVal = rev.optInt("rating", 0)
+              if (ratingVal in 1..5) {
+                val prev = ratingStatsBySeller[sellerId] ?: (0 to 0)
+                ratingStatsBySeller[sellerId] = (prev.first + ratingVal) to (prev.second + 1)
+              }
+            }
+          }
+        }
+        shopsResult.fold(
           onSuccess = { jsonStr ->
             val arr = JSONArray(jsonStr)
             val list = mutableListOf<ShopRecord>()
             for (i in 0 until arr.length()) {
               val obj = arr.optJSONObject(i) ?: continue
               val name = obj.optString("shop_name", "").takeIf { it.isNotBlank() } ?: continue
+              val shopId = obj.optString("id", "").takeIf { it.isNotBlank() } ?: continue
+              val stats = ratingStatsBySeller[shopId]
+              val computedAvgRating = if (stats != null && stats.second > 0) {
+                stats.first.toDouble() / stats.second.toDouble()
+              } else {
+                listOf("rating", "average_rating", "avg_rating")
+                  .firstNotNullOfOrNull { key ->
+                    if (obj.has(key) && !obj.isNull(key)) obj.optDouble(key, 0.0).takeIf { !it.isNaN() && it > 0.0 } else null
+                  } ?: 0.0
+              }
               list.add(
                 ShopRecord(
-                  id = obj.optString("id", "").takeIf { it.isNotBlank() } ?: continue,
+                  id = shopId,
                   name = name,
                   slug = obj.optString("slug", ""),
                   productCount = obj.optInt("product_count", 0),
@@ -943,6 +977,7 @@ object SupabaseApiService {
                   address = obj.optString("shop_location_label", ""),
                   latitude = if (!obj.isNull("shop_lat")) obj.optDouble("shop_lat", 0.0) else 0.0,
                   longitude = if (!obj.isNull("shop_lng")) obj.optDouble("shop_lng", 0.0) else 0.0,
+                  rating = computedAvgRating,
                   isVerified = obj.optBoolean("is_verified", false),
                   phone = "",
                   deliveryRadiusKm = obj.optDouble("delivery_radius_km", 0.0)

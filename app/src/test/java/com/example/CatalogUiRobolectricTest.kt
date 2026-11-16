@@ -5,10 +5,12 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import coil.Coil
 import coil.ImageLoader
@@ -18,10 +20,14 @@ import com.example.data.model.CategoryItem
 import com.example.data.model.Product
 import com.example.data.repository.CatalogPaginator
 import com.example.data.repository.PaginatedProductsPage
+import com.example.data.repository.ActiveProductCampaign
+import com.example.data.supabase.SupabaseProductCampaignDto
 import com.example.ui.components.FriendlyEmptyState
 import com.example.ui.components.FriendlyErrorState
 import com.example.ui.components.PaginationFooter
 import com.example.ui.screens.CategoryProductsScreen
+import com.example.ui.screens.CollectionProductsScreen
+import com.example.ui.screens.HomeCollectionTarget
 import com.example.ui.theme.JTBazarTheme
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -240,5 +246,79 @@ class CatalogUiRobolectricTest {
     composeTestRule.onNodeWithTag("friendly_empty_state").assertIsDisplayed()
     composeTestRule.onNodeWithTag("friendly_empty_action_button").performClick()
     assertEquals(1, emptyActionTapped)
+  }
+
+  @Test
+  fun dealCollectionScreenRendersBannerAndAllDealProducts() {
+    val dealProducts = (1..8).map { idx ->
+      fakeProduct("d_$idx", "Flash Deal Item $idx", "Electronics", "cat_elec")
+    }
+    val campaignDto = SupabaseProductCampaignDto(
+      id = "camp_1",
+      name = "Weekend Mega Flash",
+      campaignType = "flash_sale",
+      displayTitle = "Weekend Mega Flash",
+      description = "Up to 40% OFF on top tech",
+      discountPercent = 40.0,
+      buyQuantity = 1,
+      getQuantity = 1,
+      bundlePrice = null,
+      startsAt = null,
+      endsAt = null,
+      productIds = dealProducts.map { it.id }
+    )
+    val target = HomeCollectionTarget.Deal(ActiveProductCampaign(campaignDto, dealProducts))
+
+    composeTestRule.setContent {
+      val scope = rememberCoroutineScope()
+      val paginator = CatalogPaginator(scope) { _, page, _ ->
+        Result.success(PaginatedProductsPage(items = dealProducts, page = page, hasMore = false))
+      }
+      JTBazarTheme(darkTheme = false) {
+        CollectionProductsScreen(
+          target = target,
+          onBack = {},
+          onProductClick = {},
+          onCartClick = {},
+          paginatorOverride = paginator
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("deal_collection_banner").assertIsDisplayed()
+    composeTestRule.onNodeWithText("40% off • 8 ITEMS").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Flash Deal Item 1").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Flash Deal Item 2").assertIsDisplayed()
+  }
+
+  @Test
+  fun popularAndNewArrivalsCollectionScreenRendersHeaderSortAndProducts() {
+    val popularItems = (1..4).map { idx ->
+      fakeProduct("p_$idx", "Popular Pick $idx", "Food", "cat_food")
+    }
+
+    composeTestRule.setContent {
+      val scope = rememberCoroutineScope()
+      val paginator = CatalogPaginator(scope) { _, page, _ ->
+        Result.success(PaginatedProductsPage(items = popularItems, page = page, hasMore = false))
+      }
+      JTBazarTheme(darkTheme = false) {
+        CollectionProductsScreen(
+          target = HomeCollectionTarget.Popular(isFeaturedOnly = true),
+          onBack = {},
+          onProductClick = {},
+          onCartClick = {},
+          paginatorOverride = paginator
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithText("Most Popular on JTBazar").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("collection_sort_newest").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Popular Pick 1").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("collection_lazy_column").performScrollToNode(hasText("Popular Pick 4"))
+    composeTestRule.onNodeWithText("Popular Pick 4").assertIsDisplayed()
   }
 }

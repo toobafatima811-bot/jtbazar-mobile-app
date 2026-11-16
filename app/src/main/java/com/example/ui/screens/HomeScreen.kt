@@ -89,12 +89,20 @@ fun HomeScreen(
   onAccountClick: () -> Unit,
   onBudgetClick: () -> Unit = {},
   onExploreShopsClick: () -> Unit = {},
+  onShopClick: (ShopRecord) -> Unit = { _ -> onExploreShopsClick() },
+  onSeeAllDealsClick: (ActiveProductCampaign) -> Unit = { _ -> onExploreCategoriesClick() },
+  onSeeAllPopularClick: (Boolean) -> Unit = { _ -> onExploreCategoriesClick() },
+  onSeeAllNewArrivalsClick: () -> Unit = { onExploreCategoriesClick() },
   onBannerDestinationClick: ((String?) -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val screenContext = LocalContext.current
   val productGridColumns = rememberAdaptiveColumnCount(minCellWidth = 138.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
   val products by MarketplaceRepository.products.collectAsState()
+  val homePopularRepo by MarketplaceRepository.homePopularProducts.collectAsState()
+  val hasMorePopularRepo by MarketplaceRepository.hasMorePopularProducts.collectAsState()
+  val popularUsesFeaturedFilter by MarketplaceRepository.popularUsesFeaturedFilter.collectAsState()
+  val hasMoreCatalogProducts by MarketplaceRepository.hasMoreCatalogProducts.collectAsState()
   val trustedShops by MarketplaceRepository.shops.collectAsState()
   val categories by MarketplaceRepository.categories.collectAsState()
   val homepageHeroes by MarketplaceRepository.homepageHeroes.collectAsState()
@@ -128,14 +136,40 @@ fun HomeScreen(
   fun promotionsFor(placement: BannerPlacement) =
     promotionsByPlacement[placement].orEmpty()
 
-  val homeCategories = remember(categories) { categories.take(12) }
-  val homeShops = remember(trustedShops) { trustedShops.take(10) }
-  val popularProducts = remember(products) {
-    products.filter { it.isFeatured }.ifEmpty { products }.take(4)
+  val homeCategories = remember(categories) { categories.take(6) }
+  val homeShops = remember(trustedShops) {
+    trustedShops
+      .sortedWith(
+        compareByDescending<ShopRecord> { it.rating }
+          .thenByDescending { it.productCount }
+          .thenByDescending { it.isVerified }
+          .thenBy { it.name.lowercase() }
+      )
+      .take(6)
   }
-  val newArrivals = remember(products, popularProducts) {
+  val popularProducts = remember(homePopularRepo, products) {
+    homePopularRepo.ifEmpty { products.filter { it.isFeatured }.ifEmpty { products } }.take(6)
+  }
+  val hasMorePopular = remember(homePopularRepo, hasMorePopularRepo, products) {
+    if (homePopularRepo.isNotEmpty()) {
+      hasMorePopularRepo || homePopularRepo.size > 6
+    } else {
+      products.size > 6
+    }
+  }
+  val nonPopularNewest = remember(products, popularProducts) {
     val popularIds = popularProducts.mapTo(HashSet()) { it.id }
-    products.filterNot { it.id in popularIds }.ifEmpty { products }.take(4)
+    products.filterNot { it.id in popularIds }
+  }
+  val newArrivals = remember(nonPopularNewest, products) {
+    nonPopularNewest.ifEmpty { products }.take(6)
+  }
+  val hasMoreNewArrivals = remember(nonPopularNewest, products, hasMoreCatalogProducts) {
+    if (nonPopularNewest.isNotEmpty()) {
+      nonPopularNewest.size > 6 || hasMoreCatalogProducts
+    } else {
+      products.size > 6 || hasMoreCatalogProducts
+    }
   }
 
   var showAddressDialog by remember { mutableStateOf(false) }
@@ -449,7 +483,10 @@ fun HomeScreen(
                     shape = RoundedCornerShape(14.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    modifier = Modifier.width(148.dp).clickable { onExploreShopsClick() }
+                    modifier = Modifier
+                      .width(152.dp)
+                      .clickable { onShopClick(shop) }
+                      .testTag("home_trusted_shop_${shop.id}")
                   ) {
                     Column(
                       modifier = Modifier.fillMaxWidth().padding(10.dp),
@@ -469,12 +506,55 @@ fun HomeScreen(
                           contentAlignment = Alignment.Center
                         ) { Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTTextSecondary, modifier = Modifier.size(30.dp)) }
                       }
-                      Text(shop.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                      Text(
-                        "${shop.productCount} products",
-                        fontSize = 10.sp,
-                        color = JTTextSecondary
-                      )
+                      Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                      ) {
+                        Text(
+                          text = shop.name,
+                          fontSize = 12.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = JTTextPrimary,
+                          maxLines = 1,
+                          overflow = TextOverflow.Ellipsis,
+                          modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (shop.isVerified) {
+                          Icon(
+                            imageVector = Icons.Filled.Verified,
+                            contentDescription = "Verified seller",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(13.dp)
+                          )
+                        }
+                      }
+                      Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                      ) {
+                        if (shop.rating > 0.0) {
+                          Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = null,
+                            tint = JTAmber,
+                            modifier = Modifier.size(12.dp)
+                          )
+                          Text(
+                            text = String.format(java.util.Locale.US, "%.1f", shop.rating),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = JTTextPrimary
+                          )
+                          Text("•", fontSize = 10.sp, color = JTTextTertiary)
+                        }
+                        Text(
+                          "${shop.productCount} products",
+                          fontSize = 10.sp,
+                          color = JTTextSecondary,
+                          maxLines = 1,
+                          overflow = TextOverflow.Ellipsis
+                        )
+                      }
                     }
                   }
                 }
@@ -493,7 +573,8 @@ fun HomeScreen(
             productGridColumns = productGridColumns,
             onProductClick = onProductClick,
             onAddToCart = { MarketplaceRepository.addToCart(it) },
-            onToggleWishlist = { productId -> MarketplaceRepository.toggleWishlist(productId) }
+            onToggleWishlist = { product -> MarketplaceRepository.toggleWishlist(product.id, product) },
+            onSeeAllDealsClick = { onSeeAllDealsClick(activeCampaign) }
           )
         }
       }
@@ -617,19 +698,31 @@ fun HomeScreen(
               )
             }
 
-            Text(
-              text = "View All >",
-              fontSize = 13.sp,
-              fontWeight = FontWeight.SemiBold,
-              color = JTPurplePrimary,
-              modifier = Modifier
-                .clickable { onExploreCategoriesClick() }
-                .padding(4.dp)
-            )
+            if (hasMorePopular) {
+              TextButton(
+                onClick = { onSeeAllPopularClick(popularUsesFeaturedFilter) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier.defaultMinSize(minHeight = 40.dp).testTag("see_all_popular_button")
+              ) {
+                Text(
+                  text = "See All",
+                  fontSize = 13.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = JTPurplePrimary
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Icon(
+                  imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                  contentDescription = "See all popular products",
+                  tint = JTPurplePrimary,
+                  modifier = Modifier.size(14.dp)
+                )
+              }
+            }
           }
         }
 
-        // 6. Grid of Popular Products (first 4 items)
+        // 6. Grid of Popular Products (up to 6 items)
         item(key = "popular_grid", contentType = "product_grid_block") {
           Spacer(modifier = Modifier.height(10.dp))
           val chunkedPopular = remember(popularProducts, productGridColumns) {
@@ -664,6 +757,26 @@ fun HomeScreen(
                     onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
                   )
                 }
+                if (hasMorePopular) {
+                  OutlinedButton(
+                    onClick = { onSeeAllPopularClick(popularUsesFeaturedFilter) },
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, JTPurplePrimary),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = JTPurplePrimary),
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .heightIn(min = 48.dp)
+                      .testTag("see_all_popular_cta_button")
+                  ) {
+                    Text("See All Popular Products", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                      imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  }
+                }
               }
             }
           }
@@ -690,18 +803,32 @@ fun HomeScreen(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
-              Column {
+              Column(modifier = Modifier.weight(1f)) {
                 Text("NEW ARRIVALS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
                 Text("Fresh additions to the store.", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
                 Text("Recently added live listings.", fontSize = 11.sp, color = JTTextSecondary)
               }
-              Text(
-                "Browse catalog  →",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = JTOrangeDark,
-                modifier = Modifier.clickable { onExploreCategoriesClick() }.padding(4.dp)
-              )
+              if (hasMoreNewArrivals) {
+                TextButton(
+                  onClick = onSeeAllNewArrivalsClick,
+                  contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                  modifier = Modifier.defaultMinSize(minHeight = 40.dp).testTag("see_all_new_arrivals_button")
+                ) {
+                  Text(
+                    "See All",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = JTOrangeDark
+                  )
+                  Spacer(modifier = Modifier.width(3.dp))
+                  Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "See all new arrivals",
+                    tint = JTOrangeDark,
+                    modifier = Modifier.size(14.dp)
+                  )
+                }
+              }
             }
             Spacer(Modifier.height(10.dp))
             if (newArrivals.isNotEmpty()) {
@@ -717,6 +844,26 @@ fun HomeScreen(
                     onAddToCart = { MarketplaceRepository.addToCart(it) },
                     onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
                   )
+                }
+                if (hasMoreNewArrivals) {
+                  OutlinedButton(
+                    onClick = onSeeAllNewArrivalsClick,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, JTOrangeDark),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = JTOrangeDark),
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .heightIn(min = 48.dp)
+                      .testTag("see_all_new_arrivals_cta_button")
+                  ) {
+                    Text("See All New Arrivals", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                      imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  }
                 }
               }
             }
@@ -1561,7 +1708,8 @@ private fun ProductCampaignSection(
   productGridColumns: Int = 2,
   onProductClick: (Product) -> Unit,
   onAddToCart: (Product) -> Unit,
-  onToggleWishlist: (String) -> Unit
+  onToggleWishlist: (Product) -> Unit,
+  onSeeAllDealsClick: () -> Unit = {}
 ) {
   val campaign = activeCampaign.campaign
   val title = campaign.displayTitle.ifBlank { campaign.name }
@@ -1581,7 +1729,9 @@ private fun ProductCampaignSection(
   val description = campaign.description?.takeIf { it.isNotBlank() }
     ?: "Limited-time deal on selected products. Shop now before the offer ends!"
   val dealColumns = productGridColumns.coerceAtLeast(2)
-  val featuredDealProducts = remember(activeCampaign.products) { activeCampaign.products.take(4) }
+  val featuredDealProducts = remember(activeCampaign.products) { activeCampaign.products.take(6) }
+  val hasMoreDeals = activeCampaign.products.size > 6 || activeCampaign.campaign.productIds.size > 6
+  val totalDealCount = maxOf(activeCampaign.products.size, activeCampaign.campaign.productIds.size)
   val chunkedDealRows = remember(featuredDealProducts, dealColumns) { featuredDealProducts.chunked(dealColumns) }
   val cartProductIds by MarketplaceRepository.cartProductIds.collectAsState()
 
@@ -1599,12 +1749,12 @@ private fun ProductCampaignSection(
         Box(Modifier.align(Alignment.BottomEnd).offset(x = 25.dp, y = 55.dp).size(150.dp).border(1.dp, Color.White.copy(alpha = 0.10f), CircleShape))
         if (isCompact) {
           Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-            CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size, campaignTypeLabel)
+            CampaignBannerCopy(title, description, dealLabel, totalDealCount, campaignTypeLabel)
             CampaignCountdownHost(campaign.id, campaign.endsAt)
           }
         } else {
           Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 22.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            Box(Modifier.weight(1f)) { CampaignBannerCopy(title, description, dealLabel, activeCampaign.products.size, campaignTypeLabel) }
+            Box(Modifier.weight(1f)) { CampaignBannerCopy(title, description, dealLabel, totalDealCount, campaignTypeLabel) }
             CampaignCountdownHost(campaign.id, campaign.endsAt, Modifier.width(210.dp))
           }
         }
@@ -1613,13 +1763,35 @@ private fun ProductCampaignSection(
       Row(
         Modifier.fillMaxWidth().padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom
+        verticalAlignment = Alignment.CenterVertically
       ) {
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
           Text("HANDPICKED FOR YOU", color = Color(0xFFC45B22), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
           Text("Shop this deal", color = JTTextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
-        if (!isCompact) Text("Limited-time prices · While stocks last", color = JTTextSecondary, fontSize = 10.sp)
+        if (hasMoreDeals) {
+          TextButton(
+            onClick = onSeeAllDealsClick,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.defaultMinSize(minHeight = 40.dp).testTag("see_all_deals_${campaign.id}")
+          ) {
+            Text(
+              text = "See All Deals",
+              color = Color(0xFFC45B22),
+              fontSize = 13.sp,
+              fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+              contentDescription = "See all deals",
+              tint = Color(0xFFC45B22),
+              modifier = Modifier.size(14.dp)
+            )
+          }
+        } else if (!isCompact) {
+          Text("Limited-time prices · While stocks last", color = JTTextSecondary, fontSize = 10.sp)
+        }
       }
       chunkedDealRows.forEach { rowProducts ->
         Row(
@@ -1632,7 +1804,7 @@ private fun ProductCampaignSection(
                 product = if (product.badge == null) product.copy(badge = dealLabel) else product,
                 onProductClick = { onProductClick(product) },
                 onAddToCart = { onAddToCart(product) },
-                onToggleWishlist = { onToggleWishlist(product.id) },
+                onToggleWishlist = { onToggleWishlist(product) },
                 campaignStyle = true,
                 isInCartOverride = product.id in cartProductIds
               )
@@ -1641,6 +1813,26 @@ private fun ProductCampaignSection(
           repeat((dealColumns - rowProducts.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
         }
         Spacer(Modifier.height(12.dp))
+      }
+      if (hasMoreDeals) {
+        OutlinedButton(
+          onClick = onSeeAllDealsClick,
+          shape = RoundedCornerShape(12.dp),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE85A2A)),
+          colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC45B22)),
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .testTag("see_all_deals_button_${campaign.id}")
+        ) {
+          Text("See All Deals ($totalDealCount items)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+          Spacer(modifier = Modifier.width(6.dp))
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+          )
+        }
       }
     }
   }
@@ -1667,7 +1859,7 @@ private fun CampaignBannerCopy(title: String, description: String, dealLabel: St
 }
 
 @Composable
-private fun CampaignCountdownHost(
+internal fun CampaignCountdownHost(
   campaignId: String,
   endsAt: String?,
   modifier: Modifier = Modifier

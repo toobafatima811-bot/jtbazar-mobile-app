@@ -90,6 +90,7 @@ enum class AppScreen {
   ACCOUNT_SETTINGS,
   SECURITY_PASSWORD,
   BUDGET_SHOPPING,
+  COLLECTION_PRODUCTS,
   VENDOR_CENTER,
   DRIVER_CENTER,
   DRIVER_NAVIGATION,
@@ -164,6 +165,9 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   var selectedProduct by remember { mutableStateOf<Product?>(null) }
   var selectedPublicShopId by remember { mutableStateOf<String?>(null) }
   var selectedCategory by remember { mutableStateOf<CategoryItem?>(null) }
+  var selectedCollectionTarget by remember { mutableStateOf<HomeCollectionTarget?>(null) }
+  val collectionListStates = remember { mutableStateMapOf<String, LazyListState>() }
+  val collectionPaginators = remember { mutableStateMapOf<String, CatalogPaginator>() }
   var selectedDeliveryForNavigation by remember { mutableStateOf<JSONObject?>(null) }
 
   LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link) {
@@ -215,7 +219,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         selectedPublicShopId = null
         currentScreen = popBack(AppScreen.HOME)
       }
-      AppScreen.PRODUCT_DETAIL, AppScreen.BUDGET_SHOPPING, AppScreen.CART_CHECKOUT, AppScreen.ORDER_TRACKING -> {
+      AppScreen.PRODUCT_DETAIL, AppScreen.BUDGET_SHOPPING, AppScreen.COLLECTION_PRODUCTS, AppScreen.CART_CHECKOUT, AppScreen.ORDER_TRACKING -> {
         currentScreen = popBack(AppScreen.HOME)
       }
       AppScreen.CATEGORY_PRODUCTS -> {
@@ -464,7 +468,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         isRefreshing = isPullRefreshing,
         enabled = currentScreen in setOf(
           AppScreen.HOME, AppScreen.CATEGORIES, AppScreen.CATEGORY_PRODUCTS,
-          AppScreen.DISCOVER, AppScreen.WISHLIST, AppScreen.ACCOUNT,
+          AppScreen.COLLECTION_PRODUCTS, AppScreen.DISCOVER, AppScreen.WISHLIST, AppScreen.ACCOUNT,
           AppScreen.CART_CHECKOUT, AppScreen.ORDER_TRACKING, AppScreen.MY_ORDERS,
           AppScreen.NOTIFICATIONS, AppScreen.RETURNS_REFUNDS, AppScreen.PUBLIC_SHOPS,
           AppScreen.VENDOR_CENTER, AppScreen.DRIVER_CENTER
@@ -513,6 +517,22 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onExploreShopsClick = {
               selectedPublicShopId = null
               navigateTo(AppScreen.PUBLIC_SHOPS)
+            },
+            onShopClick = { shop ->
+              selectedPublicShopId = shop.id
+              navigateTo(AppScreen.PUBLIC_SHOPS)
+            },
+            onSeeAllDealsClick = { activeCampaign ->
+              selectedCollectionTarget = HomeCollectionTarget.Deal(activeCampaign)
+              navigateTo(AppScreen.COLLECTION_PRODUCTS)
+            },
+            onSeeAllPopularClick = { isFeaturedOnly ->
+              selectedCollectionTarget = HomeCollectionTarget.Popular(isFeaturedOnly)
+              navigateTo(AppScreen.COLLECTION_PRODUCTS)
+            },
+            onSeeAllNewArrivalsClick = {
+              selectedCollectionTarget = HomeCollectionTarget.NewArrivals
+              navigateTo(AppScreen.COLLECTION_PRODUCTS)
             },
             onBannerDestinationClick = { rawDestination ->
               when (val dest = PromotionCampaignFilter.resolveDestination(rawDestination)) {
@@ -917,6 +937,48 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) },
             onBack = { navigateBack() }
           )
+        }
+
+        AppScreen.COLLECTION_PRODUCTS -> {
+          val target = selectedCollectionTarget
+          if (target != null) {
+            val cacheKey = when (target) {
+              is HomeCollectionTarget.Deal -> "${target.key}_${target.activeCampaign.campaign.productIds.hashCode()}"
+              is HomeCollectionTarget.Popular,
+              is HomeCollectionTarget.NewArrivals -> target.key
+            }
+            LaunchedEffect(cacheKey) {
+              if (collectionPaginators.size > 4) {
+                val oldestKey = collectionPaginators.keys.firstOrNull { it != cacheKey }
+                if (oldestKey != null) {
+                  collectionPaginators.remove(oldestKey)?.clear()
+                  collectionListStates.remove(oldestKey)
+                }
+              }
+            }
+            val colScrollState = collectionListStates.getOrPut(cacheKey) { LazyListState() }
+            val colPaginator = collectionPaginators.getOrPut(cacheKey) {
+              when (target) {
+                is HomeCollectionTarget.Deal -> MarketplaceRepository.createCampaignPaginator(pullRefreshScope, target.activeCampaign)
+                is HomeCollectionTarget.Popular,
+                is HomeCollectionTarget.NewArrivals -> MarketplaceRepository.createCatalogPaginator(pullRefreshScope, ErrorContext.PRODUCT_LOAD)
+              }
+            }
+            CollectionProductsScreen(
+              target = target,
+              listState = colScrollState,
+              paginatorOverride = colPaginator,
+              onBack = { navigateBack() },
+              onProductClick = { product ->
+                selectedProduct = product
+                MarketplaceRepository.selectProduct(product)
+                navigateTo(AppScreen.PRODUCT_DETAIL)
+              },
+              onCartClick = { navigateTo(AppScreen.CART_CHECKOUT) }
+            )
+          } else {
+            LaunchedEffect(Unit) { navigateBack() }
+          }
         }
       }
       }

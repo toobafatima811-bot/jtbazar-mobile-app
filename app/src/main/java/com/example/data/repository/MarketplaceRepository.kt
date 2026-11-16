@@ -109,6 +109,18 @@ object MarketplaceRepository {
   private val _products = MutableStateFlow<List<Product>>(emptyList())
   val products: StateFlow<List<Product>> = _products.asStateFlow()
 
+  private val _homePopularProducts = MutableStateFlow<List<Product>>(emptyList())
+  val homePopularProducts: StateFlow<List<Product>> = _homePopularProducts.asStateFlow()
+
+  private val _hasMorePopularProducts = MutableStateFlow(false)
+  val hasMorePopularProducts: StateFlow<Boolean> = _hasMorePopularProducts.asStateFlow()
+
+  private val _popularUsesFeaturedFilter = MutableStateFlow(false)
+  val popularUsesFeaturedFilter: StateFlow<Boolean> = _popularUsesFeaturedFilter.asStateFlow()
+
+  private val _hasMoreCatalogProducts = MutableStateFlow(false)
+  val hasMoreCatalogProducts: StateFlow<Boolean> = _hasMoreCatalogProducts.asStateFlow()
+
   private val _wishlistedIds = MutableStateFlow<Set<String>>(emptySet())
   val wishlistedIds: StateFlow<Set<String>> = _wishlistedIds.asStateFlow()
   private val _wishlistedProducts = MutableStateFlow<List<Product>>(emptyList())
@@ -136,6 +148,66 @@ object MarketplaceRepository {
       errorContext = errorContext,
       fetcher = ::fetchCatalogPage
     )
+  }
+
+  fun applyCampaignPricing(product: Product, campaign: SupabaseProductCampaignDto): Product {
+    val supportsPercentPrice = campaign.campaignType in setOf("flash_sale", "seasonal", "custom")
+    if (!supportsPercentPrice || campaign.discountPercent <= 0.0) {
+      return product
+    }
+    val campaignPercent = campaign.discountPercent.toInt().coerceIn(0, 100)
+    val bestDiscount = maxOf(product.discountPercent, campaignPercent)
+    val discountedPrice = (product.originalPrice * (100 - bestDiscount) / 100.0).toInt()
+    return product.copy(
+      discountPercent = bestDiscount,
+      price = discountedPrice,
+      badge = "${bestDiscount}% OFF"
+    )
+  }
+
+  fun createCampaignPaginator(
+    paginatorScope: kotlinx.coroutines.CoroutineScope,
+    activeCampaign: ActiveProductCampaign
+  ): CatalogPaginator {
+    val campaign = activeCampaign.campaign
+    val allIds = campaign.productIds.distinct()
+    val prehydrated = activeCampaign.products.associateBy { it.id }
+    return CatalogPaginator(
+      scope = paginatorScope,
+      pageSize = CatalogPaginator.DEFAULT_PAGE_SIZE,
+      errorContext = ErrorContext.PRODUCT_LOAD
+    ) { _, page, pageSize ->
+      val start = page * pageSize
+      if (start >= allIds.size) {
+        return@CatalogPaginator Result.success(PaginatedProductsPage(items = emptyList(), page = page, hasMore = false))
+      }
+      val end = minOf(start + pageSize, allIds.size)
+      val sliceIds = allIds.subList(start, end)
+      val wishlistSet = _wishlistedIds.value
+      val missingIds = sliceIds.filter { it !in prehydrated }
+      val fetchedMap = if (missingIds.isNotEmpty()) {
+        val res = SupabaseApiService.fetchProductsByIds(missingIds)
+        if (res.isFailure) {
+          return@CatalogPaginator Result.failure(res.exceptionOrNull() ?: IllegalStateException("Deals load nahi ho sake."))
+        }
+        res.getOrNull().orEmpty()
+          .map { applyCampaignPricing(mapDtoToProduct(it, wishlistSet), campaign) }
+          .associateBy { it.id }
+      } else {
+        emptyMap()
+      }
+      val orderedItems = sliceIds.mapNotNull { id ->
+        val resolved = fetchedMap[id] ?: prehydrated[id]
+        resolved?.copy(isWishlisted = id in wishlistSet)
+      }
+      Result.success(
+        PaginatedProductsPage(
+          items = orderedItems,
+          page = page,
+          hasMore = end < allIds.size
+        )
+      )
+    }
   }
 
   suspend fun fetchCatalogPage(
@@ -469,6 +541,16 @@ object MarketplaceRepository {
     _products.update { list ->
       list.map { prod -> if (prod.id == productId) prod.copy(isWishlisted = newWishlistedState) else prod }
     }
+    _homePopularProducts.update { list ->
+      list.map { prod -> if (prod.id == productId) prod.copy(isWishlisted = newWishlistedState) else prod }
+    }
+    _activeProductCampaigns.update { list ->
+      list.map { camp ->
+        camp.copy(products = camp.products.map { prod ->
+          if (prod.id == productId) prod.copy(isWishlisted = newWishlistedState) else prod
+        })
+      }
+    }
     if (newWishlistedState) {
       val source = productHint ?: _products.value.firstOrNull { it.id == productId } ?: _selectedProduct.value?.takeIf { it.id == productId }
       if (source != null) {
@@ -502,6 +584,18 @@ object MarketplaceRepository {
             _products.update { list ->
               list.map { product ->
                 if (product.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+              }
+            }
+            _homePopularProducts.update { list ->
+              list.map { product ->
+                if (product.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+              }
+            }
+            _activeProductCampaigns.update { list ->
+              list.map { camp ->
+                camp.copy(products = camp.products.map { product ->
+                  if (product.id == productId) product.copy(isWishlisted = !newWishlistedState) else product
+                })
               }
             }
             _selectedProduct.update { product ->
@@ -689,6 +783,13 @@ object MarketplaceRepository {
         pageSize = CatalogPaginator.DEFAULT_PAGE_SIZE
       )
     }
+    val featuredDeferred = async {
+      SupabaseApiService.fetchProductsPage(
+        page = 0,
+        pageSize = 7,
+        isFeatured = true
+      )
+    }
     val campaignDeferred = async { SupabaseApiService.fetchActiveProductCampaigns() }
     val userDataDeferred = if (refreshUserData) {
       SupabaseClient.currentUserId?.let { uid -> async { loadUserDataSuspending(uid) } }
@@ -757,6 +858,7 @@ object MarketplaceRepository {
       val wishlistSet = _wishlistedIds.value + _products.value.filter { it.isWishlisted }.map { it.id }
       _wishlistedIds.value = wishlistSet
       val mappedProducts = dtoList.map { mapDtoToProduct(it, wishlistSet) }
+      _hasMoreCatalogProducts.value = dtoPage?.hasMore == true || mappedProducts.size > 6
       if (_products.value != mappedProducts) {
         _products.value = mappedProducts
         val selectedProductId = _selectedProduct.value?.id
@@ -768,6 +870,18 @@ object MarketplaceRepository {
       }
       if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
       Log.d(TAG, "Loaded ${mappedProducts.size} live products (page 0) from Supabase")
+
+      val featuredPage = featuredDeferred.await().getOrNull()
+      val featuredMapped = featuredPage?.items.orEmpty().map { mapDtoToProduct(it, wishlistSet) }
+      if (featuredMapped.isNotEmpty()) {
+        _homePopularProducts.value = featuredMapped.take(6)
+        _hasMorePopularProducts.value = featuredMapped.size > 6 || featuredPage?.hasMore == true
+        _popularUsesFeaturedFilter.value = true
+      } else {
+        _homePopularProducts.value = mappedProducts.take(6)
+        _hasMorePopularProducts.value = mappedProducts.size > 6 || dtoPage?.hasMore == true
+        _popularUsesFeaturedFilter.value = false
+      }
 
       val campaignResult = campaignDeferred.await()
       if (campaignResult.isSuccess) {
@@ -782,13 +896,13 @@ object MarketplaceRepository {
           }
         }
 
-        val loadedById = mappedProducts.associateBy { it.id }
-        // Hydrate up to 4 highlighted deals per active campaign (max 16) to keep Home fast.
+        val loadedById = (mappedProducts + featuredMapped).associateBy { it.id }
+        // Hydrate up to 7 highlighted deals per active campaign (max 28) so Home renders 6 cards and detects > 6.
         val neededIds = validCampaigns
-          .flatMap { it.productIds.take(4) }
+          .flatMap { it.productIds.take(7) }
           .distinct()
           .filter { it !in loadedById }
-          .take(16)
+          .take(28)
         val extraProductsById = if (neededIds.isNotEmpty()) {
           SupabaseApiService.fetchProductsByIds(neededIds).getOrNull().orEmpty()
             .map { mapDtoToProduct(it, wishlistSet) }
@@ -800,21 +914,7 @@ object MarketplaceRepository {
           val matchedProds = camp.productIds.mapNotNull { combinedById[it] }
           if (matchedProds.isEmpty()) return@mapNotNull null
 
-          val enrichedProds = matchedProds.map { prod ->
-            val supportsPercentPrice = camp.campaignType in setOf("flash_sale", "seasonal", "custom")
-            if (!supportsPercentPrice || camp.discountPercent <= 0.0) {
-              prod
-            } else {
-              val campaignPercent = camp.discountPercent.toInt().coerceIn(0, 100)
-              val bestDiscount = maxOf(prod.discountPercent, campaignPercent)
-              val discountedPrice = (prod.originalPrice * (100 - bestDiscount) / 100.0).toInt()
-              prod.copy(
-                discountPercent = bestDiscount,
-                price = discountedPrice,
-                badge = "${bestDiscount}% OFF"
-              )
-            }
-          }
+          val enrichedProds = matchedProds.map { prod -> applyCampaignPricing(prod, camp) }
           ActiveProductCampaign(campaign = camp, products = enrichedProds)
         }
         _activeProductCampaigns.value = mappedCampaigns
@@ -823,6 +923,7 @@ object MarketplaceRepository {
         _activeProductCampaigns.value = emptyList()
       }
     } else {
+      featuredDeferred.cancel()
       campaignDeferred.cancel()
       _activeProductCampaigns.value = emptyList()
       _errorMessage.value = AppErrorMapper.toCustomerMessage(productResult.exceptionOrNull(), ErrorContext.PRODUCT_LOAD)
@@ -1091,6 +1192,12 @@ object MarketplaceRepository {
         }
         if (wishlistRes.isSuccess) {
           _products.update { list -> list.map { it.copy(isWishlisted = wishlistIds.contains(it.id)) } }
+          _homePopularProducts.update { list -> list.map { it.copy(isWishlisted = wishlistIds.contains(it.id)) } }
+          _activeProductCampaigns.update { list ->
+            list.map { camp ->
+              camp.copy(products = camp.products.map { it.copy(isWishlisted = wishlistIds.contains(it.id)) })
+            }
+          }
           _wishlistedProducts.value = wishlistIds.mapNotNull { id -> hydratedById[id]?.copy(isWishlisted = true) }
           homePaginator.syncWishlistStates(wishlistIds)
         }
