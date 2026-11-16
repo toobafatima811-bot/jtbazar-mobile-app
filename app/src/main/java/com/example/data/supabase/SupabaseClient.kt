@@ -156,7 +156,14 @@ object SupabaseClient {
       level = HttpLoggingInterceptor.Level.BASIC
     }
 
+    val dispatcher = Dispatcher().apply {
+      maxRequests = 48
+      maxRequestsPerHost = 16
+    }
+
     OkHttpClient.Builder()
+      .dispatcher(dispatcher)
+      .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
       .connectTimeout(20, TimeUnit.SECONDS)
       .readTimeout(30, TimeUnit.SECONDS)
       .writeTimeout(30, TimeUnit.SECONDS)
@@ -193,8 +200,10 @@ object SupabaseClient {
 
         val request = requestBuilder.build()
         // Keep the app-wide progress state active during write/submit operations.
-        // Background GET polling must not block the entire UI with a full-screen loader.
-        val shouldShowOperationLoader = request.method !in setOf("GET", "HEAD")
+        // Background GET polling and read-only public RPCs must not block the UI.
+        val path = request.url.encodedPath
+        val isPublicReadRpc = path.contains("/rpc/get_public_") || path.contains("/rpc/list_public_")
+        val shouldShowOperationLoader = request.method !in setOf("GET", "HEAD") && !isPublicReadRpc
         if (shouldShowOperationLoader) GlobalLoadingState.show()
         try {
           chain.proceed(request)

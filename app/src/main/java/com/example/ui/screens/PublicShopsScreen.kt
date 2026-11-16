@@ -5,9 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,6 +21,7 @@ import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.ui.components.rememberAdaptiveColumnCount
+import com.example.ui.components.rememberSizedImageRequest
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseClient
@@ -41,7 +40,19 @@ fun PublicShopsScreen(
   val products by MarketplaceRepository.products.collectAsState()
   var selectedShop by remember { mutableStateOf<ShopRecord?>(null) }
 
-  LaunchedEffect(Unit) { MarketplaceRepository.refreshShops() }
+  val productsBySeller = remember(products) {
+    products.groupBy { it.sellerId.orEmpty() }
+  }
+  val productsByVendorName = remember(products) {
+    products.filter { it.sellerId.isNullOrBlank() }.groupBy { it.vendor.trim().lowercase() }
+  }
+  fun productsForShop(shop: ShopRecord): List<Product> {
+    return productsBySeller[shop.id] ?: productsByVendorName[shop.name.trim().lowercase()].orEmpty()
+  }
+
+  LaunchedEffect(Unit) {
+    if (shops.isEmpty()) MarketplaceRepository.refreshShops()
+  }
   LaunchedEffect(shops, initialShopId) {
     if (!initialShopId.isNullOrBlank()) {
       shops.firstOrNull { it.id == initialShopId }?.let { selectedShop = it }
@@ -57,10 +68,7 @@ fun PublicShopsScreen(
     BackHandler { exitShopDetail() }
     PublicShopDetailScreen(
       shop = selectedShop!!,
-      products = products.filter { product ->
-        product.sellerId == selectedShop!!.id ||
-          (product.sellerId.isNullOrBlank() && product.vendor.equals(selectedShop!!.name, ignoreCase = true))
-      },
+      products = productsForShop(selectedShop!!),
       onBack = exitShopDetail,
       onProductClick = onProductClick
     )
@@ -85,12 +93,9 @@ fun PublicShopsScreen(
         }
       } else {
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          items(shops, key = { it.id }) { shop ->
-            val shopProducts = remember(products, shop.id, shop.name) {
-              products.filter { product ->
-                product.sellerId == shop.id ||
-                  (product.sellerId.isNullOrBlank() && product.vendor.equals(shop.name, ignoreCase = true))
-              }
+          items(shops, key = { it.id }, contentType = { "shop_card" }) { shop ->
+            val shopProductCount = remember(productsBySeller, productsByVendorName, shop.id, shop.name, shop.productCount) {
+              productsForShop(shop).size.coerceAtLeast(shop.productCount)
             }
             Card(
               modifier = Modifier.fillMaxWidth().clickable {
@@ -104,14 +109,18 @@ fun PublicShopsScreen(
                 verticalAlignment = Alignment.CenterVertically
               ) {
                 if (!shop.logoUrl.isNullOrBlank()) {
-                  AsyncImage(model = shop.logoUrl, contentDescription = shop.name, modifier = Modifier.size(58.dp))
+                  AsyncImage(
+                    model = rememberSizedImageRequest(data = shop.logoUrl, widthPx = 180, heightPx = 180),
+                    contentDescription = shop.name,
+                    modifier = Modifier.size(58.dp)
+                  )
                 } else {
                   Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(48.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                   Text(shop.name, fontWeight = FontWeight.Bold)
-                  Text((if (shop.isVerified) "Verified seller" else "Seller") + " • " + shopProducts.size.coerceAtLeast(shop.productCount) + " products", style = MaterialTheme.typography.bodySmall)
+                  Text((if (shop.isVerified) "Verified seller" else "Seller") + " • " + shopProductCount + " products", style = MaterialTheme.typography.bodySmall)
                   if (shop.city.isNotBlank()) Text(shop.city, style = MaterialTheme.typography.bodySmall)
                 }
                 Text("View", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -157,110 +166,122 @@ private fun PublicShopDetailScreen(
       Text("Shop details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
     HorizontalDivider()
-    Column(
-      Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+    val chunkedProducts = remember(products, productColumns) {
+      products.chunked(productColumns)
+    }
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-      Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!shop.logoUrl.isNullOrBlank()) {
-              AsyncImage(model = shop.logoUrl, contentDescription = shop.name, modifier = Modifier.size(72.dp))
-            } else {
-              Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(64.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-              Text(shop.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-              Text((if (shop.isVerified) "Verified seller" else "Seller") + " • " + products.size.coerceAtLeast(shop.productCount) + " products", style = MaterialTheme.typography.bodySmall)
-              if (shop.city.isNotBlank()) Text(shop.city, style = MaterialTheme.typography.bodySmall)
-            }
-          }
-          if (shop.description.isNotBlank()) Text(shop.description, style = MaterialTheme.typography.bodyMedium)
-        }
-      }
-
-      Text("Customer reviews (${sellerReviews.length()})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-      for (reviewIndex in 0 until sellerReviews.length()) {
-        val review = sellerReviews.optJSONObject(reviewIndex) ?: continue
-        Card(modifier = Modifier.fillMaxWidth()) {
-          Text("★ ${review.optInt("rating")}/5 • ${review.optString("comment")}", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
-        }
-      }
-      if (user != null) {
-        TextButton(onClick = { reviewOpen = !reviewOpen }) {
-          Text(if (reviewOpen) "Close review" else "Write a seller review")
-        }
-        if (reviewOpen) {
-          OutlinedTextField(
-            value = reviewRating.toString(),
-            onValueChange = { reviewRating = it.toIntOrNull()?.coerceIn(1, 5) ?: reviewRating },
-            label = { Text("Rating (1–5)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-          )
-          OutlinedTextField(
-            value = reviewComment,
-            onValueChange = { reviewComment = it },
-            label = { Text("Your review") },
-            minLines = 2,
-            modifier = Modifier.fillMaxWidth()
-          )
-          Button(
-            onClick = {
-              scope.launch {
-                try {
-                  reviewSubmitting = true
-                  reviewMessage = null
-                  SellerReviewService.submitForDeliveredOrder(shop.id, reviewRating, reviewComment)
-                  sellerReviews = SellerReviewService.listApproved(shop.id)
-                  reviewComment = ""
-                  reviewOpen = false
-                  reviewMessage = "Thank you! Your review has been submitted."
-                } catch (error: Exception) {
-                  reviewMessage = AppErrorMapper.toCustomerMessage(error, ErrorContext.REVIEWS)
-                } finally {
-                  reviewSubmitting = false
-                }
+      item(key = "shop_detail_header") {
+        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+          Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              if (!shop.logoUrl.isNullOrBlank()) {
+                AsyncImage(
+                  model = rememberSizedImageRequest(data = shop.logoUrl, widthPx = 180, heightPx = 180),
+                  contentDescription = shop.name,
+                  modifier = Modifier.size(72.dp)
+                )
+              } else {
+                Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(64.dp))
               }
-            },
-            enabled = reviewComment.trim().length >= 3 && !reviewSubmitting
-          ) {
-            if (reviewSubmitting) {
-              CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-              Spacer(Modifier.width(8.dp))
+              Spacer(Modifier.width(12.dp))
+              Column(Modifier.weight(1f)) {
+                Text(shop.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text((if (shop.isVerified) "Verified seller" else "Seller") + " • " + products.size.coerceAtLeast(shop.productCount) + " products", style = MaterialTheme.typography.bodySmall)
+                if (shop.city.isNotBlank()) Text(shop.city, style = MaterialTheme.typography.bodySmall)
+              }
             }
-            Text(if (reviewSubmitting) "Submitting..." else "Submit review")
+            if (shop.description.isNotBlank()) Text(shop.description, style = MaterialTheme.typography.bodyMedium)
           }
-          reviewMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
         }
-      } else {
-        Text("Sign in and place a delivered order from this shop to leave a review.", style = MaterialTheme.typography.bodySmall)
       }
 
-      Text("Shop products (${products.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-      if (products.isEmpty()) {
-        Text("No published products from this shop are currently available.")
-      } else {
-        products.chunked(productColumns).forEach { productRow ->
-          Row(
-            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
-          ) {
-            productRow.forEach { product ->
-              ProductCard(
-                product = product,
-                onProductClick = { onProductClick(product) },
-                onAddToCart = { MarketplaceRepository.addToCart(product) },
-                onToggleWishlist = { MarketplaceRepository.toggleWishlist(product.id, product) },
-                modifier = Modifier.weight(1f).fillMaxHeight()
-              )
-            }
-            repeat((productColumns - productRow.size).coerceAtLeast(0)) {
-              Spacer(Modifier.weight(1f))
+      item(key = "shop_reviews_header") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text("Customer reviews (${sellerReviews.length()})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+          for (reviewIndex in 0 until sellerReviews.length()) {
+            val review = sellerReviews.optJSONObject(reviewIndex) ?: continue
+            Card(modifier = Modifier.fillMaxWidth()) {
+              Text("★ ${review.optInt("rating")}/5 • ${review.optString("comment")}", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
             }
           }
+          if (user != null) {
+            TextButton(onClick = { reviewOpen = !reviewOpen }) {
+              Text(if (reviewOpen) "Close review" else "Write a seller review")
+            }
+            if (reviewOpen) {
+              OutlinedTextField(
+                value = reviewRating.toString(),
+                onValueChange = { reviewRating = it.toIntOrNull()?.coerceIn(1, 5) ?: reviewRating },
+                label = { Text("Rating (1–5)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+              )
+              OutlinedTextField(
+                value = reviewComment,
+                onValueChange = { reviewComment = it },
+                label = { Text("Your review") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth()
+              )
+              Button(
+                onClick = {
+                  scope.launch {
+                    try {
+                      reviewSubmitting = true
+                      reviewMessage = null
+                      SellerReviewService.submitForDeliveredOrder(shop.id, reviewRating, reviewComment)
+                      sellerReviews = SellerReviewService.listApproved(shop.id)
+                      reviewComment = ""
+                      reviewOpen = false
+                      reviewMessage = "Thank you! Your review has been submitted."
+                    } catch (error: Exception) {
+                      reviewMessage = AppErrorMapper.toCustomerMessage(error, ErrorContext.REVIEWS)
+                    } finally {
+                      reviewSubmitting = false
+                    }
+                  }
+                },
+                enabled = reviewComment.trim().length >= 3 && !reviewSubmitting
+              ) {
+                if (reviewSubmitting) {
+                  CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                  Spacer(Modifier.width(8.dp))
+                }
+                Text(if (reviewSubmitting) "Submitting..." else "Submit review")
+              }
+              reviewMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
+            }
+          } else {
+            Text("Sign in and place a delivered order from this shop to leave a review.", style = MaterialTheme.typography.bodySmall)
+          }
+        }
+      }
+
+      item(key = "shop_products_header") {
+        Text("Shop products (${products.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+      }
+
+      if (products.isEmpty()) {
+        item(key = "shop_products_empty") {
+          Text("No published products from this shop are currently available.")
+        }
+      } else {
+        items(
+          items = chunkedProducts,
+          key = { row -> "shop_prod_${row.firstOrNull()?.id ?: row.hashCode()}" },
+          contentType = { "product_row" }
+        ) { productRow ->
+          ProductGridRow(
+            rowItems = productRow,
+            columns = productColumns,
+            onProductClick = onProductClick,
+            onAddToCart = { MarketplaceRepository.addToCart(it) },
+            onToggleWishlist = { MarketplaceRepository.toggleWishlist(it.id, it) }
+          )
         }
       }
     }

@@ -152,6 +152,10 @@ fun CategoryProductsScreen(
     }
   }
 
+  val chunkedProductRows = remember(feedState.items, productGridColumns) {
+    feedState.items.chunked(productGridColumns)
+  }
+
   Scaffold(
     modifier = modifier.fillMaxSize(),
     containerColor = Color.White,
@@ -388,10 +392,10 @@ fun CategoryProductsScreen(
           }
         }
         else -> {
-          val chunked = feedState.items.chunked(productGridColumns)
           items(
-            items = chunked,
-            key = { row -> "cat_${row.firstOrNull()?.id ?: row.hashCode()}" }
+            items = chunkedProductRows,
+            key = { row -> "cat_${row.firstOrNull()?.id ?: row.hashCode()}" },
+            contentType = { "product_row" }
           ) { rowItems ->
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
               ProductGridRow(

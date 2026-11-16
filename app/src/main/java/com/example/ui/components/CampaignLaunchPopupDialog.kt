@@ -65,7 +65,7 @@ fun CampaignLaunchPopupDialog(
           )
       ) {
         AsyncImage(
-          model = imageUrl,
+          model = rememberSizedImageRequest(data = imageUrl, widthPx = 1080, heightPx = 1350),
           contentDescription = campaign.title.ifBlank { "Special Campaign Offer" },
           modifier = Modifier
             .fillMaxWidth()

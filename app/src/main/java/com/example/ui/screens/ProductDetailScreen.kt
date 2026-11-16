@@ -63,12 +63,16 @@ fun ProductDetailScreen(
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
   val publicShops by MarketplaceRepository.shops.collectAsState()
   val activeCampaigns by MarketplaceRepository.activeProductCampaigns.collectAsState()
-  var campaignNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
-  val productCampaign = activeCampaigns.firstOrNull { entry -> entry.products.any { it.id == product.id } }?.campaign
-  val campaignEndMillis = remember(productCampaign?.endsAt) { productCampaign?.endsAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } }
-  LaunchedEffect(campaignEndMillis) { while (campaignEndMillis != null && campaignNow < campaignEndMillis) { kotlinx.coroutines.delay(1000); campaignNow = System.currentTimeMillis() } }
+  val productCampaign = remember(activeCampaigns, product.id) {
+    activeCampaigns.firstOrNull { entry -> entry.products.any { it.id == product.id } }?.campaign
+  }
+  val campaignEndMillis = remember(productCampaign?.endsAt) {
+    productCampaign?.endsAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+  }
   BackHandler { onBackClick() }
-  val sellerShop = publicShops.firstOrNull { it.id == liveProduct.sellerId }
+  val sellerShop = remember(publicShops, liveProduct.sellerId) {
+    publicShops.firstOrNull { it.id == liveProduct.sellerId }
+  }
 
   var showAddressDialog by remember { mutableStateOf(false) }
   var quantity by remember { mutableIntStateOf(1) }
@@ -86,11 +90,15 @@ fun ProductDetailScreen(
   var reviewTitle by remember { mutableStateOf("") }
   var reviewComment by remember { mutableStateOf("") }
   val allReviews by MarketplaceRepository.reviews.collectAsState()
-  val productReviews = allReviews.filter { it.productId == product.id }
+  val productReviews = remember(allReviews, product.id) {
+    allReviews.filter { it.productId == product.id }
+  }
 
   LaunchedEffect(product.id) {
     MarketplaceRepository.selectProduct(product)
-    MarketplaceRepository.refreshShops()
+    if (publicShops.isEmpty()) {
+      MarketplaceRepository.refreshShops()
+    }
   }
 
   if (showWriteReviewDialog) {
@@ -388,27 +396,12 @@ fun ProductDetailScreen(
       }
 
 
-      if (campaignEndMillis != null && campaignEndMillis > campaignNow) item {
-        val remaining = ((campaignEndMillis - campaignNow) / 1000L).coerceAtLeast(0L)
-        val days = remaining / 86400
-        val hours = (remaining % 86400) / 3600
-        val minutes = (remaining % 3600) / 60
-        val seconds = remaining % 60
-        Surface(color = Color(0xFFFFF1F0), shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD5D1)), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-          Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(productCampaign?.displayTitle?.ifBlank { "Flash Deal ends in" } ?: "Flash Deal ends in", fontWeight = FontWeight.Bold, color = Color(0xFFB42318), fontSize = 14.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-              val timerParts = if (days > 0) listOf(days, hours, minutes, seconds) else listOf(hours, minutes, seconds)
-              timerParts.forEachIndexed { index, value ->
-                Surface(color = Color(0xFFB42318), shape = RoundedCornerShape(8.dp)) {
-                  Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(value.toString().padStart(2, '0'), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-                    Text(if (days > 0) listOf("DAYS", "HRS", "MIN", "SEC")[index] else listOf("HRS", "MIN", "SEC")[index], color = Color.White, fontSize = 9.sp)
-                  }
-                }
-              }
-            }
-          }
+      if (campaignEndMillis != null) {
+        item(key = "deal_timer") {
+          ProductDetailDealTimer(
+            title = productCampaign?.displayTitle?.ifBlank { "Flash Deal ends in" } ?: "Flash Deal ends in",
+            campaignEndMillis = campaignEndMillis
+          )
         }
       }
 
@@ -544,7 +537,7 @@ fun ProductDetailScreen(
               Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (!sellerShop.logoUrl.isNullOrBlank()) {
                   AsyncImage(
-                    model = sellerShop.logoUrl,
+                    model = rememberSizedImageRequest(data = sellerShop.logoUrl, widthPx = 160, heightPx = 160),
                     contentDescription = sellerShop.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp))
@@ -947,6 +940,52 @@ private fun ReviewSnippet(
       }
       Spacer(modifier = Modifier.height(3.dp))
       Text(text = comment, fontSize = 10.sp, color = JTTextSecondary)
+    }
+  }
+}
+
+@Composable
+private fun ProductDetailDealTimer(
+  title: String,
+  campaignEndMillis: Long
+) {
+  var remainingSeconds by remember(campaignEndMillis) {
+    mutableLongStateOf(((campaignEndMillis - System.currentTimeMillis()) / 1000L).coerceAtLeast(0L))
+  }
+  LaunchedEffect(campaignEndMillis) {
+    while (true) {
+      val rem = ((campaignEndMillis - System.currentTimeMillis()) / 1000L).coerceAtLeast(0L)
+      remainingSeconds = rem
+      if (rem == 0L) break
+      kotlinx.coroutines.delay(1000L)
+    }
+  }
+  if (remainingSeconds <= 0L) return
+
+  val days = remainingSeconds / 86400L
+  val hours = (remainingSeconds % 86400L) / 3600L
+  val minutes = (remainingSeconds % 3600L) / 60L
+  val seconds = remainingSeconds % 60L
+  Surface(
+    color = Color(0xFFFFF1F0),
+    shape = RoundedCornerShape(14.dp),
+    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD5D1)),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+  ) {
+    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Text(title, fontWeight = FontWeight.Bold, color = Color(0xFFB42318), fontSize = 14.sp)
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        val timerParts = if (days > 0) listOf(days, hours, minutes, seconds) else listOf(hours, minutes, seconds)
+        val labels = if (days > 0) listOf("DAYS", "HRS", "MIN", "SEC") else listOf("HRS", "MIN", "SEC")
+        timerParts.forEachIndexed { index, value ->
+          Surface(color = Color(0xFFB42318), shape = RoundedCornerShape(8.dp)) {
+            Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(value.toString().padStart(2, '0'), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+              Text(labels[index], color = Color.White, fontSize = 9.sp)
+            }
+          }
+        }
+      }
     }
   }
 }

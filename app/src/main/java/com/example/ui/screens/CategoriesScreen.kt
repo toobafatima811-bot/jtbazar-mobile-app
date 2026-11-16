@@ -52,6 +52,18 @@ fun CategoriesScreen(
   var selectedCategoryId by remember { mutableStateOf<String?>(null) }
   var searchQuery by remember { mutableStateOf("") }
 
+  val filteredCategories = remember(categories, selectedCategoryId, searchQuery) {
+    categories.filter { category ->
+      (selectedCategoryId == null || category.id == selectedCategoryId) &&
+        (searchQuery.isBlank() ||
+          category.title.contains(searchQuery, ignoreCase = true) ||
+          category.sampleItems.contains(searchQuery, ignoreCase = true))
+    }
+  }
+  val chunkedCats = remember(filteredCategories, categoryColumns) {
+    filteredCategories.chunked(categoryColumns)
+  }
+
   if (showAddressDialog) {
     AddressSelectionSheet(
       addresses = addresses,
@@ -200,13 +212,6 @@ fun CategoriesScreen(
       }
 
       // 5. 2-Column Grid of Categories
-      val filteredCategories = categories.filter { category ->
-        (selectedCategoryId == null || category.id == selectedCategoryId) &&
-          (searchQuery.isBlank() ||
-            category.title.contains(searchQuery, ignoreCase = true) ||
-            category.sampleItems.contains(searchQuery, ignoreCase = true))
-      }
-
       if (filteredCategories.isEmpty()) {
         item {
           Surface(
@@ -238,8 +243,11 @@ fun CategoriesScreen(
         }
       }
 
-      val chunkedCats = filteredCategories.chunked(categoryColumns)
-      items(chunkedCats) { rowItems ->
+      items(
+        items = chunkedCats,
+        key = { row -> "cat_row_${row.firstOrNull()?.id ?: row.hashCode()}" },
+        contentType = { "category_row" }
+      ) { rowItems ->
         Spacer(modifier = Modifier.height(12.dp))
         Row(
           modifier = Modifier

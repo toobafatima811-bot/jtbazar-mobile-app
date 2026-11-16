@@ -296,7 +296,9 @@ fun BudgetShoppingScreen(
           }
         }
         else -> {
-          val chunkedProducts = feedState.items.chunked(productGridColumns)
+          val chunkedProducts = remember(feedState.items, productGridColumns) {
+            feedState.items.chunked(productGridColumns)
+          }
           LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -305,7 +307,8 @@ fun BudgetShoppingScreen(
           ) {
             items(
               items = chunkedProducts,
-              key = { row -> row.joinToString("_") { it.id } }
+              key = { row -> row.joinToString("_") { it.id } },
+              contentType = { "product_row" }
             ) { rowProducts ->
               ProductGridRow(
                 rowItems = rowProducts,

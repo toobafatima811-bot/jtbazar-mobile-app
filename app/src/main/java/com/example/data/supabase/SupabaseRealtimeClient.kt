@@ -30,7 +30,7 @@ class SupabaseRealtimeClient(
   companion object {
     private const val TAG = "SupabaseRealtime"
     private const val HEARTBEAT_INTERVAL_MS = 25_000L
-    private const val DEBOUNCE_MS = 350L
+    private const val DEBOUNCE_MS = 1_500L
   }
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

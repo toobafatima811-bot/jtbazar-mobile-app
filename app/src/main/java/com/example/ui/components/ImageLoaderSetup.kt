@@ -27,6 +27,8 @@ object JTBazarImageLoader {
     instance?.let { return it }
     return synchronized(this) {
       instance ?: ImageLoader.Builder(context.applicationContext)
+        .dispatcher(kotlinx.coroutines.Dispatchers.IO.limitedParallelism(6))
+        .bitmapFactoryMaxParallelism(4)
         .memoryCache {
           MemoryCache.Builder(context.applicationContext)
             .maxSizePercent(0.25)

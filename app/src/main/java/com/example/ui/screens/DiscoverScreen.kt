@@ -166,12 +166,11 @@ fun DiscoverScreen(
   }
 
   LaunchedEffect(Unit) {
-    if (hasLocationPermission) loadCurrentLocation()
-    else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-  }
-
-  LaunchedEffect(hasLocationPermission) {
-    if (hasLocationPermission && userLatitude == null) loadCurrentLocation()
+    if (hasLocationPermission) {
+      if (userLatitude == null) loadCurrentLocation()
+    } else {
+      locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
   }
 
   Scaffold(
@@ -549,7 +548,12 @@ private fun NearbyShopsMapView(
               contentAlignment = Alignment.Center
             ) {
               if (!activeShop.logoUrl.isNullOrBlank()) {
-                AsyncImage(model = activeShop.logoUrl, contentDescription = activeShop.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                AsyncImage(
+                  model = rememberSizedImageRequest(data = activeShop.logoUrl, widthPx = 160, heightPx = 160),
+                  contentDescription = activeShop.name,
+                  modifier = Modifier.fillMaxSize(),
+                  contentScale = ContentScale.Crop
+                )
               } else {
                 Icon(Icons.Filled.Store, contentDescription = null, tint = JTPurplePrimary)
               }
@@ -632,23 +636,30 @@ private fun ProductsFeedReelsView(
 ) {
   val feedSessionSeed = remember { kotlin.random.Random.nextLong() }
   val feedEntries = remember(products, videos, feedSessionSeed) {
-    val videosByProduct = videos.groupBy { it.productId }
-    val videoProductIds = videosByProduct.keys
+    val productsById = products.associateBy { it.id }
+    val videoProductIds = videos.mapTo(HashSet()) { it.productId }
     val entries = buildList {
       products.filterNot { it.id in videoProductIds }.forEach { add(ProductFeedEntry(it, null, it.createdAt)) }
       videos.forEach { video ->
-        products.firstOrNull { it.id == video.productId }?.let { product ->
+        productsById[video.productId]?.let { product ->
           add(ProductFeedEntry(product, video.videoUrl, video.createdAt))
         }
       }
     }
     val sessionSeed = feedSessionSeed
-    entries.sortedWith(
-      compareByDescending<ProductFeedEntry> { runCatching { java.time.Instant.parse(it.createdAt).toEpochMilli() }.getOrDefault(0L) }
-        .thenByDescending { it.product.reviewCount }
-        .thenByDescending { it.product.rating }
-        .thenBy { (it.product.id.hashCode().toLong() xor sessionSeed).absoluteValue }
-    )
+    entries
+      .map { entry ->
+        val ts = runCatching { java.time.Instant.parse(entry.createdAt).toEpochMilli() }.getOrDefault(0L)
+        entry to ts
+      }
+      .sortedWith(
+        compareByDescending<Pair<ProductFeedEntry, Long>> { it.second }
+          .thenByDescending { it.first.product.reviewCount }
+          .thenByDescending { it.first.product.rating }
+          .thenBy { (it.first.product.id.hashCode().toLong() xor sessionSeed).absoluteValue }
+      )
+      .take(40)
+      .map { it.first }
   }
   if (feedEntries.isEmpty()) {
     Box(

@@ -142,6 +142,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val homeListState = rememberLazyListState()
   val categoryListStates = remember { mutableStateMapOf<String, LazyListState>() }
   val categoryPaginators = remember { mutableStateMapOf<String, CatalogPaginator>() }
+  val recentCategoryIds = remember { mutableStateListOf<String>() }
   val budgetListState = rememberLazyListState()
   val snackbarHostState = remember { SnackbarHostState() }
   val repoError by MarketplaceRepository.errorMessage.collectAsState()
@@ -602,6 +603,15 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         AppScreen.CATEGORY_PRODUCTS -> {
           val category = selectedCategory
           if (category != null) {
+            LaunchedEffect(category.id) {
+              recentCategoryIds.remove(category.id)
+              recentCategoryIds.add(category.id)
+              while (recentCategoryIds.size > 4) {
+                val evictedId = recentCategoryIds.removeAt(0)
+                categoryPaginators.remove(evictedId)?.clear()
+                categoryListStates.remove(evictedId)
+              }
+            }
             val catScrollState = categoryListStates.getOrPut(category.id) { LazyListState() }
             val catPaginator = categoryPaginators.getOrPut(category.id) {
               MarketplaceRepository.createCatalogPaginator(pullRefreshScope, ErrorContext.PRODUCT_LOAD)
