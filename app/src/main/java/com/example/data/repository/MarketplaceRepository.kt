@@ -622,43 +622,122 @@ object MarketplaceRepository {
   private val _selectedAddress = MutableStateFlow<DeliveryAddress?>(null)
   val selectedAddress: StateFlow<DeliveryAddress?> = _selectedAddress.asStateFlow()
 
-  fun selectAddress(address: DeliveryAddress) {
-    _selectedAddress.value = address
-    _currentLocation.value = "${address.area}, ${address.city}"
+  private fun DeliveryAddress.locationLabel(): String {
+    return listOf(area, city).filter { it.isNotBlank() }.joinToString(", ").ifBlank { "Selected address" }
   }
 
-  fun addOrUpdateAddress(newAddress: DeliveryAddress) {
-    _addresses.update { list ->
-      val index = list.indexOfFirst { it.id == newAddress.id }
-      if (index >= 0) {
-        list.toMutableList().also { it[index] = newAddress }
-      } else {
-        list + newAddress
-      }
+  private fun SupabaseAddressDto.toDeliveryAddress(preferredTag: String? = null): DeliveryAddress {
+    return DeliveryAddress(
+      id = id,
+      name = name,
+      phone = phone,
+      addressLine = addressLine,
+      area = area,
+      city = city,
+      province = province,
+      tag = preferredTag?.takeIf { it.isNotBlank() } ?: tag.ifBlank { "HOME" },
+      isDefault = isDefault,
+      latitude = latitude,
+      longitude = longitude
+    )
+  }
+
+  fun selectAddress(address: DeliveryAddress) {
+    _selectedAddress.value = address
+    _currentLocation.value = address.locationLabel()
+  }
+
+  fun addOrUpdateAddress(
+    newAddress: DeliveryAddress,
+    onComplete: ((Result<DeliveryAddress>) -> Unit)? = null
+  ) {
+    val cleanAddress = newAddress.copy(
+      name = newAddress.name.trim(),
+      phone = newAddress.phone.trim(),
+      addressLine = newAddress.addressLine.trim(),
+      area = newAddress.area.trim(),
+      city = newAddress.city.trim(),
+      province = newAddress.province.trim(),
+      tag = newAddress.tag.trim().ifBlank { "HOME" }
+    )
+
+    val validationError = when {
+      cleanAddress.name.isEmpty() -> "Please enter recipient full name."
+      !SupabaseApiService.isValidPakistaniMobile(cleanAddress.phone) ->
+        "Enter a valid Pakistani mobile number like 03001234567 or +923001234567."
+      cleanAddress.addressLine.length < 3 -> "Please enter a complete street address (at least 3 characters)."
+      cleanAddress.city.isEmpty() -> "Please enter your city."
+      else -> null
     }
-    _selectedAddress.value = newAddress
-    _currentLocation.value = "${newAddress.area}, ${newAddress.city}"
+    if (validationError != null) {
+      _errorMessage.value = validationError
+      onComplete?.invoke(Result.failure(IllegalArgumentException(validationError)))
+      return
+    }
 
     val userId = SupabaseClient.currentUserId
     if (userId != null) {
       scope.launch {
-        SupabaseApiService.saveAddress(
+        val result = SupabaseApiService.saveAddress(
           SupabaseAddressDto(
-            id = if (newAddress.id.startsWith("addr_")) "" else newAddress.id,
+            id = if (cleanAddress.id.startsWith("addr_")) "" else cleanAddress.id,
             userId = userId,
-            name = newAddress.name,
-            phone = newAddress.phone,
-            addressLine = newAddress.addressLine,
-            area = newAddress.area,
-            city = newAddress.city,
-            province = newAddress.province,
-            tag = newAddress.tag,
-            isDefault = newAddress.isDefault,
-            latitude = newAddress.latitude,
-            longitude = newAddress.longitude
+            name = cleanAddress.name,
+            phone = cleanAddress.phone,
+            addressLine = cleanAddress.addressLine,
+            area = cleanAddress.area,
+            city = cleanAddress.city,
+            province = cleanAddress.province,
+            tag = cleanAddress.tag,
+            isDefault = cleanAddress.isDefault,
+            latitude = cleanAddress.latitude,
+            longitude = cleanAddress.longitude
           )
-        ).onSuccess { loadUserData(userId) }.onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.ADDRESS) }
+        )
+        result.onSuccess { savedDto ->
+          val existingTags = _addresses.value.associate { it.id to it.tag }
+          val savedAddress = savedDto.toDeliveryAddress(preferredTag = cleanAddress.tag)
+
+          val refreshed = SupabaseApiService.fetchAddresses(userId).getOrNull()?.map { dto ->
+            val tagForRow = if (dto.id == savedAddress.id) cleanAddress.tag else existingTags[dto.id]
+            dto.toDeliveryAddress(preferredTag = tagForRow)
+          }
+
+          if (!refreshed.isNullOrEmpty()) {
+            _addresses.value = refreshed
+            val resolvedSelected = refreshed.firstOrNull { it.id == savedAddress.id } ?: savedAddress
+            _selectedAddress.value = resolvedSelected
+            _currentLocation.value = resolvedSelected.locationLabel()
+          } else {
+            _addresses.update { list ->
+              val base = if (savedAddress.isDefault) list.map { it.copy(isDefault = false) } else list
+              val withoutOld = base.filterNot { it.id == savedAddress.id || it.id == cleanAddress.id }
+              if (savedAddress.isDefault) listOf(savedAddress) + withoutOld else withoutOld + savedAddress
+            }
+            _selectedAddress.value = savedAddress
+            _currentLocation.value = savedAddress.locationLabel()
+          }
+
+          onComplete?.let { cb -> withContext(Dispatchers.Main) { cb(Result.success(savedAddress)) } }
+        }.onFailure { err ->
+          val friendly = AppErrorMapper.toCustomerMessage(err, ErrorContext.ADDRESS)
+          _errorMessage.value = friendly
+          onComplete?.let { cb -> withContext(Dispatchers.Main) { cb(Result.failure(IllegalStateException(friendly))) } }
+        }
       }
+    } else {
+      _addresses.update { list ->
+        val base = if (cleanAddress.isDefault) list.map { it.copy(isDefault = false) } else list
+        val index = base.indexOfFirst { it.id == cleanAddress.id }
+        if (index >= 0) {
+          base.toMutableList().also { it[index] = cleanAddress }
+        } else {
+          base + cleanAddress
+        }
+      }
+      _selectedAddress.value = cleanAddress
+      _currentLocation.value = cleanAddress.locationLabel()
+      onComplete?.invoke(Result.success(cleanAddress))
     }
   }
 
@@ -950,9 +1029,8 @@ object MarketplaceRepository {
     if (address == null) { onComplete?.invoke(Result.failure(IllegalStateException("Delivery address is required"))); return null }
     val userId = SupabaseClient.currentUserId
     if (userId == null) { onComplete?.invoke(Result.failure(IllegalStateException("Please sign in before placing an order."))); return null }
-    val phone = address.phone.trim()
-    if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(phone)) {
-      onComplete?.invoke(Result.failure(IllegalArgumentException("Enter exactly 03001234567 or +923001234567.")))
+    if (!SupabaseApiService.isValidPakistaniMobile(address.phone)) {
+      onComplete?.invoke(Result.failure(IllegalArgumentException("Enter a valid Pakistani mobile number like 03001234567 or +923001234567.")))
       return null
     }
     val email = SupabaseClient.currentUser.value?.email?.trim().orEmpty()

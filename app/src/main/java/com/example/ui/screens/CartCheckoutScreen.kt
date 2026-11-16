@@ -101,20 +101,24 @@ fun CartCheckoutScreen(
   var orderErrorMessage by remember { mutableStateOf<String?>(null) }
 
   // Checkout Form States
-  var recipientName by remember(userProfile, selectedAddress) {
-    mutableStateOf(selectedAddress?.name ?: userProfile?.fullName ?: currentUser?.fullName ?: "")
+  val initialAddr = selectedAddress ?: addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
+  var selectedSavedAddressId by remember { mutableStateOf(initialAddr?.id) }
+  var hasUserEditedAddress by remember { mutableStateOf(false) }
+
+  var recipientName by remember {
+    mutableStateOf(initialAddr?.name ?: userProfile?.fullName ?: currentUser?.fullName ?: "")
   }
-  var recipientPhone by remember(userProfile, selectedAddress) {
-    mutableStateOf(selectedAddress?.phone ?: userProfile?.phone ?: currentUser?.phone ?: "")
+  var recipientPhone by remember {
+    mutableStateOf(initialAddr?.phone ?: userProfile?.phone ?: currentUser?.phone ?: "")
   }
-  var city by remember(userProfile, selectedAddress) {
-    mutableStateOf(selectedAddress?.city ?: userProfile?.city ?: "")
+  var city by remember {
+    mutableStateOf(initialAddr?.city ?: userProfile?.city ?: "")
   }
-  var streetAddress by remember(selectedAddress) {
-    mutableStateOf(selectedAddress?.addressLine ?: "")
+  var streetAddress by remember {
+    mutableStateOf(initialAddr?.addressLine ?: "")
   }
-  var areaLocality by remember(selectedAddress) {
-    mutableStateOf(selectedAddress?.area ?: "")
+  var areaLocality by remember {
+    mutableStateOf(initialAddr?.area ?: "")
   }
   var customerEmail by remember(currentUser, userProfile) {
     mutableStateOf(currentUser?.email ?: userProfile?.email ?: "")
@@ -123,10 +127,32 @@ fun CartCheckoutScreen(
   var saveAddressToAccount by remember { mutableStateOf(true) }
 
   // Location Pin State
-  var deliveryLat by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude) }
-  var deliveryLng by remember(selectedAddress) { mutableStateOf(selectedAddress?.longitude) }
+  var deliveryLat by remember { mutableStateOf(initialAddr?.latitude) }
+  var deliveryLng by remember { mutableStateOf(initialAddr?.longitude) }
   var locationCapturedAt by remember { mutableStateOf<String?>(null) }
-  var isPinConfirmed by remember(selectedAddress) { mutableStateOf(selectedAddress?.latitude != null && selectedAddress?.longitude != null) }
+  var isPinConfirmed by remember { mutableStateOf(initialAddr?.latitude != null && initialAddr?.longitude != null) }
+
+  // Populate defaults once saved addresses finish loading if user hasn't typed yet
+  LaunchedEffect(addresses, selectedAddress, userProfile) {
+    if (!hasUserEditedAddress && streetAddress.isBlank()) {
+      val fallback = selectedAddress ?: addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
+      if (fallback != null) {
+        selectedSavedAddressId = fallback.id
+        recipientName = fallback.name.ifBlank { recipientName }
+        recipientPhone = fallback.phone.ifBlank { recipientPhone }
+        city = fallback.city.ifBlank { city }
+        streetAddress = fallback.addressLine
+        areaLocality = fallback.area
+        deliveryLat = fallback.latitude
+        deliveryLng = fallback.longitude
+        isPinConfirmed = fallback.latitude != null && fallback.longitude != null
+      } else if (recipientName.isBlank() || recipientPhone.isBlank() || city.isBlank()) {
+        if (recipientName.isBlank()) recipientName = userProfile?.fullName ?: currentUser?.fullName ?: ""
+        if (recipientPhone.isBlank()) recipientPhone = userProfile?.phone ?: currentUser?.phone ?: ""
+        if (city.isBlank()) city = userProfile?.city ?: ""
+      }
+    }
+  }
 
   var isLocatingPin by remember { mutableStateOf(false) }
 
@@ -344,15 +370,15 @@ fun CartCheckoutScreen(
             couponMessage = couponMessage,
             couponIsError = couponIsError,
             recipientName = recipientName,
-            onRecipientNameChange = { recipientName = it },
+            onRecipientNameChange = { hasUserEditedAddress = true; recipientName = it },
             recipientPhone = recipientPhone,
-            onRecipientPhoneChange = { recipientPhone = it },
+            onRecipientPhoneChange = { hasUserEditedAddress = true; recipientPhone = it },
             city = city,
-            onCityChange = { city = it },
+            onCityChange = { hasUserEditedAddress = true; city = it },
             streetAddress = streetAddress,
-            onStreetAddressChange = { streetAddress = it },
+            onStreetAddressChange = { hasUserEditedAddress = true; streetAddress = it },
             areaLocality = areaLocality,
-            onAreaLocalityChange = { areaLocality = it },
+            onAreaLocalityChange = { hasUserEditedAddress = true; areaLocality = it },
             customerEmail = customerEmail,
             onCustomerEmailChange = { customerEmail = it },
             deliveryInstructions = deliveryInstructions,
@@ -360,7 +386,10 @@ fun CartCheckoutScreen(
             saveAddressToAccount = saveAddressToAccount,
             onSaveAddressToAccountChange = { saveAddressToAccount = it },
             savedAddresses = addresses,
+            selectedSavedAddressId = selectedSavedAddressId,
             onSelectSavedAddress = { addr ->
+              hasUserEditedAddress = false
+              selectedSavedAddressId = addr.id
               recipientName = addr.name
               recipientPhone = addr.phone
               city = addr.city
@@ -370,6 +399,16 @@ fun CartCheckoutScreen(
               deliveryLng = addr.longitude
               isPinConfirmed = addr.latitude != null && addr.longitude != null
               MarketplaceRepository.selectAddress(addr)
+            },
+            onUseNewAddress = {
+              hasUserEditedAddress = true
+              selectedSavedAddressId = null
+              streetAddress = ""
+              areaLocality = ""
+              deliveryLat = null
+              deliveryLng = null
+              isPinConfirmed = false
+              saveAddressToAccount = true
             },
             deliveryLat = deliveryLat,
             deliveryLng = deliveryLng,
@@ -388,8 +427,12 @@ fun CartCheckoutScreen(
                 Toast.makeText(context, "Please complete all required delivery fields.", Toast.LENGTH_SHORT).show()
                 return@CheckoutView
               }
-              if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(recipientPhone.trim())) {
-                Toast.makeText(context, "Enter exactly 03001234567 or +923001234567.", Toast.LENGTH_LONG).show()
+              if (streetAddress.trim().length < 3) {
+                Toast.makeText(context, "Please enter a complete street address (at least 3 characters).", Toast.LENGTH_LONG).show()
+                return@CheckoutView
+              }
+              if (!com.example.data.supabase.SupabaseApiService.isValidPakistaniMobile(recipientPhone)) {
+                Toast.makeText(context, "Enter a valid Pakistani mobile number like 03001234567 or +923001234567.", Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
               if (customerEmail.isNotBlank() && (customerEmail.trim().length > 254 || !android.util.Patterns.EMAIL_ADDRESS.matcher(customerEmail.trim()).matches())) {
@@ -415,23 +458,37 @@ fun CartCheckoutScreen(
                 return@CheckoutView
               }
 
-              // Update/Save Address
+              val matchedSaved = addresses.firstOrNull { it.id == selectedSavedAddressId }
+              val matchesExistingCore = matchedSaved != null &&
+                matchedSaved.name.trim() == recipientName.trim() &&
+                matchedSaved.phone.replace(Regex("[\\s-]+"), "") == recipientPhone.trim().replace(Regex("[\\s-]+"), "") &&
+                matchedSaved.addressLine.trim() == streetAddress.trim() &&
+                matchedSaved.area.trim() == areaLocality.trim() &&
+                matchedSaved.city.trim() == city.trim()
+
+              val targetId = if (matchesExistingCore) matchedSaved!!.id else "addr_${System.currentTimeMillis()}"
               val activeAddr = DeliveryAddress(
-                id = selectedAddress?.id ?: "addr_${System.currentTimeMillis()}",
+                id = targetId,
                 name = recipientName.trim(),
                 phone = recipientPhone.trim(),
                 addressLine = streetAddress.trim(),
                 area = areaLocality.trim(),
                 city = city.trim(),
-                province = selectedAddress?.province.orEmpty(),
-                tag = selectedAddress?.tag ?: "HOME",
-                isDefault = selectedAddress?.isDefault ?: addresses.isEmpty(),
+                province = if (matchesExistingCore) matchedSaved!!.province else "",
+                tag = if (matchesExistingCore) matchedSaved!!.tag else "HOME",
+                isDefault = if (matchesExistingCore) matchedSaved!!.isDefault else addresses.isEmpty(),
                 latitude = deliveryLat,
                 longitude = deliveryLng
               )
               MarketplaceRepository.selectAddress(activeAddr)
-              if (saveAddressToAccount && SupabaseClient.isAuthenticated) {
-                MarketplaceRepository.addOrUpdateAddress(activeAddr)
+              val needsSaveToAccount = saveAddressToAccount && SupabaseClient.isAuthenticated &&
+                (!matchesExistingCore || matchedSaved?.latitude != deliveryLat || matchedSaved?.longitude != deliveryLng)
+              if (needsSaveToAccount) {
+                MarketplaceRepository.addOrUpdateAddress(activeAddr) { saveRes ->
+                  saveRes.onSuccess { persisted ->
+                    selectedSavedAddressId = persisted.id
+                  }
+                }
               }
 
               MarketplaceRepository.placeCurrentOrder(
@@ -772,7 +829,9 @@ private fun CheckoutView(
   saveAddressToAccount: Boolean,
   onSaveAddressToAccountChange: (Boolean) -> Unit,
   savedAddresses: List<DeliveryAddress>,
+  selectedSavedAddressId: String? = null,
   onSelectSavedAddress: (DeliveryAddress) -> Unit,
+  onUseNewAddress: () -> Unit = {},
   deliveryLat: Double?,
   deliveryLng: Double?,
   isPinConfirmed: Boolean,
@@ -810,27 +869,15 @@ private fun CheckoutView(
       }
     }
 
-    // Saved Address Quick Picker
+    // Saved Address Dropdown Selector
     if (savedAddresses.isNotEmpty()) {
-      Text("Select Saved Address", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        savedAddresses.take(3).forEach { addr ->
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = if (streetAddress == addr.addressLine) JTPurpleContainer else JTSurfaceVariant,
-            border = androidx.compose.foundation.BorderStroke(1.dp, if (streetAddress == addr.addressLine) JTPurplePrimary else Color.Transparent),
-            modifier = Modifier.clickable { onSelectSavedAddress(addr) }
-          ) {
-            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-              Text(addr.name, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-              Text(addr.tag, fontSize = 10.sp, color = JTPurplePrimary, fontWeight = FontWeight.Bold)
-            }
-          }
-        }
-      }
+      SavedAddressDropdown(
+        savedAddresses = savedAddresses,
+        selectedAddressId = selectedSavedAddressId,
+        currentStreetAddress = streetAddress,
+        onSelectSavedAddress = onSelectSavedAddress,
+        onUseNewAddress = onUseNewAddress
+      )
     }
 
     Text("Delivery Details", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
@@ -1190,6 +1237,225 @@ private fun OrderConfirmationView(
       modifier = Modifier.fillMaxWidth().height(46.dp).testTag("confirm_continue_shopping_btn")
     ) {
       Text("Continue Shopping", fontWeight = FontWeight.Bold)
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SavedAddressDropdown(
+  savedAddresses: List<DeliveryAddress>,
+  selectedAddressId: String?,
+  currentStreetAddress: String,
+  onSelectSavedAddress: (DeliveryAddress) -> Unit,
+  onUseNewAddress: () -> Unit,
+  modifier: Modifier = Modifier
+) {
+  var expanded by remember { mutableStateOf(false) }
+
+  val activeSaved = savedAddresses.firstOrNull { it.id == selectedAddressId }
+    ?: savedAddresses.firstOrNull {
+      currentStreetAddress.isNotBlank() && it.addressLine.equals(currentStreetAddress.trim(), ignoreCase = true)
+    }
+
+  val displayLabel = if (activeSaved != null) {
+    val locationParts = listOf(activeSaved.addressLine, activeSaved.area, activeSaved.city)
+      .filter { it.isNotBlank() }
+      .joinToString(", ")
+    "${activeSaved.name} • $locationParts"
+  } else {
+    "Use a New Delivery Address"
+  }
+
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    color = JTPurpleContainer.copy(alpha = 0.35f),
+    border = androidx.compose.foundation.BorderStroke(1.dp, JTPurplePrimary.copy(alpha = 0.35f)),
+    modifier = modifier.fillMaxWidth()
+  ) {
+    Column(
+      modifier = Modifier.padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          Icon(
+            imageVector = Icons.Filled.LocationOn,
+            contentDescription = null,
+            tint = JTPurplePrimary,
+            modifier = Modifier.size(18.dp)
+          )
+          Text(
+            text = "Saved Delivery Addresses",
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = JTTextPrimary
+          )
+        }
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = JTPurplePrimary.copy(alpha = 0.12f)
+        ) {
+          Text(
+            text = "${savedAddresses.size} saved",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = JTPurplePrimary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+          )
+        }
+      }
+
+      ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        OutlinedTextField(
+          value = displayLabel,
+          onValueChange = {},
+          readOnly = true,
+          singleLine = true,
+          label = { Text("Choose Saved Address") },
+          trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+          colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = Color.White,
+            unfocusedContainerColor = Color.White,
+            focusedBorderColor = JTPurplePrimary,
+            unfocusedBorderColor = JTBorder
+          ),
+          shape = RoundedCornerShape(10.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .menuAnchor()
+            .testTag("checkout_saved_address_dropdown")
+        )
+
+        ExposedDropdownMenu(
+          expanded = expanded,
+          onDismissRequest = { expanded = false },
+          modifier = Modifier.background(Color.White)
+        ) {
+          savedAddresses.forEach { addr ->
+            val isSelected = addr.id == activeSaved?.id
+            val fullLine = listOf(addr.addressLine, addr.area, addr.city)
+              .filter { it.isNotBlank() }
+              .joinToString(", ")
+
+            DropdownMenuItem(
+              modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .background(if (isSelected) JTPurpleContainer.copy(alpha = 0.45f) else Color.White)
+                .testTag("saved_address_option_${addr.id}"),
+              leadingIcon = {
+                Icon(
+                  imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Filled.Home,
+                  contentDescription = null,
+                  tint = if (isSelected) JTPurplePrimary else JTTextSecondary,
+                  modifier = Modifier.size(20.dp)
+                )
+              },
+              text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                  ) {
+                    Text(
+                      text = addr.name,
+                      fontWeight = FontWeight.Bold,
+                      fontSize = 13.sp,
+                      color = JTTextPrimary,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis
+                    )
+                    if (addr.isDefault) {
+                      Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFDEF7EC)
+                      ) {
+                        Text(
+                          text = "DEFAULT",
+                          fontSize = 9.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = Color(0xFF03543F),
+                          modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                      }
+                    }
+                    if (addr.latitude != null && addr.longitude != null) {
+                      Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = JTPurpleContainer
+                      ) {
+                        Text(
+                          text = "GPS",
+                          fontSize = 9.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = JTPurplePrimary,
+                          modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                      }
+                    }
+                  }
+                  Text(
+                    text = fullLine,
+                    fontSize = 11.5.sp,
+                    color = JTTextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                  Text(
+                    text = addr.phone,
+                    fontSize = 11.sp,
+                    color = JTTextSecondary
+                  )
+                }
+              },
+              contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+              onClick = {
+                expanded = false
+                onSelectSavedAddress(addr)
+              }
+            )
+          }
+
+          HorizontalDivider(color = JTBorder)
+
+          DropdownMenuItem(
+            modifier = Modifier
+              .fillMaxWidth()
+              .heightIn(min = 48.dp)
+              .testTag("saved_address_option_new"),
+            leadingIcon = {
+              Icon(
+                imageVector = Icons.Filled.AddLocationAlt,
+                contentDescription = null,
+                tint = JTOrange,
+                modifier = Modifier.size(20.dp)
+              )
+            },
+            text = {
+              Text(
+                text = "Use a New Delivery Address",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = JTOrange
+              )
+            },
+            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+            onClick = {
+              expanded = false
+              onUseNewAddress()
+            }
+          )
+        }
+      }
     }
   }
 }

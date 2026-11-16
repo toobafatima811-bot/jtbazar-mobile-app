@@ -500,14 +500,32 @@ fun AddressSelectionSheet(
         Button(
           enabled = recipientName.isNotBlank() && phone.isNotBlank() && addressLine.isNotBlank() && city.isNotBlank() && !locating,
           onClick = {
+            val cleanName = recipientName.trim()
+            val cleanPhone = phone.trim()
+            val cleanLine = addressLine.trim()
+            val cleanArea = area.trim()
+            val cleanCity = city.trim()
+            val err = when {
+              cleanName.isEmpty() -> "Please enter recipient full name."
+              !com.example.data.supabase.SupabaseApiService.isValidPakistaniMobile(cleanPhone) ->
+                "Enter a valid Pakistani mobile number like 03001234567 or +923001234567."
+              cleanLine.length < 3 -> "Please enter a complete street address (at least 3 characters)."
+              cleanCity.isEmpty() -> "Please enter your city."
+              else -> null
+            }
+            if (err != null) {
+              locationError = err
+              return@Button
+            }
+            locationError = null
             val savedLabel = if (label == "OTHER") customLabel.trim().ifBlank { "OTHER" } else label
             val newAddr = DeliveryAddress(
               id = "addr_${System.currentTimeMillis()}",
-              name = recipientName.trim(),
-              phone = phone.trim(),
-              addressLine = addressLine.trim(),
-              area = area.trim(),
-              city = city.trim(),
+              name = cleanName,
+              phone = cleanPhone,
+              addressLine = cleanLine,
+              area = cleanArea,
+              city = cleanCity,
               province = "",
               tag = savedLabel,
               isDefault = addresses.isEmpty(),
@@ -596,7 +614,11 @@ fun AddressSelectionSheet(
                       Spacer(Modifier.width(6.dp))
                       if (addr.isDefault) Text("DEFAULT", color = JTPurplePrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text("${addr.area}, ${addr.city}", fontSize = 12.sp, color = JTTextSecondary)
+                    Text(
+                      text = listOf(addr.area, addr.city).filter { it.isNotBlank() }.joinToString(", "),
+                      fontSize = 12.sp,
+                      color = JTTextSecondary
+                    )
                     Text(addr.addressLine, fontSize = 12.sp, color = JTTextSecondary)
                     if (addr.latitude != null && addr.longitude != null) Text("GPS location saved", fontSize = 10.sp, color = JTPurplePrimary)
                   }

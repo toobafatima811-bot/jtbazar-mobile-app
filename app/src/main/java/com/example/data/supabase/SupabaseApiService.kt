@@ -579,31 +579,38 @@ object SupabaseApiService {
   // ADDRESSES
   // ----------------------------------------------------
 
+  private fun JSONObject.optNonNullString(key: String, fallback: String = ""): String {
+    if (!has(key) || isNull(key)) return fallback
+    val value = optString(key, fallback)
+    return if (value.equals("null", ignoreCase = true)) fallback else value
+  }
+
+  private fun parseAddressDto(obj: JSONObject, fallbackUserId: String): SupabaseAddressDto {
+    return SupabaseAddressDto(
+      id = obj.optNonNullString("id", ""),
+      userId = obj.optNonNullString("user_id", fallbackUserId),
+      name = obj.optNonNullString("recipient_name", ""),
+      phone = obj.optNonNullString("phone", ""),
+      addressLine = obj.optNonNullString("address_line_1", ""),
+      area = obj.optNonNullString("address_line_2", ""),
+      city = obj.optNonNullString("city", ""),
+      province = obj.optNonNullString("province", ""),
+      postalCode = obj.optNonNullString("postal_code", "").takeIf { it.isNotBlank() },
+      tag = obj.optNonNullString("tag", "HOME").ifBlank { "HOME" },
+      isDefault = obj.optBoolean("is_default", false),
+      latitude = if (obj.isNull("latitude")) null else obj.optDouble("latitude"),
+      longitude = if (obj.isNull("longitude")) null else obj.optDouble("longitude")
+    )
+  }
+
   suspend fun fetchAddresses(userId: String): Result<List<SupabaseAddressDto>> = withContext(Dispatchers.IO) {
     try {
-      val res = SupabaseClient.get("customer_addresses?user_id=eq.$userId&select=*&order=is_default.desc")
+      val res = SupabaseClient.get("customer_addresses?user_id=eq.$userId&select=*&order=is_default.desc,updated_at.desc")
       res.mapCatching { jsonStr ->
         val arr = JSONArray(jsonStr)
         val list = mutableListOf<SupabaseAddressDto>()
         for (i in 0 until arr.length()) {
-          val obj = arr.getJSONObject(i)
-          list.add(
-            SupabaseAddressDto(
-              id = obj.optString("id", ""),
-              userId = obj.optString("user_id", userId),
-              name = obj.optString("recipient_name", ""),
-              phone = obj.optString("phone", ""),
-              addressLine = obj.optString("address_line_1", ""),
-              area = obj.optString("address_line_2", ""),
-              city = obj.optString("city", ""),
-              province = obj.optString("province", "Punjab"),
-              postalCode = if (obj.has("postal_code")) obj.optString("postal_code") else null,
-              tag = obj.optString("tag", "HOME"),
-              isDefault = obj.optBoolean("is_default", false),
-              latitude = if (obj.isNull("latitude")) null else obj.optDouble("latitude"),
-              longitude = if (obj.isNull("longitude")) null else obj.optDouble("longitude")
-            )
-          )
+          list.add(parseAddressDto(arr.getJSONObject(i), userId))
         }
         list
       }
@@ -615,31 +622,78 @@ object SupabaseApiService {
 
   private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
-  private fun normalizePakistaniMobile(value: String): String {
-    val phone = value.trim()
-    if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(phone)) throw IOException("Enter exactly 03001234567 or +923001234567.")
+  internal fun normalizePakistaniMobile(value: String): String {
+    val phone = value.trim().replace(Regex("[\\s-]+"), "")
+    if (!Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(phone)) {
+      throw IOException("Enter a valid Pakistani mobile number like 03001234567 or +923001234567.")
+    }
     return if (phone.startsWith("03")) "+92" + phone.substring(1) else phone
   }
 
-  suspend fun saveAddress(address: SupabaseAddressDto): Result<String> = withContext(Dispatchers.IO) {
-    val json = JSONObject().apply {
-      if (address.id.isNotBlank() && !address.id.startsWith("addr_")) put("id", address.id)
-      put("user_id", address.userId)
-      put("recipient_name", address.name)
-      put("phone", normalizePakistaniMobile(address.phone))
-      put("address_line_1", address.addressLine)
-      if (address.area.isNotBlank()) put("address_line_2", address.area)
-      put("city", address.city)
-      put("province", address.province)
-      if (!address.postalCode.isNullOrBlank()) put("postal_code", address.postalCode)
-      put("tag", address.tag)
-      put("is_default", address.isDefault)
-      address.latitude?.let { put("latitude", it) }
-      address.longitude?.let { put("longitude", it) }
+  internal fun isValidPakistaniMobile(value: String): Boolean {
+    val phone = value.trim().replace(Regex("[\\s-]+"), "")
+    return Regex("^(03[0-9]{9}|\\+923[0-9]{9})$").matches(phone)
+  }
+
+  suspend fun saveAddress(address: SupabaseAddressDto): Result<SupabaseAddressDto> = withContext(Dispatchers.IO) {
+    try {
+      val cleanName = address.name.trim()
+      val cleanLine = address.addressLine.trim()
+      val cleanArea = address.area.trim()
+      val cleanCity = address.city.trim()
+      val cleanProvince = address.province.trim()
+
+      if (cleanName.isEmpty()) throw IOException("Please enter recipient full name.")
+      if (cleanLine.length < 3) throw IOException("Please enter a complete street address (at least 3 characters).")
+      if (cleanCity.isEmpty()) throw IOException("Please enter your city.")
+      val normalizedPhone = normalizePakistaniMobile(address.phone)
+
+      // Note: public.customer_addresses schema does not have a `tag` column; keep only valid DB columns.
+      val json = JSONObject().apply {
+        if (address.id.isNotBlank() && !address.id.startsWith("addr_")) put("id", address.id)
+        put("user_id", address.userId)
+        put("recipient_name", cleanName)
+        put("phone", normalizedPhone)
+        put("address_line_1", cleanLine)
+        if (cleanArea.isNotBlank()) put("address_line_2", cleanArea)
+        put("city", cleanCity)
+        if (cleanProvince.isNotBlank()) put("province", cleanProvince)
+        if (!address.postalCode.isNullOrBlank()) put("postal_code", address.postalCode.trim())
+        put("is_default", address.isDefault)
+        address.latitude?.let { put("latitude", it) }
+        address.longitude?.let { put("longitude", it) }
+      }
+
+      val writeResult = if (address.id.isNotBlank() && !address.id.startsWith("addr_")) {
+        SupabaseClient.patch("customer_addresses?id=eq.${address.id}&user_id=eq.${address.userId}", json.toString())
+      } else {
+        SupabaseClient.post("customer_addresses", json.toString())
+      }
+
+      val savedDto = writeResult.mapCatching { body ->
+        val trimmed = body.trim()
+        val obj = when {
+          trimmed.startsWith("[") -> JSONArray(trimmed).optJSONObject(0)
+          trimmed.startsWith("{") -> JSONObject(trimmed)
+          else -> null
+        } ?: throw IOException("Address save confirmation was empty.")
+        parseAddressDto(obj, address.userId).copy(tag = address.tag.ifBlank { "HOME" })
+      }.getOrThrow()
+
+      if (savedDto.isDefault && savedDto.id.isNotBlank()) {
+        runCatching {
+          SupabaseClient.patch(
+            "customer_addresses?user_id=eq.${address.userId}&id=neq.${savedDto.id}&is_default=eq.true",
+            JSONObject().put("is_default", false).toString()
+          )
+        }
+      }
+
+      Result.success(savedDto)
+    } catch (e: Exception) {
+      Log.e(TAG, "saveAddress error", e)
+      Result.failure(e)
     }
-    if (address.id.isNotBlank() && !address.id.startsWith("addr_")) {
-      SupabaseClient.patch("customer_addresses?id=eq.${address.id}&user_id=eq.${address.userId}", json.toString())
-    } else SupabaseClient.post("customer_addresses", json.toString())
   }
 
   suspend fun deleteAddress(addressId: String, userId: String): Result<Boolean> = withContext(Dispatchers.IO) {

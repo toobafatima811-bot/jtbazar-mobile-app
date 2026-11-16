@@ -205,7 +205,7 @@ fun MyAddressesScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                  text = "${address.addressLine}, ${address.area}, ${address.city}",
+                  text = listOf(address.addressLine, address.area, address.city).filter { it.isNotBlank() }.joinToString(", "),
                   fontSize = 12.sp,
                   color = JTTextPrimary
                 )
@@ -240,9 +240,9 @@ fun MyAddressesScreen(
   if (showAddAddressSheet) {
     AddAddressDialog(
       onDismiss = { showAddAddressSheet = false },
-      onSave = { newAddr ->
-        MarketplaceRepository.addOrUpdateAddress(newAddr)
+      onSaved = {
         showAddAddressSheet = false
+        Toast.makeText(context, "Address saved", Toast.LENGTH_SHORT).show()
       }
     )
   }
@@ -251,7 +251,7 @@ fun MyAddressesScreen(
 @Composable
 private fun AddAddressDialog(
   onDismiss: () -> Unit,
-  onSave: (DeliveryAddress) -> Unit
+  onSaved: () -> Unit
 ) {
   var name by remember { mutableStateOf("") }
   var phone by remember { mutableStateOf("") }
@@ -263,6 +263,8 @@ private fun AddAddressDialog(
   var latitude by remember { mutableStateOf<Double?>(null) }
   var longitude by remember { mutableStateOf<Double?>(null) }
   var locating by remember { mutableStateOf(false) }
+  var saving by remember { mutableStateOf(false) }
+  var validationError by remember { mutableStateOf<String?>(null) }
   var locationMessage by remember { mutableStateOf<String?>(null) }
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -406,35 +408,75 @@ private fun AddAddressDialog(
           Spacer(modifier = Modifier.width(4.dp))
           Text("Set as default delivery address", fontSize = 12.sp)
         }
+
+        validationError?.let { err ->
+          Text(
+            text = err,
+            color = MaterialTheme.colorScheme.error,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+          )
+        }
       }
     },
     confirmButton = {
       Button(
+        enabled = !saving && !locating,
         onClick = {
-          if (name.isNotBlank() && phone.isNotBlank() && street.isNotBlank() && city.isNotBlank()) {
-            onSave(
-              DeliveryAddress(
-                id = "addr_${System.currentTimeMillis()}",
-                name = name.trim(),
-                phone = phone.trim(),
-                addressLine = street.trim(),
-                area = area.trim(),
-                city = city.trim(),
-                tag = tag,
-                isDefault = isDefault,
-                latitude = latitude,
-                longitude = longitude
-              )
+          val cleanName = name.trim()
+          val cleanPhone = phone.trim()
+          val cleanStreet = street.trim()
+          val cleanArea = area.trim()
+          val cleanCity = city.trim()
+
+          val err = when {
+            cleanName.isEmpty() -> "Please enter recipient name."
+            !com.example.data.supabase.SupabaseApiService.isValidPakistaniMobile(cleanPhone) ->
+              "Enter a valid Pakistani mobile number like 03001234567 or +923001234567."
+            cleanStreet.length < 3 -> "Please enter a complete street address (at least 3 characters)."
+            cleanCity.isEmpty() -> "Please enter your city."
+            else -> null
+          }
+          if (err != null) {
+            validationError = err
+            return@Button
+          }
+          validationError = null
+          saving = true
+          MarketplaceRepository.addOrUpdateAddress(
+            DeliveryAddress(
+              id = "addr_${System.currentTimeMillis()}",
+              name = cleanName,
+              phone = cleanPhone,
+              addressLine = cleanStreet,
+              area = cleanArea,
+              city = cleanCity,
+              tag = tag,
+              isDefault = isDefault,
+              latitude = latitude,
+              longitude = longitude
             )
+          ) { result ->
+            saving = false
+            result.onSuccess { onSaved() }
+              .onFailure { failure ->
+                validationError = failure.message ?: "Your delivery address could not be saved. Please try again."
+              }
           }
         },
         colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
       ) {
-        Text("Save Address")
+        if (saving) {
+          CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("Saving...")
+        } else {
+          Text("Save Address")
+        }
       }
     },
     dismissButton = {
-      TextButton(onClick = onDismiss) { Text("Cancel") }
+      TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") }
     }
   )
 }
