@@ -434,7 +434,7 @@ object SupabaseClient {
         return@withContext Result.failure(IllegalArgumentException("Invalid storage object path."))
       }
 
-      if (bucket == "driver-documents") {
+      if (bucket == "driver-documents" || bucket == "delivery-proofs") {
         val firstFolder = cleanPath.substringBefore('/', missingDelimiterValue = "")
         if (firstFolder != userId) {
           return@withContext Result.failure(IllegalArgumentException("Driver documents must be uploaded under your own user folder."))
