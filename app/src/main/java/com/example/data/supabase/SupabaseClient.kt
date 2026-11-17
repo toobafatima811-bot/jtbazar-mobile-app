@@ -463,6 +463,47 @@ object SupabaseClient {
   }
 
   /**
+   * Delete a private storage object with the current authenticated user's JWT.
+   * Used for best-effort cleanup when proof upload succeeds but its DB RPC fails.
+   */
+  suspend fun deletePrivateFile(bucket: String, path: String): Result<Unit> = withContext(Dispatchers.IO) {
+    try {
+      val session = _session.value
+      val accessToken = session?.accessToken?.trim()
+      val userId = session?.user?.id?.trim()
+      if (session == null || accessToken.isNullOrBlank() || userId.isNullOrBlank()) {
+        return@withContext Result.failure(IllegalStateException("Authentication required to delete private file."))
+      }
+      val cleanPath = path.trimStart('/')
+      if (cleanPath.isBlank() || cleanPath.contains("..")) {
+        return@withContext Result.failure(IllegalArgumentException("Invalid storage object path."))
+      }
+      val segments = cleanPath.split("/")
+      if (segments.firstOrNull() != userId ||
+        (bucket == "delivery-proofs" && segments.getOrNull(1) != "delivery_proofs")) {
+        return@withContext Result.failure(IllegalArgumentException("You can only delete your own private driver proof."))
+      }
+      val encodedPath = segments.joinToString("/") {
+        java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+      }
+      val baseStorageUrl = (storageUrlOverride ?: SupabaseConfig.storageUrl).trimEnd('/')
+      val request = Request.Builder()
+        .url("$baseStorageUrl/object/$bucket/$encodedPath")
+        .header("Authorization", "Bearer $accessToken")
+        .delete()
+        .build()
+      okHttpClient.newCall(request).execute().use { response ->
+        val body = response.body?.string() ?: ""
+        if (response.isSuccessful) Result.success(Unit)
+        else Result.failure(IOException("Private storage cleanup error ${response.code}: $body"))
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "Private storage cleanup failed for $bucket/$path", e)
+      Result.failure(e)
+    }
+  }
+
+  /**
    * Execute RPC function in Supabase.
    * Protected customer/vendor/driver RPCs pass requireAuth = true so they fail fast
    * instead of silently sending the anonymous publishableKey as a Bearer token.
