@@ -202,6 +202,7 @@ fun DriverCenterScreen(
   var error by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf<String?>(null) }
   var uploadingProofAssignmentId by remember { mutableStateOf<String?>(null) }
+  var failedProofUploads by remember { mutableStateOf<Map<String, Pair<Uri, Boolean>>>(emptyMap()) }
   var proofPreviews by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
   var completingAssignmentIds by remember { mutableStateOf<Set<String>>(emptySet()) }
   var showOtpDialog by remember { mutableStateOf(false) }
@@ -264,8 +265,10 @@ fun DriverCenterScreen(
 
       deliveries = updateAssignmentProofPathInList(deliveries, assignmentId, storagePath)
       proofPreviews = proofPreviews + (assignmentId to decodedBitmap)
+      failedProofUploads = failedProofUploads - assignmentId
       message = "Delivery photo proof saved securely."
     } catch (e: Exception) {
+      failedProofUploads = failedProofUploads + (assignmentId to (uri to isCameraCapture))
       error = extractDriverFriendlyError(e, "Could not upload delivery photo proof.")
     } finally {
       uploadingProofAssignmentId = null
@@ -2128,8 +2131,13 @@ fun DriverCenterScreen(
                       OutlinedButton(
                         enabled = !actionBusy && !busy && !isUploadingThisProof,
                         onClick = {
-                          activePickerTarget = DriverPhotoPickerTarget.DeliveryProof(assignmentId)
-                          showPickerSheet = true
+                          val retry = failedProofUploads[assignmentId]
+                          if (retry != null) {
+                            scope.launch { uploadDeliveryProofFromUri(assignmentId, retry.first, retry.second) }
+                          } else {
+                            activePickerTarget = DriverPhotoPickerTarget.DeliveryProof(assignmentId)
+                            showPickerSheet = true
+                          }
                         },
                         modifier = Modifier
                           .fillMaxWidth()
@@ -2145,7 +2153,7 @@ fun DriverCenterScreen(
                           Icon(Icons.Filled.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp))
                           Spacer(Modifier.width(6.dp))
                           Text(
-                            if (proofSaved) "Replace Proof Photo" else "Upload Proof Photo",
+                            if (failedProofUploads.containsKey(assignmentId)) "Retry Photo Upload" else if (proofSaved) "Replace Proof Photo" else "Upload Proof Photo",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                           )
