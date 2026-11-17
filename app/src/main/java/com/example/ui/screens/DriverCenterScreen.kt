@@ -182,6 +182,43 @@ fun DriverCenterScreen(
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf<String?>(null) }
+  var proofAssignmentId by remember { mutableStateOf("") }
+  var showOtpDialog by remember { mutableStateOf(false) }
+  var showFailedDialog by remember { mutableStateOf(false) }
+  var showCodDialog by remember { mutableStateOf(false) }
+  var actionAssignmentId by remember { mutableStateOf("") }
+  var otpCode by remember { mutableStateOf("") }
+  var failureReason by remember { mutableStateOf("customer_unavailable") }
+  var failureNote by remember { mutableStateOf("") }
+  var codAmount by remember { mutableStateOf("") }
+  var actionBusy by remember { mutableStateOf(false) }
+
+  val deliveryProofPickerLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.PickVisualMedia()
+  ) { uri ->
+    val assignmentId = proofAssignmentId
+    if (uri != null && assignmentId.isNotBlank()) {
+      scope.launch {
+        actionBusy = true
+        try {
+          val bytes = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
+            ?: throw IllegalStateException("Could not read the selected delivery photo.")
+          if (bytes.isEmpty() || bytes.size > 8 * 1024 * 1024) throw IllegalArgumentException("Choose a delivery photo up to 8 MB.")
+          val uid = SupabaseClient.currentUserId ?: throw IllegalStateException("Please sign in again.")
+          val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+          if (!mime.startsWith("image/")) throw IllegalArgumentException("Choose an image for delivery proof.")
+          val ext = when (mime.lowercase()) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
+          val storagePath = "$uid/delivery_proofs/${assignmentId}_${System.currentTimeMillis()}.$ext"
+          SupabaseClient.uploadPrivateFile("driver-documents", storagePath, bytes, mime).getOrThrow()
+          SupabaseClient.rpc("driver_set_delivery_proof_path", JSONObject().put("p_assignment_id", assignmentId).put("p_storage_path", storagePath).toString()).getOrThrow()
+          deliveries = deliveries.map { item -> if (item.optString("assignment_id") == assignmentId) item.put("delivery_proof_path", storagePath) else item }
+          message = "Delivery photo proof saved."
+        } catch (e: Exception) {
+          error = e.message ?: "Could not upload delivery proof."
+        } finally { actionBusy = false }
+      }
+    }
+  }
 
   suspend fun applyDriverDeviceLocation(location: android.location.Location) {
     applicationLat = location.latitude
@@ -436,7 +473,7 @@ fun DriverCenterScreen(
 
       // Security check: Customer locations & deliveries are only accessible to approved drivers
       deliveries = if (application?.optString("status") == "approved") {
-        JSONArray(SupabaseClient.rpc("driver_list_assigned_orders").getOrThrow()).let { rows ->
+        JSONArray(SupabaseClient.rpc("driver_list_assigned_orders_v2").getOrThrow()).let { rows ->
           (0 until rows.length()).map { rows.getJSONObject(it) }
         }
       } else emptyList()
@@ -457,7 +494,7 @@ fun DriverCenterScreen(
 
   val filteredDeliveries = remember(deliveries, selectedFilter, selectedTab) {
     if (selectedTab == DriverBottomNavTab.HISTORY) {
-      deliveries.filter { it.optString("assignment_status") in setOf("delivered", "cancelled") }
+      deliveries.filter { it.optString("assignment_status") in setOf("delivered", "cancelled", "failed") }
     } else {
       when (selectedFilter) {
         DriverDeliveryFilter.ALL -> deliveries
@@ -1290,7 +1327,7 @@ fun DriverCenterScreen(
           val customerName = delivery.optString("customer_name").ifBlank { "Customer" }
           val customerPhone = delivery.optString("customer_phone")
           val addressText = driverAddressText(delivery)
-          val isDelivered = assignmentStatus == "delivered" || assignmentStatus == "cancelled"
+          val isDelivered = assignmentStatus == "delivered" || assignmentStatus == "cancelled" || assignmentStatus == "failed"
 
           // Format items summary (e.g. "BOLT B155 20000mAh Power Bank × 1")
           val itemsArr = delivery.optJSONArray("items")
@@ -1326,7 +1363,7 @@ fun DriverCenterScreen(
               ) {
                 // Status Pill (e.g., • Active, • Picked Up, • Delivered)
                 Surface(
-                  color = when (assignmentStatus) { "delivered" -> Color(0xFFDCFCE7); "cancelled" -> Color(0xFFFEE2E2); "picked_up" -> Color(0xFFEFF6FF); else -> Color(0xFFFFF7ED) },
+                  color = when (assignmentStatus) { "delivered" -> Color(0xFFDCFCE7); "cancelled", "failed" -> Color(0xFFFEE2E2); "picked_up" -> Color(0xFFEFF6FF); else -> Color(0xFFFFF7ED) },
                   shape = RoundedCornerShape(20.dp)
                 ) {
                   Row(
@@ -1338,12 +1375,13 @@ fun DriverCenterScreen(
                       modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(when (assignmentStatus) { "delivered" -> Color(0xFF16A34A); "cancelled" -> Color(0xFFDC2626); "picked_up" -> Color(0xFF2563EB); else -> Color(0xFFEA580C) })
+                        .background(when (assignmentStatus) { "delivered" -> Color(0xFF16A34A); "cancelled", "failed" -> Color(0xFFDC2626); "picked_up" -> Color(0xFF2563EB); else -> Color(0xFFEA580C) })
                     )
                     Text(
                       text = when {
                     assignmentStatus == "delivered" -> "Delivered"
                     assignmentStatus == "cancelled" -> "Cancelled"
+                    assignmentStatus == "failed" -> "Delivery Failed · ${delivery.optString("failed_reason").replace('_',' ')}"
                     assignmentStatus == "picked_up" -> "In Transit"
                     delivery.optString("order_status").equals("shipped", true) -> "Shipped"
                     delivery.optString("order_status").equals("processing", true) -> "Processing"
@@ -1498,6 +1536,12 @@ fun DriverCenterScreen(
                 }
               }
 
+              if (delivery.optString("delivery_batch_number").isNotBlank()) {
+                Surface(color = Color(0xFFEDE9FE), shape = RoundedCornerShape(8.dp)) {
+                  Text("Combined route · " + delivery.optString("delivery_batch_number"), modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6D28D9))
+                }
+              }
+
               // Divider
               HorizontalDivider(color = Color(0xFFF1F5F9))
 
@@ -1591,11 +1635,9 @@ fun DriverCenterScreen(
                     onClick = {
                       scope.launch {
                         busy = true
-                        val r = SupabaseClient.rpc(
-                          "driver_update_delivery_status",
-                          JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "delivered").toString()
-                        )
-                        if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
+                        actionAssignmentId = delivery.optString("assignment_id")
+                        otpCode = ""
+                        showOtpDialog = true
                         busy = false
                       }
                     },
@@ -1628,9 +1670,34 @@ fun DriverCenterScreen(
                     ) {
                       Icon(if (assignmentStatus == "cancelled") Icons.Filled.Cancel else Icons.Filled.CheckCircle, contentDescription = null, tint = if (assignmentStatus == "cancelled") Color(0xFFDC2626) else Color(0xFF16A34A), modifier = Modifier.size(15.dp))
                       Spacer(Modifier.width(6.dp))
-                      Text(if (assignmentStatus == "cancelled") "Cancelled" else "Delivered", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (assignmentStatus == "cancelled") Color(0xFFDC2626) else Color(0xFF16A34A))
+                      Text(when (assignmentStatus) { "cancelled" -> "Cancelled"; "failed" -> "Delivery Failed"; else -> "Delivered" }, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (assignmentStatus == "delivered") Color(0xFF16A34A) else Color(0xFFDC2626))
                     }
                   }
+                }
+              }
+
+              if (assignmentStatus == "picked_up") {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                  OutlinedButton(onClick = {
+                    proofAssignmentId = delivery.optString("assignment_id")
+                    deliveryProofPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                  }, enabled = !actionBusy, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.PhotoCamera, contentDescription = null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(5.dp))
+                    Text(if (delivery.optString("delivery_proof_path").isNotBlank()) "Replace proof photo" else "Upload proof photo", fontSize = 11.sp)
+                  }
+                  OutlinedButton(onClick = {
+                    actionAssignmentId = delivery.optString("assignment_id"); failureReason = "customer_unavailable"; failureNote = ""; showFailedDialog = true
+                  }, enabled = !actionBusy, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.ReportProblem, contentDescription = null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(5.dp)); Text("Failed delivery", fontSize = 11.sp)
+                  }
+                }
+              } else if (assignmentStatus == "assigned") {
+                OutlinedButton(onClick = {
+                  actionAssignmentId = delivery.optString("assignment_id"); failureReason = "customer_unavailable"; failureNote = ""; showFailedDialog = true
+                }, enabled = !actionBusy, modifier = Modifier.fillMaxWidth()) { Text("Report delivery issue", fontSize = 11.sp) }
+              } else if (assignmentStatus == "delivered" && delivery.optString("payment_method").equals("cod", true) && delivery.isNull("cod_collected_amount")) {
+                Button(onClick = { actionAssignmentId = delivery.optString("assignment_id"); codAmount = delivery.optString("order_total"); showCodDialog = true }, enabled = !actionBusy, modifier = Modifier.fillMaxWidth()) {
+                  Icon(Icons.Filled.Payments, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Record COD cash collected")
                 }
               }
             }
@@ -1638,6 +1705,55 @@ fun DriverCenterScreen(
         }
       }
     }
+  }
+
+  if (showOtpDialog) {
+    AlertDialog(onDismissRequest = { if (!actionBusy) showOtpDialog = false },
+      title = { Text("Confirm customer delivery OTP") },
+      text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Ask the customer to open JTBazar order tracking and show the six-digit delivery code. A delivery photo must also be uploaded before completion.", fontSize = 12.sp)
+        OutlinedTextField(value = otpCode, onValueChange = { otpCode = it.filter(Char::isDigit).take(6) }, label = { Text("6-digit OTP") }, singleLine = true)
+      } },
+      confirmButton = { Button(enabled = !actionBusy && otpCode.length == 6, onClick = {
+        scope.launch {
+          actionBusy = true
+          try {
+            val verified = SupabaseClient.rpc("driver_verify_delivery_otp", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_code", otpCode).toString()).getOrThrow().trim().equals("true", true)
+            if (!verified) throw IllegalStateException("Incorrect or expired OTP. Ask the customer to generate a new code.")
+            SupabaseClient.rpc("driver_update_delivery_status", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_action", "delivered").toString()).getOrThrow()
+            showOtpDialog = false; message = "Delivery completed successfully."; load()
+          } catch (e: Exception) { error = e.message ?: "Could not verify delivery OTP." }
+          finally { actionBusy = false }
+        }
+      }) { Text(if (actionBusy) "Verifying…" else "Verify & complete delivery") } },
+      dismissButton = { TextButton(onClick = { showOtpDialog = false }) { Text("Cancel") } })
+  }
+
+  if (showFailedDialog) {
+    AlertDialog(onDismissRequest = { if (!actionBusy) showFailedDialog = false }, title = { Text("Why was delivery unsuccessful?") },
+      text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf("customer_unavailable" to "Customer unavailable", "address_issue" to "Address issue", "customer_refused" to "Customer refused", "delivery_failed" to "Other delivery failure").forEach { (value,label) ->
+          Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = failureReason == value, onClick = { failureReason = value }); Text(label, fontSize = 13.sp) }
+        }
+        OutlinedTextField(value = failureNote, onValueChange = { failureNote = it.take(1000) }, label = { Text("Extra note (optional)") }, minLines = 2)
+      } },
+      confirmButton = { Button(enabled = !actionBusy, onClick = { scope.launch {
+        actionBusy = true
+        try { SupabaseClient.rpc("driver_mark_delivery_failed", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_reason", failureReason).put("p_note", failureNote).toString()).getOrThrow(); showFailedDialog = false; message = "Delivery issue reported to JTBazar."; load() }
+        catch (e: Exception) { error = e.message ?: "Could not report delivery issue." }
+        finally { actionBusy = false }
+      } }) { Text("Submit reason") } }, dismissButton = { TextButton(onClick = { showFailedDialog = false }) { Text("Cancel") } })
+  }
+
+  if (showCodDialog) {
+    AlertDialog(onDismissRequest = { if (!actionBusy) showCodDialog = false }, title = { Text("Record COD cash") },
+      text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Enter the amount physically received from the customer.", fontSize = 12.sp); OutlinedTextField(value = codAmount, onValueChange = { codAmount = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) }, label = { Text("Collected amount (PKR)") }, singleLine = true) } },
+      confirmButton = { Button(enabled = !actionBusy && codAmount.toDoubleOrNull() != null, onClick = { scope.launch {
+        actionBusy = true
+        try { SupabaseClient.rpc("driver_record_cod_collection", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_amount", codAmount.toDouble()).toString()).getOrThrow(); showCodDialog = false; message = "COD collection recorded."; load() }
+        catch (e: Exception) { error = e.message ?: "Could not record COD collection." }
+        finally { actionBusy = false }
+      } }) { Text("Save collection") } }, dismissButton = { TextButton(onClick = { showCodDialog = false }) { Text("Cancel") } })
   }
 
   if (showApplicationLocationPicker) {

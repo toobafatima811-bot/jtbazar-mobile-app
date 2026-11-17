@@ -38,6 +38,9 @@ import com.example.data.model.StepState
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
+import com.example.data.supabase.SupabaseClient
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.theme.*
 
@@ -55,6 +58,10 @@ fun OrderTrackingScreen(
 
   var showInvoiceDialog by remember { mutableStateOf(false) }
   var isCancelling by remember { mutableStateOf(false) }
+  val scope = rememberCoroutineScope()
+  var deliveryOtp by remember(activeOrder?.orderId) { mutableStateOf<String?>(null) }
+  var otpLoading by remember { mutableStateOf(false) }
+  var otpError by remember { mutableStateOf<String?>(null) }
 
   if (showInvoiceDialog && activeOrder != null) {
     InvoiceDialog(
@@ -432,6 +439,48 @@ fun OrderTrackingScreen(
                   lineHeight = 14.sp
                 )
               }
+            }
+          }
+        }
+      }
+
+      // 3A. Customer-only delivery OTP: the driver cannot complete delivery without this code.
+      item {
+        Surface(
+          shape = RoundedCornerShape(16.dp),
+          color = Color(0xFFF5F3FF),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDD6FE)),
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+          Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = JTPurplePrimary)
+              Spacer(Modifier.width(8.dp))
+              Text("Secure delivery OTP", fontWeight = FontWeight.Bold, color = JTTextPrimary)
+            }
+            Text("When the JTBazar driver has picked up your parcel, generate a one-time code and show it to the driver at your door. Do not share it before the parcel arrives.", fontSize = 11.sp, color = JTTextSecondary)
+            if (deliveryOtp != null) {
+              Text(deliveryOtp!!, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = JTPurplePrimary, letterSpacing = 5.sp)
+              Text("This code expires in 30 minutes. Generate a new one if it expires.", fontSize = 10.sp, color = JTTextSecondary)
+            }
+            otpError?.let { Text(it, color = JTRed, fontSize = 11.sp) }
+            Button(
+              enabled = !otpLoading && activeOrder.orderStatus !in listOf("DELIVERED", "CANCELLED"),
+              onClick = {
+                scope.launch {
+                  otpLoading = true; otpError = null
+                  try {
+                    val raw = SupabaseClient.rpc("customer_generate_delivery_otp", JSONObject().put("p_order_id", activeOrder.orderId).toString()).getOrThrow()
+                    deliveryOtp = raw.trim().removeSurrounding("\"")
+                  } catch (e: Exception) {
+                    otpError = e.message ?: "OTP is available after the driver picks up your parcel."
+                  } finally { otpLoading = false }
+                }
+              },
+              colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Text(if (otpLoading) "Generating…" else if (deliveryOtp == null) "Generate delivery OTP" else "Generate new OTP")
             }
           }
         }
