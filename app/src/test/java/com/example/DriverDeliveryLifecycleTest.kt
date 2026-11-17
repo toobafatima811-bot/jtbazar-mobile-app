@@ -330,7 +330,7 @@ class DriverDeliveryLifecycleTest {
     StubSupabaseServer { req ->
       when {
         req.pathWithQuery.contains("/storage/v1/object/delivery-proofs/") ->
-          StubResponse(200, """{"Key":"driver-documents/ok"}""")
+          StubResponse(200, """{"Key":"delivery-proofs/ok"}""")
         req.pathWithQuery.endsWith("/rest/v1/rpc/driver_set_delivery_proof_path") ->
           StubResponse(200, "true")
         else -> StubResponse(404, """{"message":"Not found"}""")
@@ -357,7 +357,7 @@ class DriverDeliveryLifecycleTest {
 
       val rpcReq = server.recordedRequests.first { it.pathWithQuery.endsWith("/rpc/driver_set_delivery_proof_path") }
       assertEquals(proofPath, JSONObject(rpcReq.body).getString("p_storage_path"))
-      assertEquals("Bearer test-access-token", rpcReq.headers["Authorization"])
+      assertEquals("Bearer " + createTestJwt(uid), rpcReq.headers["authorization"])
     }
   }
 
