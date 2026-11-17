@@ -923,12 +923,12 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           if (delivery != null) {
             val lat = delivery.optDouble("delivery_lat", Double.NaN)
             val lng = delivery.optDouble("delivery_lng", Double.NaN)
-            val orderNumber = delivery.optString("order_number")
-            val customerName = delivery.optString("customer_name")
-            val customerPhone = delivery.optString("customer_phone")
+            val orderNumber = delivery.optCleanString("order_number")
+            val customerName = delivery.optCleanString("customer_name")
+            val customerPhone = delivery.optCleanString("customer_phone")
             val address = driverAddressText(delivery)
-            val assignmentStatus = delivery.optString("assignment_status", "assigned")
-            val assignmentId = delivery.optString("assignment_id")
+            val assignmentStatus = delivery.optCleanString("assignment_status").ifBlank { "assigned" }
+            val assignmentId = delivery.optCleanString("assignment_id")
 
             DriverNavigationScreen(
               orderNumber = orderNumber,
@@ -939,8 +939,11 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               customerLng = lng,
               assignmentStatus = assignmentStatus,
               assignmentId = assignmentId,
+              otpVerified = isDeliveryOtpVerified(delivery),
+              hasDeliveryProof = hasDeliveryProofSaved(delivery),
               onStatusUpdated = {
-                // Return to Driver Center on delivery completion if desired or stay
+                selectedDeliveryForNavigation = null
+                navigateBack()
               },
               onBack = { navigateBack() }
             )

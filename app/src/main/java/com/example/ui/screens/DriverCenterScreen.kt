@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -48,8 +49,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -135,6 +138,11 @@ enum class DriverBottomNavTab {
   PROFILE
 }
 
+sealed class DriverPhotoPickerTarget {
+  data class ApplicationDoc(val docType: DriverDocType) : DriverPhotoPickerTarget()
+  data class DeliveryProof(val assignmentId: String) : DriverPhotoPickerTarget()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverCenterScreen(
@@ -146,10 +154,13 @@ fun DriverCenterScreen(
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val user by SupabaseClient.currentUser.collectAsState()
+  val session by SupabaseClient.session.collectAsState()
+  val isAuthenticatedSession = session != null && !user?.id.isNullOrBlank()
 
   var enabled by remember { mutableStateOf(false) }
   var application by remember { mutableStateOf<JSONObject?>(null) }
   var deliveries by remember { mutableStateOf(listOf<JSONObject>()) }
+  var showResubmitForm by remember { mutableStateOf(false) }
 
   // Filter and Nav state
   var selectedFilter by remember { mutableStateOf(DriverDeliveryFilter.ALL) }
@@ -173,8 +184,8 @@ fun DriverCenterScreen(
   var cnicBackDoc by remember { mutableStateOf(DocUploadItem()) }
   var plateDoc by remember { mutableStateOf(DocUploadItem()) }
 
-  // Active target for camera/gallery picker
-  var activeDocForPicker by remember { mutableStateOf<DriverDocType?>(null) }
+  // Active target for camera/gallery picker (shared across application docs & delivery photo proof)
+  var activePickerTarget by remember { mutableStateOf<DriverPhotoPickerTarget?>(null) }
   var showPickerSheet by remember { mutableStateOf(false) }
   var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -182,8 +193,11 @@ fun DriverCenterScreen(
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   var message by remember { mutableStateOf<String?>(null) }
-  var proofAssignmentId by remember { mutableStateOf("") }
+  var uploadingProofAssignmentId by remember { mutableStateOf<String?>(null) }
+  var proofPreviews by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
+  var completingAssignmentIds by remember { mutableStateOf<Set<String>>(emptySet()) }
   var showOtpDialog by remember { mutableStateOf(false) }
+  var otpDialogError by remember { mutableStateOf<String?>(null) }
   var showFailedDialog by remember { mutableStateOf(false) }
   var showCodDialog by remember { mutableStateOf(false) }
   var actionAssignmentId by remember { mutableStateOf("") }
@@ -193,30 +207,48 @@ fun DriverCenterScreen(
   var codAmount by remember { mutableStateOf("") }
   var actionBusy by remember { mutableStateOf(false) }
 
-  val deliveryProofPickerLauncher = rememberLauncherForActivityResult(
-    ActivityResultContracts.PickVisualMedia()
-  ) { uri ->
-    val assignmentId = proofAssignmentId
-    if (uri != null && assignmentId.isNotBlank()) {
-      scope.launch {
-        actionBusy = true
-        try {
-          val bytes = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
-            ?: throw IllegalStateException("Could not read the selected delivery photo.")
-          if (bytes.isEmpty() || bytes.size > 8 * 1024 * 1024) throw IllegalArgumentException("Choose a delivery photo up to 8 MB.")
-          val uid = SupabaseClient.currentUserId ?: throw IllegalStateException("Please sign in again.")
-          val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-          if (!mime.startsWith("image/")) throw IllegalArgumentException("Choose an image for delivery proof.")
-          val ext = when (mime.lowercase()) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
-          val storagePath = "$uid/delivery_proofs/${assignmentId}_${System.currentTimeMillis()}.$ext"
-          SupabaseClient.uploadPrivateFile("driver-documents", storagePath, bytes, mime).getOrThrow()
-          SupabaseClient.rpc("driver_set_delivery_proof_path", JSONObject().put("p_assignment_id", assignmentId).put("p_storage_path", storagePath).toString()).getOrThrow()
-          deliveries = deliveries.map { item -> if (item.optString("assignment_id") == assignmentId) item.put("delivery_proof_path", storagePath) else item }
-          message = "Delivery photo proof saved."
-        } catch (e: Exception) {
-          error = e.message ?: "Could not upload delivery proof."
-        } finally { actionBusy = false }
-      }
+  suspend fun uploadDeliveryProofFromUri(
+    assignmentId: String,
+    uri: Uri,
+    isCameraCapture: Boolean
+  ) {
+    if (uploadingProofAssignmentId != null || actionBusy) return
+    uploadingProofAssignmentId = assignmentId
+    actionBusy = true
+    error = null
+    try {
+      val uid = SupabaseClient.currentUserId?.takeIf { it.isNotBlank() }
+        ?: throw IllegalStateException("Please sign in again.")
+      val rawBytes = withContext(Dispatchers.IO) {
+        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+      } ?: throw IllegalStateException("Could not read the selected delivery photo.")
+
+      val rawMime = context.contentResolver.getType(uri)
+        ?: if (isCameraCapture) "image/jpeg" else null
+
+      val validated = validateDeliveryProofImage(rawBytes, rawMime)
+      val decodedBitmap = withContext(Dispatchers.Default) {
+        BitmapFactory.decodeByteArray(validated.bytes, 0, validated.bytes.size)
+      } ?: throw IllegalArgumentException("Selected file is not a valid image. Please choose a clear photo.")
+
+      val storagePath = buildDeliveryProofPath(uid, assignmentId, validated.extension)
+      SupabaseClient.uploadPrivateFile("driver-documents", storagePath, validated.bytes, validated.mimeType).getOrThrow()
+      SupabaseClient.rpc(
+        "driver_set_delivery_proof_path",
+        JSONObject()
+          .put("p_assignment_id", assignmentId)
+          .put("p_storage_path", storagePath)
+          .toString()
+      ).getOrThrow()
+
+      deliveries = updateAssignmentProofPathInList(deliveries, assignmentId, storagePath)
+      proofPreviews = proofPreviews + (assignmentId to decodedBitmap)
+      message = "Delivery photo proof saved securely."
+    } catch (e: Exception) {
+      error = extractDriverFriendlyError(e, "Could not upload delivery photo proof.")
+    } finally {
+      uploadingProofAssignmentId = null
+      actionBusy = false
     }
   }
 
@@ -303,7 +335,12 @@ fun DriverCenterScreen(
     }
   }
 
-  val isApprovedDriver = application?.optString("status") == "approved"
+  val appStatus = application?.optCleanString("status")?.lowercase().orEmpty()
+  val isApprovedDriver = hasDriverDeliveryAccess(
+    isAuthenticated = isAuthenticatedSession,
+    accessEnabled = enabled,
+    applicationStatus = appStatus
+  )
 
   suspend fun uploadDocBytes(docType: DriverDocType, bytes: ByteArray, uri: Uri?, bitmap: Bitmap?) {
     fun setDocState(item: DocUploadItem) {
@@ -347,6 +384,19 @@ fun DriverCenterScreen(
       }
     }
 
+    if (uploadBytes.isEmpty() || uploadBytes.size > MAX_DRIVER_IMAGE_BYTES) {
+      val failed = DocUploadItem(
+        localUri = uri,
+        localBitmap = bitmap,
+        isUploading = false,
+        errorMessage = "Choose a document photo up to 8 MB."
+      )
+      withContext(Dispatchers.Main) {
+        setDocState(failed)
+      }
+      return
+    }
+
     val uploadingItem = DocUploadItem(localUri = uri, localBitmap = bitmap, isUploading = true)
     withContext(Dispatchers.Main) {
       error = null
@@ -364,7 +414,12 @@ fun DriverCenterScreen(
         }
       },
       onFailure = { err ->
-        val failed = DocUploadItem(localUri = uri, localBitmap = bitmap, isUploading = false, errorMessage = err.message ?: "Upload failed")
+        val failed = DocUploadItem(
+          localUri = uri,
+          localBitmap = bitmap,
+          isUploading = false,
+          errorMessage = extractDriverFriendlyError(err, "Document upload failed. Please try again.")
+        )
         withContext(Dispatchers.Main) {
           setDocState(failed)
         }
@@ -372,56 +427,90 @@ fun DriverCenterScreen(
     )
   }
 
-  // Camera photo capture launcher
+  // Camera photo capture launcher (shared for application documents & delivery proof)
   val takePictureLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.TakePicture()
   ) { success ->
-    if (success && tempCameraUri != null && activeDocForPicker != null) {
-      val target = activeDocForPicker!!
-      val uri = tempCameraUri!!
-      scope.launch(Dispatchers.IO) {
-        try {
-          val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-          if (bytes != null && bytes.isNotEmpty()) {
-            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            if (bmp == null) {
-              withContext(Dispatchers.Main) { error = "Captured photo could not be decoded. Please try again." }
-            } else {
-              uploadDocBytes(target, bytes, uri, bmp)
+    val target = activePickerTarget
+    val uri = tempCameraUri
+    if (success && uri != null && target != null) {
+      when (target) {
+        is DriverPhotoPickerTarget.DeliveryProof -> {
+          scope.launch { uploadDeliveryProofFromUri(target.assignmentId, uri, isCameraCapture = true) }
+        }
+        is DriverPhotoPickerTarget.ApplicationDoc -> {
+          scope.launch(Dispatchers.IO) {
+            try {
+              val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+              if (bytes != null && bytes.isNotEmpty()) {
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bmp == null) {
+                  withContext(Dispatchers.Main) { error = "Captured photo could not be decoded. Please try again." }
+                } else {
+                  uploadDocBytes(target.docType, bytes, uri, bmp)
+                }
+              } else {
+                withContext(Dispatchers.Main) { error = "Captured photo was empty. Please try again." }
+              }
+            } catch (e: Exception) {
+              withContext(Dispatchers.Main) { error = extractDriverFriendlyError(e, "Could not read camera photo.") }
             }
-          } else {
-            withContext(Dispatchers.Main) { error = "Captured photo was empty. Please try again." }
           }
-        } catch (e: Exception) {
-          withContext(Dispatchers.Main) { error = "Could not read camera photo: ${e.message}" }
         }
       }
     }
   }
 
-  // Gallery photo picker launcher
+  // Gallery photo picker launcher (shared for application documents & delivery proof)
   val pickMediaLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.PickVisualMedia()
   ) { uri ->
-    if (uri != null && activeDocForPicker != null) {
-      val target = activeDocForPicker!!
-      scope.launch(Dispatchers.IO) {
-        try {
-          val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-          if (bytes != null && bytes.isNotEmpty()) {
-            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            if (bmp == null) {
-              withContext(Dispatchers.Main) { error = "Selected file is not a valid image. Please choose a photo." }
-            } else {
-              uploadDocBytes(target, bytes, uri, bmp)
+    val target = activePickerTarget
+    if (uri != null && target != null) {
+      when (target) {
+        is DriverPhotoPickerTarget.DeliveryProof -> {
+          scope.launch { uploadDeliveryProofFromUri(target.assignmentId, uri, isCameraCapture = false) }
+        }
+        is DriverPhotoPickerTarget.ApplicationDoc -> {
+          scope.launch(Dispatchers.IO) {
+            try {
+              val rawMime = context.contentResolver.getType(uri)
+              if (!rawMime.isNullOrBlank() && !rawMime.lowercase().startsWith("image/")) {
+                withContext(Dispatchers.Main) { error = "Selected file is not an image. Please choose a JPEG or PNG photo." }
+                return@launch
+              }
+              val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+              if (bytes != null && bytes.isNotEmpty()) {
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bmp == null) {
+                  withContext(Dispatchers.Main) { error = "Selected file is not a valid image. Please choose a photo." }
+                } else {
+                  uploadDocBytes(target.docType, bytes, uri, bmp)
+                }
+              } else {
+                withContext(Dispatchers.Main) { error = "Selected photo was empty. Please choose another file." }
+              }
+            } catch (e: Exception) {
+              withContext(Dispatchers.Main) { error = extractDriverFriendlyError(e, "Could not read selected photo.") }
             }
-          } else {
-            withContext(Dispatchers.Main) { error = "Selected photo was empty. Please choose another file." }
           }
-        } catch (e: Exception) {
-          withContext(Dispatchers.Main) { error = "Could not read selected photo: ${e.message}" }
         }
       }
+    }
+  }
+
+  fun launchCameraForTarget() {
+    try {
+      val prefix = when (activePickerTarget) {
+        is DriverPhotoPickerTarget.DeliveryProof -> "delivery_proof_"
+        else -> "driver_doc_"
+      }
+      val tempFile = File.createTempFile(prefix, ".jpg", context.cacheDir)
+      val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+      tempCameraUri = uri
+      takePictureLauncher.launch(uri)
+    } catch (e: Exception) {
+      error = extractDriverFriendlyError(e, "Failed to launch camera.")
     }
   }
 
@@ -430,30 +519,16 @@ fun DriverCenterScreen(
     ActivityResultContracts.RequestPermission()
   ) { granted ->
     if (granted) {
-      try {
-        val tempFile = File.createTempFile("driver_doc_", ".jpg", context.cacheDir)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
-        tempCameraUri = uri
-        takePictureLauncher.launch(uri)
-      } catch (e: Exception) {
-        error = "Failed to launch camera: ${e.message}"
-      }
+      launchCameraForTarget()
     } else {
-      error = "Camera permission is required to take photo"
+      error = "Camera permission is required to take a photo. You can still select an image from your gallery."
     }
   }
 
   fun startCameraCapture() {
     val hasCam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     if (hasCam) {
-      try {
-        val tempFile = File.createTempFile("driver_doc_", ".jpg", context.cacheDir)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
-        tempCameraUri = uri
-        takePictureLauncher.launch(uri)
-      } catch (e: Exception) {
-        error = "Failed to launch camera: ${e.message}"
-      }
+      launchCameraForTarget()
     } else {
       cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
@@ -462,29 +537,41 @@ fun DriverCenterScreen(
   suspend fun load() {
     loading = true
     error = null
+    val uid = user?.id?.takeIf { it.isNotBlank() }
+    if (!SupabaseClient.isAuthenticated || uid == null) {
+      enabled = false
+      application = null
+      deliveries = emptyList()
+      loading = false
+      return
+    }
     try {
       val access = SupabaseClient.rpc("get_my_driver_access").getOrThrow()
       enabled = access.trim().equals("true", ignoreCase = true)
-      val uid = user?.id ?: throw IllegalStateException("Please sign in first.")
       val appRows = JSONArray(
         SupabaseClient.get("driver_applications?select=id,full_name,phone,vehicle_type,current_address,status,admin_note&user_id=eq.$uid&limit=1").getOrThrow()
       )
       application = if (appRows.length() > 0) appRows.getJSONObject(0) else null
+      val fetchedStatus = application?.optCleanString("status")
 
-      // Security check: Customer locations & deliveries are only accessible to approved drivers
-      deliveries = if (application?.optString("status") == "approved") {
+      // Strict security check: customer locations & assigned deliveries are ONLY accessible
+      // to authenticated, approved drivers whose customer_driver_access is enabled.
+      deliveries = if (hasDriverDeliveryAccess(true, enabled, fetchedStatus)) {
         JSONArray(SupabaseClient.rpc("driver_list_assigned_orders_v2").getOrThrow()).let { rows ->
           (0 until rows.length()).map { rows.getJSONObject(it) }
         }
-      } else emptyList()
+      } else {
+        emptyList()
+      }
     } catch (e: Exception) {
-      error = e.message ?: "Could not load driver information."
+      deliveries = emptyList()
+      error = extractDriverFriendlyError(e, "Could not load driver information. Please try again.")
     } finally {
       loading = false
     }
   }
 
-  LaunchedEffect(user?.id) { load() }
+  LaunchedEffect(user?.id, session != null) { load() }
 
   // Delivery filter counts
   val allCount = deliveries.size
@@ -635,7 +722,8 @@ fun DriverCenterScreen(
     LazyColumn(
       modifier = Modifier
         .fillMaxSize()
-        .padding(padding),
+        .padding(padding)
+        .testTag("driver_center_list"),
       contentPadding = PaddingValues(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -780,131 +868,249 @@ fun DriverCenterScreen(
         }
       }
 
-      // 2. DRIVER APPLICATION CARD (MATCHING REFERENCE IMAGE)
+      if (!isAuthenticatedSession) {
+        item {
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp)
+              .testTag("driver_signin_required_card"),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+          ) {
+            Column(
+              modifier = Modifier.padding(24.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+              Icon(Icons.Filled.Lock, contentDescription = null, tint = Color(0xFFEA580C), modifier = Modifier.size(36.dp))
+              Text("Sign In Required", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F172A))
+              Text(
+                "Please sign in to your JTBazar account to apply as a driver or manage assigned deliveries.",
+                fontSize = 12.5.sp,
+                color = JTTextSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+              )
+              Button(
+                onClick = onBack,
+                modifier = Modifier.heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
+              ) {
+                Text("Go Back", fontWeight = FontWeight.Bold)
+              }
+            }
+          }
+        }
+      } else {
+      // 2. DRIVER APPLICATION CARD
       if (application != null) {
         val appObj = application!!
-        val applicantName = appObj.optString("full_name").takeIf { it.isNotBlank() && !it.equals("null", true) } ?: user?.fullName?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: "Driver"
-        val vehType = appObj.optString("vehicle_type").takeIf { it.isNotBlank() && !it.equals("null", true) } ?: "Vehicle not set"
-        val rawAddr = appObj.optString("current_address")
-        val addrDisplay = if (rawAddr.isNotBlank() && rawAddr != "null") rawAddr else "Location not set"
-        val status = appObj.optString("status", "pending")
+        val applicantName = appObj.optCleanString("full_name").ifBlank { user?.fullName?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: "Driver" }
+        val vehType = appObj.optCleanString("vehicle_type").ifBlank { "Vehicle not set" }
+        val addrDisplay = appObj.optCleanString("current_address").ifBlank { "Location not set" }
+        val status = appObj.optCleanString("status").lowercase().ifBlank { "pending" }
+        val rejectionReason = extractDriverRejectionReason(appObj)
 
         item {
           Card(
             modifier = Modifier
               .fillMaxWidth()
               .padding(horizontal = 16.dp)
-              .shadow(elevation = 3.dp, shape = RoundedCornerShape(22.dp)),
+              .shadow(elevation = 3.dp, shape = RoundedCornerShape(22.dp))
+              .testTag("driver_application_status_card"),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9))
           ) {
-            Row(
-              modifier = Modifier.padding(16.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              // Left: Rider avatar with green checkmark badge
-              Box(
-                modifier = Modifier
-                  .size(70.dp)
-                  .clip(CircleShape)
-                  .background(Color(0xFFEFF6FF)),
-                contentAlignment = Alignment.Center
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically
               ) {
-                Image(
-                  painter = painterResource(id = R.drawable.ic_driver_courier),
-                  contentDescription = "Driver Avatar",
-                  contentScale = ContentScale.Crop,
-                  modifier = Modifier.fillMaxSize()
-                )
+                // Left: Rider avatar with green checkmark badge
+                Box(
+                  modifier = Modifier
+                    .size(70.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFEFF6FF)),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Image(
+                    painter = painterResource(id = R.drawable.ic_driver_courier),
+                    contentDescription = "Driver Avatar",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                  )
 
-                if (status == "approved") {
-                  Box(
-                    modifier = Modifier
-                      .align(Alignment.BottomEnd)
-                      .size(20.dp)
-                      .clip(CircleShape)
-                      .background(Color(0xFF16A34A))
-                      .padding(2.dp),
-                    contentAlignment = Alignment.Center
+                  if (status == "approved" && enabled) {
+                    Box(
+                      modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF16A34A))
+                        .padding(2.dp),
+                      contentAlignment = Alignment.Center
+                    ) {
+                      Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                      )
+                    }
+                  }
+                }
+
+                Spacer(Modifier.width(14.dp))
+
+                // Middle: Driver Application details
+                Column(
+                  modifier = Modifier.weight(1f),
+                  verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                  Text(
+                    "Driver Application",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                  )
+
+                  Spacer(Modifier.height(2.dp))
+
+                  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Filled.DirectionsCar, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
+                    Text("Applicant: $applicantName", fontSize = 11.5.sp, color = Color(0xFF334155), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                  }
+
+                  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Filled.TwoWheeler, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
+                    Text("Vehicle: $vehType", fontSize = 11.5.sp, color = Color(0xFF334155))
+                  }
+
+                  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
+                    Text("Address: $addrDisplay", fontSize = 11.5.sp, color = Color(0xFF334155), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                  }
+                }
+
+                // Right: Status badge pill
+                Surface(
+                  color = when (status) {
+                    "approved" -> Color(0xFFDCFCE7)
+                    "rejected", "suspended" -> Color(0xFFFEE2E2)
+                    else -> Color(0xFFFEF3C7)
+                  },
+                  shape = RoundedCornerShape(20.dp),
+                  border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    when (status) {
+                      "approved" -> Color(0xFF86EFAC)
+                      "rejected", "suspended" -> Color(0xFFFCA5A5)
+                      else -> Color(0xFFFDE68A)
+                    }
+                  ),
+                  modifier = Modifier.testTag("driver_application_status_badge")
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                   ) {
-                    Icon(
-                      Icons.Filled.Check,
-                      contentDescription = null,
-                      tint = Color.White,
-                      modifier = Modifier.size(12.dp)
+                    if (status == "approved") {
+                      Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+                    }
+                    Text(
+                      text = status.replaceFirstChar { it.uppercase() },
+                      fontSize = 11.5.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = when (status) {
+                        "approved" -> Color(0xFF16A34A)
+                        "rejected", "suspended" -> Color(0xFFB91C1C)
+                        else -> Color(0xFF92400E)
+                      }
                     )
                   }
                 }
               }
 
-              Spacer(Modifier.width(14.dp))
-
-              // Middle: Driver Application details
-              Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-              ) {
-                Text(
-                  "Driver Application",
-                  fontSize = 15.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = Color(0xFF0F172A)
-                )
-
-                Spacer(Modifier.height(2.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  Icon(Icons.Filled.DirectionsCar, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
-                  Text("Applicant: $applicantName", fontSize = 11.5.sp, color = Color(0xFF334155), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  Icon(Icons.Filled.TwoWheeler, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
-                  Text("Vehicle: $vehType", fontSize = 11.5.sp, color = Color(0xFF334155))
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFF1E293B), modifier = Modifier.size(13.dp))
-                  Text("Address: $addrDisplay", fontSize = 11.5.sp, color = Color(0xFF334155), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-              }
-
-              // Right: Status badge pill
-              Surface(
-                color = when (status) {
-                  "approved" -> Color(0xFFDCFCE7)
-                  "rejected", "suspended" -> Color(0xFFFEE2E2)
-                  else -> Color(0xFFFEF3C7)
-                },
-                shape = RoundedCornerShape(20.dp),
-                border = androidx.compose.foundation.BorderStroke(
-                  1.dp,
-                  when (status) {
-                    "approved" -> Color(0xFF86EFAC)
-                    "rejected", "suspended" -> Color(0xFFFCA5A5)
-                    else -> Color(0xFFFDE68A)
-                  }
-                )
-              ) {
-                Row(
-                  modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.spacedBy(4.dp)
+              if (status == "pending") {
+                Surface(
+                  color = Color(0xFFFFFBEB),
+                  shape = RoundedCornerShape(12.dp),
+                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("driver_status_pending_card")
                 ) {
-                  if (status == "approved") {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+                  Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Icon(Icons.Filled.Schedule, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(18.dp))
+                    Text(
+                      "Your application is under review. Assigned deliveries and customer delivery details remain locked until an administrator approves your account.",
+                      fontSize = 12.sp,
+                      color = Color(0xFF92400E)
+                    )
                   }
-                  Text(
-                    text = status.replaceFirstChar { it.uppercase() },
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = when (status) {
-                      "approved" -> Color(0xFF16A34A)
-                      "rejected", "suspended" -> Color(0xFFB91C1C)
-                      else -> Color(0xFF92400E)
+                }
+              } else if (status == "rejected" || status == "suspended") {
+                Surface(
+                  color = Color(0xFFFEF2F2),
+                  shape = RoundedCornerShape(12.dp),
+                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("driver_status_rejected_card")
+                ) {
+                  Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                      Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                      Text(
+                        if (status == "suspended") "Application Suspended" else "Application Rejected",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF991B1B)
+                      )
                     }
-                  )
+                    Text(
+                      text = if (rejectionReason.isNotBlank()) "Reason: $rejectionReason"
+                      else "Your application was not approved. Please review your details and upload clear documents.",
+                      fontSize = 12.sp,
+                      color = Color(0xFF7F1D1D),
+                      modifier = Modifier.testTag("driver_rejection_reason")
+                    )
+                    if (status == "rejected" && enabled && !showResubmitForm) {
+                      Button(
+                        onClick = {
+                          if (fullName.isBlank()) fullName = appObj.optCleanString("full_name")
+                          if (phone.isBlank()) phone = appObj.optCleanString("phone")
+                          if (currentAddress.isBlank()) currentAddress = appObj.optCleanString("current_address")
+                          val prevVehicle = appObj.optCleanString("vehicle_type")
+                          if (prevVehicle in listOf("Bike", "Car")) vehicleType = prevVehicle
+                          cnicFrontDoc = DocUploadItem()
+                          cnicBackDoc = DocUploadItem()
+                          plateDoc = DocUploadItem()
+                          showResubmitForm = true
+                        },
+                        modifier = Modifier
+                          .fillMaxWidth()
+                          .heightIn(min = 48.dp)
+                          .testTag("resubmit_application_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
+                      ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Resubmit Application", fontWeight = FontWeight.Bold)
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -912,27 +1118,35 @@ fun DriverCenterScreen(
         }
       }
 
-      // NOT APPROVED NOTICE / APPLICATION FORM
+      // NOT ENABLED / ACCESS RESTRICTED NOTICE OR APPLICATION / RESUBMISSION FORM
       if (!enabled) {
         item {
           Card(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 16.dp),
+              .padding(horizontal = 16.dp)
+              .testTag("driver_access_disabled_card"),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
           ) {
             Column(
               modifier = Modifier.padding(24.dp),
               horizontalAlignment = Alignment.CenterHorizontally,
               verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-              Text("Driver System Disabled", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-              Text("Driver applications are currently paused by administrator.", fontSize = 12.sp, color = JTTextSecondary)
+              Icon(Icons.Filled.Block, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(32.dp))
+              Text("Driver Access Disabled", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0F172A))
+              Text(
+                "Driver access is currently disabled for your account by an administrator. Assigned deliveries and customer details are unavailable.",
+                fontSize = 12.sp,
+                color = JTTextSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+              )
             }
           }
         }
-      } else if (application == null) {
+      } else if (application == null || (appStatus == "rejected" && showResubmitForm)) {
         // DRIVER APPLICATION FORM WITH 7 REQUIRED FIELDS
         item {
           Card(
@@ -1102,7 +1316,7 @@ fun DriverCenterScreen(
                 subtitle = "Clear photo of front side",
                 docState = cnicFrontDoc,
                 onChoosePhoto = {
-                  activeDocForPicker = DriverDocType.CNIC_FRONT
+                  activePickerTarget = DriverPhotoPickerTarget.ApplicationDoc(DriverDocType.CNIC_FRONT)
                   showPickerSheet = true
                 },
                 onClear = { cnicFrontDoc = DocUploadItem() }
@@ -1114,7 +1328,7 @@ fun DriverCenterScreen(
                 subtitle = "Clear photo of back side",
                 docState = cnicBackDoc,
                 onChoosePhoto = {
-                  activeDocForPicker = DriverDocType.CNIC_BACK
+                  activePickerTarget = DriverPhotoPickerTarget.ApplicationDoc(DriverDocType.CNIC_BACK)
                   showPickerSheet = true
                 },
                 onClear = { cnicBackDoc = DocUploadItem() }
@@ -1126,7 +1340,7 @@ fun DriverCenterScreen(
                 subtitle = "Clear rear photo of bike/car",
                 docState = plateDoc,
                 onChoosePhoto = {
-                  activeDocForPicker = DriverDocType.VEHICLE_PLATE
+                  activePickerTarget = DriverPhotoPickerTarget.ApplicationDoc(DriverDocType.VEHICLE_PLATE)
                   showPickerSheet = true
                 },
                 onClear = { plateDoc = DocUploadItem() }
@@ -1143,9 +1357,18 @@ fun DriverCenterScreen(
                 !cnicBackDoc.isUploading &&
                 !plateDoc.isUploading
 
+              if (!isFormValid) {
+                Text(
+                  text = "Fill name, phone, address, pin your map location, and upload all 3 verification documents to submit.",
+                  fontSize = 11.sp,
+                  color = Color(0xFF64748B)
+                )
+              }
+
               Button(
                 enabled = !busy && isFormValid,
                 onClick = {
+                  if (busy || !isFormValid) return@Button
                   scope.launch {
                     busy = true
                     message = null
@@ -1170,14 +1393,20 @@ fun DriverCenterScreen(
                             .put("p_address", currentAddress.trim())
                             .toString()
                         )
-                        if (locationResult.isFailure) throw (locationResult.exceptionOrNull() ?: IllegalStateException("Could not save map location"))
+                        if (locationResult.isFailure) {
+                          throw (locationResult.exceptionOrNull() ?: IllegalStateException("Could not save map location."))
+                        }
+                        showResubmitForm = false
                         message = "Driver application submitted! Admin approval is required."
                         load()
                       } else {
-                        error = result.exceptionOrNull()?.message ?: "Application failed"
+                        error = extractDriverFriendlyError(
+                          result.exceptionOrNull(),
+                          "Could not submit your driver application. Please verify your details and try again."
+                        )
                       }
                     } catch (e: Exception) {
-                      error = e.message
+                      error = extractDriverFriendlyError(e, "Could not submit your driver application. Please try again.")
                     } finally {
                       busy = false
                     }
@@ -1185,11 +1414,15 @@ fun DriverCenterScreen(
                 },
                 modifier = Modifier
                   .fillMaxWidth()
-                  .height(48.dp),
+                  .height(48.dp)
+                  .testTag("submit_driver_application_button"),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
               ) {
-                Text(if (busy) "Submitting…" else "Submit Driver Application", fontWeight = FontWeight.Bold)
+                Text(
+                  if (busy) "Submitting…" else if (showResubmitForm) "Resubmit Driver Application" else "Submit Driver Application",
+                  fontWeight = FontWeight.Bold
+                )
               }
             }
           }
@@ -1319,15 +1552,22 @@ fun DriverCenterScreen(
           }
         }
 
-        items(filteredDeliveries, key = { it.optString("assignment_id") }) { delivery ->
-          val lat = delivery.optDouble("delivery_lat", Double.NaN)
-          val lng = delivery.optDouble("delivery_lng", Double.NaN)
-          val assignmentStatus = delivery.optString("assignment_status", "assigned")
-          val orderNumber = delivery.optString("order_number").ifBlank { "Order number unavailable" }
-          val customerName = delivery.optString("customer_name").ifBlank { "Customer" }
-          val customerPhone = delivery.optString("customer_phone")
+        items(filteredDeliveries, key = { it.optCleanString("assignment_id") }) { delivery ->
+          val assignmentId = delivery.optCleanString("assignment_id")
+          val assignmentStatus = delivery.optCleanString("assignment_status").ifBlank { "assigned" }
+          val orderNumber = delivery.optCleanString("order_number").ifBlank { "Order number unavailable" }
+          val customerName = delivery.optCleanString("customer_name").ifBlank { "Customer" }
+          val customerPhone = delivery.optCleanString("customer_phone")
           val addressText = driverAddressText(delivery)
           val isDelivered = assignmentStatus == "delivered" || assignmentStatus == "cancelled" || assignmentStatus == "failed"
+          val otpVerified = isDeliveryOtpVerified(delivery)
+          val proofSaved = hasDeliveryProofSaved(delivery)
+          val isUploadingThisProof = uploadingProofAssignmentId == assignmentId
+          val isCompletingThisDelivery = completingAssignmentIds.contains(assignmentId)
+          val missingHint = missingCompletionStepsMessage(otpVerified, proofSaved)
+          val batchNumber = delivery.optCleanString("delivery_batch_number")
+          val failedReasonText = delivery.optCleanString("failed_reason").replace('_', ' ')
+          val orderStatusText = delivery.optCleanString("order_status")
 
           // Format items summary (e.g. "BOLT B155 20000mAh Power Bank × 1")
           val itemsArr = delivery.optJSONArray("items")
@@ -1335,7 +1575,7 @@ fun DriverCenterScreen(
             val list = mutableListOf<String>()
             for (i in 0 until itemsArr.length()) {
               val itm = itemsArr.optJSONObject(i) ?: continue
-              list.add("${itm.optString("name", "Product")} × ${itm.optInt("quantity", 1)}")
+              list.add("${itm.optCleanString("name").ifBlank { "Product" }} × ${itm.optInt("quantity", 1)}")
             }
             list.joinToString(", ")
           } else {
@@ -1346,7 +1586,8 @@ fun DriverCenterScreen(
             modifier = Modifier
               .fillMaxWidth()
               .padding(horizontal = 16.dp)
-              .shadow(elevation = 2.dp, shape = RoundedCornerShape(22.dp)),
+              .shadow(elevation = 2.dp, shape = RoundedCornerShape(22.dp))
+              .testTag("driver_delivery_card_$assignmentId"),
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9))
@@ -1361,7 +1602,6 @@ fun DriverCenterScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
               ) {
-                // Status Pill (e.g., • Active, • Picked Up, • Delivered)
                 Surface(
                   color = when (assignmentStatus) { "delivered" -> Color(0xFFDCFCE7); "cancelled", "failed" -> Color(0xFFFEE2E2); "picked_up" -> Color(0xFFEFF6FF); else -> Color(0xFFFFF7ED) },
                   shape = RoundedCornerShape(20.dp)
@@ -1379,19 +1619,19 @@ fun DriverCenterScreen(
                     )
                     Text(
                       text = when {
-                    assignmentStatus == "delivered" -> "Delivered"
-                    assignmentStatus == "cancelled" -> "Cancelled"
-                    assignmentStatus == "failed" -> "Delivery Failed · ${delivery.optString("failed_reason").replace('_',' ')}"
-                    assignmentStatus == "picked_up" -> "In Transit"
-                    delivery.optString("order_status").equals("shipped", true) -> "Shipped"
-                    delivery.optString("order_status").equals("processing", true) -> "Processing"
-                    delivery.optString("order_status").equals("confirmed", true) -> "Confirmed"
-                    delivery.optString("order_status").equals("pending", true) -> "Pending"
-                    else -> "Active"
-                  },
+                        assignmentStatus == "delivered" -> "Delivered"
+                        assignmentStatus == "cancelled" -> "Cancelled"
+                        assignmentStatus == "failed" -> "Delivery Failed" + if (failedReasonText.isNotBlank()) " · $failedReasonText" else ""
+                        assignmentStatus == "picked_up" -> "In Transit"
+                        orderStatusText.equals("shipped", true) -> "Shipped"
+                        orderStatusText.equals("processing", true) -> "Processing"
+                        orderStatusText.equals("confirmed", true) -> "Confirmed"
+                        orderStatusText.equals("pending", true) -> "Pending"
+                        else -> "Active"
+                      },
                       fontSize = 11.5.sp,
                       fontWeight = FontWeight.Bold,
-                      color = when (assignmentStatus) { "delivered" -> Color(0xFF16A34A); "cancelled" -> Color(0xFFDC2626); "picked_up" -> Color(0xFF2563EB); else -> Color(0xFFEA580C) }
+                      color = when (assignmentStatus) { "delivered" -> Color(0xFF16A34A); "cancelled", "failed" -> Color(0xFFDC2626); "picked_up" -> Color(0xFF2563EB); else -> Color(0xFFEA580C) }
                     )
                   }
                 }
@@ -1429,14 +1669,12 @@ fun DriverCenterScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
               ) {
-                // Left Column: Customer Name, Phone, Address
                 Column(
                   modifier = Modifier
                     .weight(1f)
                     .padding(end = 10.dp),
                   verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                  // Customer name
                   Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Filled.Person, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(16.dp))
                     Column {
@@ -1445,104 +1683,96 @@ fun DriverCenterScreen(
                     }
                   }
 
-                  // Phone
-                  Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.clickable {
-                      if (customerPhone.isNotBlank()) {
+                  if (customerPhone.isNotBlank()) {
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(6.dp),
+                      modifier = Modifier.clickable {
                         val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$customerPhone"))
                         context.startActivity(dial)
                       }
+                    ) {
+                      Icon(Icons.Filled.Phone, contentDescription = "Call Customer", tint = Color(0xFF2563EB), modifier = Modifier.size(15.dp))
+                      Text(customerPhone, fontSize = 12.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Medium)
                     }
-                  ) {
-                    Icon(Icons.Filled.Phone, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(15.dp))
-                    Text(customerPhone, fontSize = 12.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Medium)
                   }
 
-                  // Customer address is intentionally hidden after delivery completion.
-                  if (!isDelivered) Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(15.dp).padding(top = 2.dp))
-                    Text(
-                      addressText,
-                      fontSize = 11.5.sp,
-                      color = Color(0xFF334155),
-                      maxLines = 2,
-                      overflow = TextOverflow.Ellipsis
-                    )
+                  if (!isDelivered) {
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                      Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(15.dp).padding(top = 2.dp))
+                      Text(
+                        addressText,
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF334155),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                      )
+                    }
                   }
                 }
 
-                // Location preview is only available for active deliveries.
-                if (!isDelivered) Box(
-                  modifier = Modifier
-                    .size(width = 110.dp, height = 80.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFFE2E8F0))
-                    .clickable {
-                      if (isApprovedDriver) {
-                        onViewCustomerLocation(delivery)
+                // Location preview is only available for active deliveries of approved+enabled drivers.
+                if (!isDelivered && isApprovedDriver) {
+                  Box(
+                    modifier = Modifier
+                      .size(width = 110.dp, height = 80.dp)
+                      .clip(RoundedCornerShape(14.dp))
+                      .background(Color(0xFFE2E8F0))
+                      .clickable { onViewCustomerLocation(delivery) }
+                  ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                      drawRect(Color(0xFFE8EEF5))
+                      drawLine(Color.White, Offset(0f, size.height * 0.4f), Offset(size.width, size.height * 0.35f), strokeWidth = 14f)
+                      drawLine(Color.White, Offset(size.width * 0.45f, 0f), Offset(size.width * 0.55f, size.height), strokeWidth = 12f)
+                      drawLine(Color(0xFFBFDBFE), Offset(0f, size.height * 0.4f), Offset(size.width, size.height * 0.35f), strokeWidth = 3f)
+                      drawRoundRect(Color(0xFFDCFCE7), Offset(size.width * 0.05f, size.height * 0.05f), androidx.compose.ui.geometry.Size(size.width * 0.35f, size.height * 0.28f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f))
+                    }
+
+                    Icon(
+                      Icons.Filled.Place,
+                      contentDescription = null,
+                      tint = Color(0xFFDC2626),
+                      modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(24.dp)
+                    )
+
+                    Surface(
+                      color = Color(0xFF1E293B).copy(alpha = 0.92f),
+                      shape = RoundedCornerShape(20.dp),
+                      modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 6.dp)
+                    ) {
+                      Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                      ) {
+                        Icon(
+                          Icons.Filled.Navigation,
+                          contentDescription = null,
+                          tint = Color.White,
+                          modifier = Modifier.size(9.dp)
+                        )
+                        Text(
+                          "View Location",
+                          fontSize = 9.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = Color.White
+                        )
                       }
                     }
-                ) {
-                  // Illustrated street grid canvas
-                  Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawRect(Color(0xFFE8EEF5))
-                    // Roads
-                    drawLine(Color.White, Offset(0f, size.height * 0.4f), Offset(size.width, size.height * 0.35f), strokeWidth = 14f)
-                    drawLine(Color.White, Offset(size.width * 0.45f, 0f), Offset(size.width * 0.55f, size.height), strokeWidth = 12f)
-                    drawLine(Color(0xFFBFDBFE), Offset(0f, size.height * 0.4f), Offset(size.width, size.height * 0.35f), strokeWidth = 3f)
-                    // Green park patch
-                    drawRoundRect(Color(0xFFDCFCE7), Offset(size.width * 0.05f, size.height * 0.05f), androidx.compose.ui.geometry.Size(size.width * 0.35f, size.height * 0.28f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f))
-                  }
-
-                  // Center Red Place Pin
-                  Icon(
-                    Icons.Filled.Place,
-                    contentDescription = null,
-                    tint = Color(0xFFDC2626),
-                    modifier = Modifier
-                      .align(Alignment.Center)
-                      .size(24.dp)
-                  )
-
-                  // Bottom dark pill: "🧭 View Location"
-                  Surface(
-                    color = Color(0xFF1E293B).copy(alpha = 0.92f),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier
-                      .align(Alignment.BottomCenter)
-                      .padding(bottom = 6.dp)
-                  ) {
-                    Row(
-                      modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                      verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                      Icon(
-                        Icons.Filled.Navigation,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(9.dp)
-                      )
-                      Text(
-                        "View Location",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                      )
-                    }
                   }
                 }
               }
 
-              if (delivery.optString("delivery_batch_number").isNotBlank()) {
+              if (batchNumber.isNotBlank()) {
                 Surface(color = Color(0xFFEDE9FE), shape = RoundedCornerShape(8.dp)) {
-                  Text("Combined route · " + delivery.optString("delivery_batch_number"), modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6D28D9))
+                  Text("Combined route · $batchNumber", modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6D28D9))
                 }
               }
 
-              // Divider
               HorizontalDivider(color = Color(0xFFF1F5F9))
 
               // Row 3: Items summary
@@ -1569,191 +1799,617 @@ fun DriverCenterScreen(
                 }
               }
 
-              // Row 4: Action Buttons (View Customer Location & Picked Up / Delivered)
+              // Row 4: Navigation & Primary Action Buttons
               Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
               ) {
-                // Completed orders never expose customer location.
-                if (!isDelivered) Button(
-                  onClick = {
-                    if (isApprovedDriver) {
-                      onViewCustomerLocation(delivery)
-                    }
-                  },
-                  modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp),
-                  shape = RoundedCornerShape(12.dp),
-                  colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFEDD5),
-                    contentColor = Color(0xFFEA580C)
-                  ),
-                  contentPadding = PaddingValues(horizontal = 6.dp)
-                ) {
-                  Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(15.dp))
-                  Spacer(Modifier.width(6.dp))
-                  Text(
-                    "View Customer Location",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                  )
+                if (!isDelivered && isApprovedDriver) {
+                  Button(
+                    onClick = { onViewCustomerLocation(delivery) },
+                    modifier = Modifier
+                      .weight(1f)
+                      .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                      containerColor = Color(0xFFFFEDD5),
+                      contentColor = Color(0xFFEA580C)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                  ) {
+                    Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                      "View Customer Location",
+                      fontSize = 11.sp,
+                      fontWeight = FontWeight.Bold
+                    )
+                  }
                 }
 
-                // Right: Green Status Button ("Picked Up" / "Delivered" / "Completed")
                 if (assignmentStatus == "assigned") {
                   Button(
-                    enabled = !busy,
+                    enabled = !busy && !actionBusy,
                     onClick = {
+                      if (busy || actionBusy) return@Button
                       scope.launch {
                         busy = true
+                        error = null
                         val r = SupabaseClient.rpc(
                           "driver_update_delivery_status",
-                          JSONObject().put("p_assignment_id", delivery.optString("assignment_id")).put("p_action", "picked_up").toString()
+                          JSONObject().put("p_assignment_id", assignmentId).put("p_action", "picked_up").toString()
                         )
-                        if (r.isSuccess) load() else error = r.exceptionOrNull()?.message
+                        if (r.isSuccess) {
+                          message = "Parcel marked as picked up."
+                          load()
+                        } else {
+                          error = extractDriverFriendlyError(r.exceptionOrNull(), "Could not update pickup status. Please try again.")
+                        }
                         busy = false
                       }
                     },
                     modifier = Modifier
                       .weight(1f)
-                      .height(42.dp),
+                      .heightIn(min = 48.dp)
+                      .testTag("mark_picked_up_button_$assignmentId"),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                       containerColor = Color(0xFF16A34A),
                       contentColor = Color.White
                     ),
-                    contentPadding = PaddingValues(horizontal = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp)
                   ) {
                     Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Picked Up", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                   }
                 } else if (assignmentStatus == "picked_up") {
-                  Button(
-                    enabled = !busy,
+                  OutlinedButton(
                     onClick = {
-                      scope.launch {
-                        busy = true
-                        actionAssignmentId = delivery.optString("assignment_id")
-                        otpCode = ""
-                        showOtpDialog = true
-                        busy = false
-                      }
+                      actionAssignmentId = assignmentId
+                      failureReason = "customer_unavailable"
+                      failureNote = ""
+                      showFailedDialog = true
                     },
+                    enabled = !actionBusy && !busy,
                     modifier = Modifier
                       .weight(1f)
-                      .height(42.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                      containerColor = Color(0xFF16A34A),
-                      contentColor = Color.White
-                    ),
-                    contentPadding = PaddingValues(horizontal = 6.dp)
+                      .heightIn(min = 48.dp)
+                      .testTag("failed_delivery_button_$assignmentId"),
+                    shape = RoundedCornerShape(12.dp)
                   ) {
-                    Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Delivered", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Filled.ReportProblem, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Failed Delivery", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                   }
                 } else {
                   Surface(
-                    color = if (assignmentStatus == "cancelled") Color(0xFFFEE2E2) else Color(0xFFDCFCE7),
+                    color = if (assignmentStatus == "cancelled" || assignmentStatus == "failed") Color(0xFFFEE2E2) else Color(0xFFDCFCE7),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                       .weight(1f)
-                      .height(42.dp)
+                      .height(48.dp)
                   ) {
                     Row(
                       modifier = Modifier.fillMaxSize(),
                       verticalAlignment = Alignment.CenterVertically,
                       horizontalArrangement = Arrangement.Center
                     ) {
-                      Icon(if (assignmentStatus == "cancelled") Icons.Filled.Cancel else Icons.Filled.CheckCircle, contentDescription = null, tint = if (assignmentStatus == "cancelled") Color(0xFFDC2626) else Color(0xFF16A34A), modifier = Modifier.size(15.dp))
+                      Icon(
+                        if (assignmentStatus == "cancelled" || assignmentStatus == "failed") Icons.Filled.Cancel else Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = if (assignmentStatus == "cancelled" || assignmentStatus == "failed") Color(0xFFDC2626) else Color(0xFF16A34A),
+                        modifier = Modifier.size(15.dp)
+                      )
                       Spacer(Modifier.width(6.dp))
-                      Text(when (assignmentStatus) { "cancelled" -> "Cancelled"; "failed" -> "Delivery Failed"; else -> "Delivered" }, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (assignmentStatus == "delivered") Color(0xFF16A34A) else Color(0xFFDC2626))
+                      Text(
+                        when (assignmentStatus) {
+                          "cancelled" -> "Cancelled"
+                          "failed" -> "Delivery Failed"
+                          else -> "Delivered"
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (assignmentStatus == "delivered") Color(0xFF16A34A) else Color(0xFFDC2626)
+                      )
                     }
                   }
                 }
               }
 
+              // 3-Step Delivery Completion Panel for In-Transit (picked_up) orders
               if (assignmentStatus == "picked_up") {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                  OutlinedButton(onClick = {
-                    proofAssignmentId = delivery.optString("assignment_id")
-                    deliveryProofPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                  }, enabled = !actionBusy, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.PhotoCamera, contentDescription = null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(5.dp))
-                    Text(if (delivery.optString("delivery_proof_path").isNotBlank()) "Replace proof photo" else "Upload proof photo", fontSize = 11.sp)
-                  }
-                  OutlinedButton(onClick = {
-                    actionAssignmentId = delivery.optString("assignment_id"); failureReason = "customer_unavailable"; failureNote = ""; showFailedDialog = true
-                  }, enabled = !actionBusy, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.ReportProblem, contentDescription = null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(5.dp)); Text("Failed delivery", fontSize = 11.sp)
+                Surface(
+                  color = Color(0xFFF8FAFC),
+                  shape = RoundedCornerShape(14.dp),
+                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                  ) {
+                    Text(
+                      "Delivery Completion Steps",
+                      fontSize = 12.5.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = Color(0xFF0F172A)
+                    )
+
+                    // Step A: Verify customer OTP
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
+                    ) {
+                      Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                      ) {
+                        Icon(
+                          if (otpVerified) Icons.Filled.CheckCircle else Icons.Filled.Password,
+                          contentDescription = null,
+                          tint = if (otpVerified) Color(0xFF16A34A) else Color(0xFFEA580C),
+                          modifier = Modifier.size(18.dp)
+                        )
+                        Column {
+                          Text("1. Customer OTP", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
+                          Text(
+                            if (otpVerified) "OTP Verified" else "Pending customer 6-digit code",
+                            fontSize = 10.5.sp,
+                            color = if (otpVerified) Color(0xFF16A34A) else Color(0xFF64748B)
+                          )
+                        }
+                      }
+
+                      if (otpVerified) {
+                        Surface(
+                          color = Color(0xFFDCFCE7),
+                          shape = RoundedCornerShape(20.dp),
+                          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
+                          modifier = Modifier.testTag("otp_verified_badge_$assignmentId")
+                        ) {
+                          Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                          ) {
+                            Icon(Icons.Filled.Check, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+                            Text("OTP Verified", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                          }
+                        }
+                      } else {
+                        OutlinedButton(
+                          enabled = !actionBusy && !busy,
+                          onClick = {
+                            actionAssignmentId = assignmentId
+                            otpCode = ""
+                            otpDialogError = null
+                            showOtpDialog = true
+                          },
+                          modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("verify_otp_button_$assignmentId"),
+                          shape = RoundedCornerShape(10.dp)
+                        ) {
+                          Text("Verify OTP", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                      }
+                    }
+
+                    HorizontalDivider(color = Color(0xFFE2E8F0))
+
+                    // Step B: Upload delivery photo proof (private bucket)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        Row(
+                          modifier = Modifier.weight(1f),
+                          verticalAlignment = Alignment.CenterVertically,
+                          horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                          Icon(
+                            if (proofSaved) Icons.Filled.CheckCircle else Icons.Filled.PhotoCamera,
+                            contentDescription = null,
+                            tint = if (proofSaved) Color(0xFF16A34A) else Color(0xFFEA580C),
+                            modifier = Modifier.size(18.dp)
+                          )
+                          Column {
+                            Text("2. Delivery Photo Proof", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
+                            Text(
+                              if (proofSaved) "Photo Proof Uploaded (Private)" else "Required before completing delivery",
+                              fontSize = 10.5.sp,
+                              color = if (proofSaved) Color(0xFF16A34A) else Color(0xFF64748B)
+                            )
+                          }
+                        }
+
+                        if (proofSaved) {
+                          Surface(
+                            color = Color(0xFFDCFCE7),
+                            shape = RoundedCornerShape(20.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
+                            modifier = Modifier.testTag("proof_uploaded_badge_$assignmentId")
+                          ) {
+                            Row(
+                              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                              verticalAlignment = Alignment.CenterVertically,
+                              horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                              Icon(Icons.Filled.Check, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(13.dp))
+                              Text("Uploaded", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                            }
+                          }
+                        }
+                      }
+
+                      proofPreviews[assignmentId]?.let { previewBmp ->
+                        Image(
+                          bitmap = previewBmp.asImageBitmap(),
+                          contentDescription = "Uploaded delivery proof preview",
+                          contentScale = ContentScale.Crop,
+                          modifier = Modifier
+                            .fillMaxWidth()
+                            .height(110.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                        )
+                      }
+
+                      OutlinedButton(
+                        enabled = !actionBusy && !busy && !isUploadingThisProof,
+                        onClick = {
+                          activePickerTarget = DriverPhotoPickerTarget.DeliveryProof(assignmentId)
+                          showPickerSheet = true
+                        },
+                        modifier = Modifier
+                          .fillMaxWidth()
+                          .heightIn(min = 48.dp)
+                          .testTag("upload_proof_button_$assignmentId"),
+                        shape = RoundedCornerShape(10.dp)
+                      ) {
+                        if (isUploadingThisProof) {
+                          CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                          Spacer(Modifier.width(8.dp))
+                          Text("Uploading Photo…", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        } else {
+                          Icon(Icons.Filled.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp))
+                          Spacer(Modifier.width(6.dp))
+                          Text(
+                            if (proofSaved) "Replace Proof Photo" else "Upload Proof Photo",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                          )
+                        }
+                      }
+                    }
+
+                    HorizontalDivider(color = Color(0xFFE2E8F0))
+
+                    // Step C: Separate Complete Delivery button (strictly gated)
+                    if (missingHint != null) {
+                      Text(
+                        text = missingHint,
+                        fontSize = 11.sp,
+                        color = Color(0xFF92400E),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.testTag("completion_requirement_hint_$assignmentId")
+                      )
+                    }
+
+                    val canCompleteThis = canCompleteDelivery(
+                      assignmentStatus = assignmentStatus,
+                      otpVerified = otpVerified,
+                      proofSaved = proofSaved,
+                      isBusy = busy || actionBusy || isUploadingThisProof || isCompletingThisDelivery
+                    )
+
+                    Button(
+                      enabled = canCompleteThis,
+                      onClick = {
+                        if (!canCompleteDelivery(assignmentStatus, otpVerified, proofSaved, isBusy = false)) {
+                          error = missingCompletionStepsMessage(otpVerified, proofSaved)
+                          return@Button
+                        }
+                        if (completingAssignmentIds.contains(assignmentId) || actionBusy || busy) return@Button
+                        scope.launch {
+                          completingAssignmentIds = completingAssignmentIds + assignmentId
+                          actionBusy = true
+                          error = null
+                          try {
+                            SupabaseClient.rpc(
+                              "driver_update_delivery_status",
+                              JSONObject()
+                                .put("p_assignment_id", assignmentId)
+                                .put("p_action", "delivered")
+                                .toString()
+                            ).getOrThrow()
+                            proofPreviews = proofPreviews - assignmentId
+                            message = "Delivery completed successfully."
+                            load()
+                          } catch (e: Exception) {
+                            error = extractDriverFriendlyError(e, "Could not complete delivery. Please verify OTP and photo proof.")
+                          } finally {
+                            completingAssignmentIds = completingAssignmentIds - assignmentId
+                            actionBusy = false
+                          }
+                        }
+                      },
+                      modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("complete_delivery_button_$assignmentId"),
+                      shape = RoundedCornerShape(12.dp),
+                      colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF16A34A),
+                        contentColor = Color.White,
+                        disabledContainerColor = Color(0xFFE2E8F0),
+                        disabledContentColor = Color(0xFF64748B)
+                      )
+                    ) {
+                      if (isCompletingThisDelivery) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Completing Delivery…", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                      } else {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Complete Delivery", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                      }
+                    }
                   }
                 }
               } else if (assignmentStatus == "assigned") {
-                OutlinedButton(onClick = {
-                  actionAssignmentId = delivery.optString("assignment_id"); failureReason = "customer_unavailable"; failureNote = ""; showFailedDialog = true
-                }, enabled = !actionBusy, modifier = Modifier.fillMaxWidth()) { Text("Report delivery issue", fontSize = 11.sp) }
-              } else if (assignmentStatus == "delivered" && delivery.optString("payment_method").equals("cod", true) && delivery.isNull("cod_collected_amount")) {
-                Button(onClick = { actionAssignmentId = delivery.optString("assignment_id"); codAmount = delivery.optString("order_total"); showCodDialog = true }, enabled = !actionBusy, modifier = Modifier.fillMaxWidth()) {
-                  Icon(Icons.Filled.Payments, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Record COD cash collected")
+                OutlinedButton(
+                  onClick = {
+                    actionAssignmentId = assignmentId
+                    failureReason = "customer_unavailable"
+                    failureNote = ""
+                    showFailedDialog = true
+                  },
+                  enabled = !actionBusy && !busy,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                ) {
+                  Text("Report Delivery Issue", fontSize = 11.5.sp)
+                }
+              } else if (assignmentStatus == "delivered" &&
+                delivery.optCleanString("payment_method").equals("cod", true) &&
+                delivery.isNull("cod_collected_amount")
+              ) {
+                Button(
+                  onClick = {
+                    actionAssignmentId = assignmentId
+                    codAmount = delivery.optCleanString("order_total")
+                    showCodDialog = true
+                  },
+                  enabled = !actionBusy && !busy,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                ) {
+                  Icon(Icons.Filled.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
+                  Spacer(Modifier.width(6.dp))
+                  Text("Record COD Cash Collected")
                 }
               }
             }
           }
         }
       }
+      }
     }
   }
 
+  // Step A: Verify customer OTP ONLY (never calls driver_update_delivery_status here)
   if (showOtpDialog) {
-    AlertDialog(onDismissRequest = { if (!actionBusy) showOtpDialog = false },
-      title = { Text("Confirm customer delivery OTP") },
-      text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Ask the customer to open JTBazar order tracking and show the six-digit delivery code. A delivery photo must also be uploaded before completion.", fontSize = 12.sp)
-        OutlinedTextField(value = otpCode, onValueChange = { otpCode = it.filter(Char::isDigit).take(6) }, label = { Text("6-digit OTP") }, singleLine = true)
-      } },
-      confirmButton = { Button(enabled = !actionBusy && otpCode.length == 6, onClick = {
-        scope.launch {
-          actionBusy = true
-          try {
-            val verified = SupabaseClient.rpc("driver_verify_delivery_otp", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_code", otpCode).toString()).getOrThrow().trim().equals("true", true)
-            if (!verified) throw IllegalStateException("Incorrect or expired OTP. Ask the customer to generate a new code.")
-            SupabaseClient.rpc("driver_update_delivery_status", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_action", "delivered").toString()).getOrThrow()
-            showOtpDialog = false; message = "Delivery completed successfully."; load()
-          } catch (e: Exception) { error = e.message ?: "Could not verify delivery OTP." }
-          finally { actionBusy = false }
+    AlertDialog(
+      onDismissRequest = { if (!actionBusy) showOtpDialog = false },
+      title = { Text("Verify Customer Delivery OTP", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text(
+            "Ask the customer to open JTBazar order tracking and share their 6-digit delivery code. After 5 incorrect attempts the code locks and a new code must be generated.",
+            fontSize = 12.sp
+          )
+          OutlinedTextField(
+            value = otpCode,
+            onValueChange = {
+              otpCode = it.filter(Char::isDigit).take(6)
+              otpDialogError = null
+            },
+            label = { Text("6-digit OTP") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("driver_otp_input")
+          )
+          otpDialogError?.let { dialogErr ->
+            Surface(
+              color = MaterialTheme.colorScheme.errorContainer,
+              shape = RoundedCornerShape(8.dp),
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("driver_otp_error")
+            ) {
+              Text(
+                text = dialogErr,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontSize = 11.5.sp,
+                modifier = Modifier.padding(10.dp)
+              )
+            }
+          }
         }
-      }) { Text(if (actionBusy) "Verifying…" else "Verify & complete delivery") } },
-      dismissButton = { TextButton(onClick = { showOtpDialog = false }) { Text("Cancel") } })
+      },
+      confirmButton = {
+        Button(
+          enabled = !actionBusy && otpCode.length == 6,
+          onClick = {
+            if (actionBusy || otpCode.length != 6) return@Button
+            scope.launch {
+              actionBusy = true
+              otpDialogError = null
+              try {
+                val rawVerified = SupabaseClient.rpc(
+                  "driver_verify_delivery_otp",
+                  JSONObject()
+                    .put("p_assignment_id", actionAssignmentId)
+                    .put("p_code", otpCode)
+                    .toString()
+                ).getOrThrow()
+                val verified = rawVerified.trim().equals("true", ignoreCase = true)
+                if (!verified) {
+                  otpDialogError = "Incorrect or expired OTP. Please check the 6-digit code or ask the customer to generate a new one."
+                } else {
+                  deliveries = markAssignmentOtpVerifiedInList(deliveries, actionAssignmentId)
+                  showOtpDialog = false
+                  otpCode = ""
+                  otpDialogError = null
+                  message = "Customer OTP verified! Upload delivery photo proof (if not done) and tap Complete Delivery."
+                  load()
+                }
+              } catch (e: Exception) {
+                otpDialogError = extractDriverFriendlyError(e, "Could not verify delivery OTP. Please try again.")
+              } finally {
+                actionBusy = false
+              }
+            }
+          },
+          modifier = Modifier.testTag("confirm_verify_otp_button")
+        ) {
+          Text(if (actionBusy) "Verifying…" else "Verify OTP")
+        }
+      },
+      dismissButton = {
+        TextButton(
+          enabled = !actionBusy,
+          onClick = {
+            showOtpDialog = false
+            otpDialogError = null
+          }
+        ) { Text("Cancel") }
+      }
+    )
   }
 
   if (showFailedDialog) {
-    AlertDialog(onDismissRequest = { if (!actionBusy) showFailedDialog = false }, title = { Text("Why was delivery unsuccessful?") },
-      text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        listOf("customer_unavailable" to "Customer unavailable", "address_issue" to "Address issue", "customer_refused" to "Customer refused", "delivery_failed" to "Other delivery failure").forEach { (value,label) ->
-          Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = failureReason == value, onClick = { failureReason = value }); Text(label, fontSize = 13.sp) }
+    AlertDialog(
+      onDismissRequest = { if (!actionBusy) showFailedDialog = false },
+      title = { Text("Why was delivery unsuccessful?") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          listOf(
+            "customer_unavailable" to "Customer unavailable",
+            "address_issue" to "Address issue",
+            "customer_refused" to "Customer refused",
+            "delivery_failed" to "Other delivery failure"
+          ).forEach { (value, label) ->
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier
+                .fillMaxWidth()
+                .clickable { failureReason = value }
+            ) {
+              RadioButton(selected = failureReason == value, onClick = { failureReason = value })
+              Text(label, fontSize = 13.sp)
+            }
+          }
+          OutlinedTextField(
+            value = failureNote,
+            onValueChange = { failureNote = it.take(1000) },
+            label = { Text("Extra note (optional)") },
+            minLines = 2
+          )
         }
-        OutlinedTextField(value = failureNote, onValueChange = { failureNote = it.take(1000) }, label = { Text("Extra note (optional)") }, minLines = 2)
-      } },
-      confirmButton = { Button(enabled = !actionBusy, onClick = { scope.launch {
-        actionBusy = true
-        try { SupabaseClient.rpc("driver_mark_delivery_failed", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_reason", failureReason).put("p_note", failureNote).toString()).getOrThrow(); showFailedDialog = false; message = "Delivery issue reported to JTBazar."; load() }
-        catch (e: Exception) { error = e.message ?: "Could not report delivery issue." }
-        finally { actionBusy = false }
-      } }) { Text("Submit reason") } }, dismissButton = { TextButton(onClick = { showFailedDialog = false }) { Text("Cancel") } })
+      },
+      confirmButton = {
+        Button(
+          enabled = !actionBusy,
+          onClick = {
+            if (actionBusy) return@Button
+            scope.launch {
+              actionBusy = true
+              try {
+                SupabaseClient.rpc(
+                  "driver_mark_delivery_failed",
+                  JSONObject()
+                    .put("p_assignment_id", actionAssignmentId)
+                    .put("p_reason", failureReason)
+                    .put("p_note", failureNote)
+                    .toString()
+                ).getOrThrow()
+                showFailedDialog = false
+                message = "Delivery issue reported to JTBazar."
+                load()
+              } catch (e: Exception) {
+                error = extractDriverFriendlyError(e, "Could not report delivery issue.")
+              } finally {
+                actionBusy = false
+              }
+            }
+          }
+        ) { Text(if (actionBusy) "Submitting…" else "Submit reason") }
+      },
+      dismissButton = {
+        TextButton(enabled = !actionBusy, onClick = { showFailedDialog = false }) { Text("Cancel") }
+      }
+    )
   }
 
   if (showCodDialog) {
-    AlertDialog(onDismissRequest = { if (!actionBusy) showCodDialog = false }, title = { Text("Record COD cash") },
-      text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Enter the amount physically received from the customer.", fontSize = 12.sp); OutlinedTextField(value = codAmount, onValueChange = { codAmount = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) }, label = { Text("Collected amount (PKR)") }, singleLine = true) } },
-      confirmButton = { Button(enabled = !actionBusy && codAmount.toDoubleOrNull() != null, onClick = { scope.launch {
-        actionBusy = true
-        try { SupabaseClient.rpc("driver_record_cod_collection", JSONObject().put("p_assignment_id", actionAssignmentId).put("p_amount", codAmount.toDouble()).toString()).getOrThrow(); showCodDialog = false; message = "COD collection recorded."; load() }
-        catch (e: Exception) { error = e.message ?: "Could not record COD collection." }
-        finally { actionBusy = false }
-      } }) { Text("Save collection") } }, dismissButton = { TextButton(onClick = { showCodDialog = false }) { Text("Cancel") } })
+    AlertDialog(
+      onDismissRequest = { if (!actionBusy) showCodDialog = false },
+      title = { Text("Record COD cash") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Enter the amount physically received from the customer.", fontSize = 12.sp)
+          OutlinedTextField(
+            value = codAmount,
+            onValueChange = { codAmount = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) },
+            label = { Text("Collected amount (PKR)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          enabled = !actionBusy && codAmount.toDoubleOrNull() != null,
+          onClick = {
+            val parsedAmount = codAmount.toDoubleOrNull() ?: return@Button
+            if (actionBusy) return@Button
+            scope.launch {
+              actionBusy = true
+              try {
+                SupabaseClient.rpc(
+                  "driver_record_cod_collection",
+                  JSONObject()
+                    .put("p_assignment_id", actionAssignmentId)
+                    .put("p_amount", parsedAmount)
+                    .toString()
+                ).getOrThrow()
+                showCodDialog = false
+                message = "COD collection recorded."
+                load()
+              } catch (e: Exception) {
+                error = extractDriverFriendlyError(e, "Could not record COD collection.")
+              } finally {
+                actionBusy = false
+              }
+            }
+          }
+        ) { Text(if (actionBusy) "Saving…" else "Save collection") }
+      },
+      dismissButton = {
+        TextButton(enabled = !actionBusy, onClick = { showCodDialog = false }) { Text("Cancel") }
+      }
+    )
   }
 
   if (showApplicationLocationPicker) {
@@ -1776,8 +2432,8 @@ fun DriverCenterScreen(
     )
   }
 
-  // BOTTOM SHEET: PICK CAMERA OR GALLERY
-  if (showPickerSheet && activeDocForPicker != null) {
+  // BOTTOM SHEET: PICK CAMERA OR GALLERY (application documents & delivery photo proof)
+  if (showPickerSheet && activePickerTarget != null) {
     ModalBottomSheet(
       onDismissRequest = {
         showPickerSheet = false
@@ -1790,14 +2446,17 @@ fun DriverCenterScreen(
           .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
       ) {
-        val title = when (activeDocForPicker) {
-          DriverDocType.CNIC_FRONT -> "CNIC Front Image"
-          DriverDocType.CNIC_BACK -> "CNIC Back Image"
-          DriverDocType.VEHICLE_PLATE -> "Vehicle Number Plate"
-          null -> "Document"
+        val title = when (val target = activePickerTarget) {
+          is DriverPhotoPickerTarget.ApplicationDoc -> when (target.docType) {
+            DriverDocType.CNIC_FRONT -> "CNIC Front Image"
+            DriverDocType.CNIC_BACK -> "CNIC Back Image"
+            DriverDocType.VEHICLE_PLATE -> "Vehicle Number Plate"
+          }
+          is DriverPhotoPickerTarget.DeliveryProof -> "Delivery Photo Proof"
+          null -> "Photo"
         }
         Text("Select $title", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Choose camera to take a photo or select from device gallery.", fontSize = 12.sp, color = JTTextSecondary)
+        Text("Choose camera to take a photo or select from device gallery (max 8 MB).", fontSize = 12.sp, color = JTTextSecondary)
 
         Spacer(Modifier.height(4.dp))
 
@@ -1808,7 +2467,8 @@ fun DriverCenterScreen(
           },
           modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp),
+            .height(48.dp)
+            .testTag("picker_camera_button"),
           shape = RoundedCornerShape(10.dp)
         ) {
           Icon(Icons.Filled.PhotoCamera, contentDescription = null, tint = Color(0xFFEA580C))
@@ -1825,7 +2485,8 @@ fun DriverCenterScreen(
           },
           modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp),
+            .height(48.dp)
+            .testTag("picker_gallery_button"),
           shape = RoundedCornerShape(10.dp),
           colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
         ) {

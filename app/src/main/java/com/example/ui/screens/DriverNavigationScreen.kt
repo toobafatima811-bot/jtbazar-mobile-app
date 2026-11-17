@@ -64,11 +64,70 @@ fun DriverNavigationScreen(
   customerLng: Double,
   assignmentStatus: String,
   assignmentId: String,
+  otpVerified: Boolean = false,
+  hasDeliveryProof: Boolean = false,
   onStatusUpdated: () -> Unit,
   onBack: () -> Unit
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
+  val session by SupabaseClient.session.collectAsState()
+  val isAuthenticated = session != null && !SupabaseClient.currentUserId.isNullOrBlank()
+  val isActiveDelivery = assignmentStatus.trim().lowercase() !in setOf("delivered", "cancelled", "failed")
+
+  if (!isAuthenticated || !isActiveDelivery) {
+    Scaffold(
+      topBar = {
+        TopAppBar(
+          title = { Text("Customer Location", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+          navigationIcon = {
+            IconButton(onClick = onBack) {
+              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+          },
+          colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+        )
+      }
+    ) { padding ->
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(padding)
+          .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+      ) {
+        Icon(Icons.Filled.Lock, contentDescription = null, tint = Color(0xFFEA580C), modifier = Modifier.size(40.dp))
+        Spacer(Modifier.height(12.dp))
+        Text(
+          text = if (!isAuthenticated) "Driver Sign-In Required" else "Customer Location Unavailable",
+          fontSize = 17.sp,
+          fontWeight = FontWeight.Bold,
+          color = JTTextPrimary
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+          text = if (!isAuthenticated) {
+            "Sign in with an approved, enabled driver account to view active customer delivery details."
+          } else {
+            "Customer delivery details and GPS coordinates are hidden once a delivery is completed or cancelled."
+          },
+          fontSize = 12.5.sp,
+          color = JTTextSecondary,
+          textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(Modifier.height(18.dp))
+        Button(
+          onClick = onBack,
+          modifier = Modifier.heightIn(min = 48.dp),
+          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
+        ) {
+          Text("Back to Driver Center", fontWeight = FontWeight.Bold)
+        }
+      }
+    }
+    return
+  }
 
   var driverLocation by remember { mutableStateOf<Location?>(null) }
   var hasLocationPermission by remember {
@@ -588,7 +647,17 @@ fun DriverNavigationScreen(
               Text("Continue In-App Navigation", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
 
-            // Secondary: Delivery Status Buttons (Picked Up / Delivered)
+            // Secondary: Delivery Status Buttons
+            if (currentStatus == "picked_up" && !(otpVerified && hasDeliveryProof)) {
+              Text(
+                text = missingCompletionStepsMessage(otpVerified, hasDeliveryProof)
+                  ?: "Verify customer OTP and upload delivery photo proof in Driver Center before completing delivery.",
+                fontSize = 11.sp,
+                color = Color(0xFF92400E),
+                fontWeight = FontWeight.Medium
+              )
+            }
+
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -597,6 +666,7 @@ fun DriverNavigationScreen(
                 OutlinedButton(
                   enabled = !isBusy,
                   onClick = {
+                    if (isBusy) return@OutlinedButton
                     scope.launch {
                       isBusy = true
                       actionError = null
@@ -608,45 +678,64 @@ fun DriverNavigationScreen(
                         currentStatus = "picked_up"
                         onStatusUpdated()
                       } else {
-                        actionError = r.exceptionOrNull()?.message
+                        actionError = extractDriverFriendlyError(r.exceptionOrNull(), "Could not update pickup status.")
                       }
                       isBusy = false
                     }
                   },
-                  modifier = Modifier.weight(1f),
+                  modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp),
                   shape = RoundedCornerShape(8.dp)
                 ) {
-                  Text(if (isBusy) "Updating…" else "Mark Picked Up", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                  Text(if (isBusy) "Updating…" else "Mark Picked Up", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
-              }
-
-              if (currentStatus != "delivered") {
-                Button(
-                  enabled = !isBusy,
-                  onClick = {
-                    scope.launch {
-                      isBusy = true
-                      actionError = null
-                      val r = SupabaseClient.rpc(
-                        "driver_update_delivery_status",
-                        JSONObject().put("p_assignment_id", assignmentId).put("p_action", "delivered").toString()
-                      )
-                      if (r.isSuccess) {
-                        currentStatus = "delivered"
-                        onStatusUpdated()
-                      } else {
-                        actionError = r.exceptionOrNull()?.message
+              } else if (currentStatus == "picked_up") {
+                if (otpVerified && hasDeliveryProof) {
+                  Button(
+                    enabled = !isBusy,
+                    onClick = {
+                      if (isBusy) return@Button
+                      scope.launch {
+                        isBusy = true
+                        actionError = null
+                        val r = SupabaseClient.rpc(
+                          "driver_update_delivery_status",
+                          JSONObject().put("p_assignment_id", assignmentId).put("p_action", "delivered").toString()
+                        )
+                        if (r.isSuccess) {
+                          currentStatus = "delivered"
+                          onStatusUpdated()
+                        } else {
+                          actionError = extractDriverFriendlyError(r.exceptionOrNull(), "Could not complete delivery.")
+                        }
+                        isBusy = false
                       }
-                      isBusy = false
-                    }
-                  },
-                  modifier = Modifier.weight(1f),
-                  shape = RoundedCornerShape(8.dp),
-                  colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                ) {
-                  Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp))
-                  Spacer(Modifier.width(4.dp))
-                  Text(if (isBusy) "Updating…" else "Mark Delivered", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    },
+                    modifier = Modifier
+                      .weight(1f)
+                      .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                  ) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (isBusy) "Completing…" else "Complete Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                  }
+                } else {
+                  Button(
+                    enabled = !isBusy,
+                    onClick = onBack,
+                    modifier = Modifier
+                      .weight(1f)
+                      .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                  ) {
+                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Verify OTP & Upload Proof", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                  }
                 }
               }
             }
