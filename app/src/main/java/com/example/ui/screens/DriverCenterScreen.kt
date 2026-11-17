@@ -239,16 +239,28 @@ fun DriverCenterScreen(
         BitmapFactory.decodeByteArray(validated.bytes, 0, validated.bytes.size)
       } ?: throw IllegalArgumentException("Selected file is not a valid image. Please choose a clear photo.")
 
+      // Never trust a stale UI assignment: the server RPC also verifies that this
+      // authenticated, approved driver owns the active assignment.
       val storagePath = buildDeliveryProofPath(uid, assignmentId, validated.extension)
-      SupabaseClient.uploadPrivateFile("driver-documents", storagePath, validated.bytes, validated.mimeType).getOrThrow()
-      SupabaseClient.rpc(
-        "driver_set_delivery_proof_path",
-        JSONObject()
-          .put("p_assignment_id", assignmentId)
-          .put("p_storage_path", storagePath)
-          .toString(),
-        requireAuth = true
-      ).getOrThrow()
+      SupabaseClient.uploadPrivateFile("delivery-proofs", storagePath, validated.bytes, validated.mimeType).getOrThrow()
+      try {
+        SupabaseClient.rpc(
+          "driver_set_delivery_proof_path",
+          JSONObject()
+            .put("p_assignment_id", assignmentId)
+            .put("p_storage_path", storagePath)
+            .toString(),
+          requireAuth = true
+        ).getOrThrow()
+      } catch (rpcError: Exception) {
+        // The object is not considered saved unless the assignment path RPC succeeds.
+        // Best-effort cleanup prevents private orphan objects when the DB write fails.
+        val cleanup = SupabaseClient.deletePrivateFile("delivery-proofs", storagePath)
+        if (cleanup.isFailure) {
+          android.util.Log.w("DriverCenterScreen", "Could not clean orphan delivery proof object after RPC failure.")
+        }
+        throw rpcError
+      }
 
       deliveries = updateAssignmentProofPathInList(deliveries, assignmentId, storagePath)
       proofPreviews = proofPreviews + (assignmentId to decodedBitmap)
