@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.SupportAgent
 import androidx.compose.material.icons.rounded.Tune
@@ -43,9 +44,11 @@ import com.example.ui.theme.VendorSpacing
 fun VendorMoreMenuContent(
   shopName: String,
   accountEmail: String,
+  unreadNotificationsCount: Int = 0,
   onOpenCasesSupport: () -> Unit,
   onOpenShopSettings: () -> Unit,
   onOpenAdvancedTools: () -> Unit,
+  onOpenNotifications: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   LazyColumn(
@@ -119,6 +122,21 @@ fun VendorMoreMenuContent(
 
     item {
       VendorMoreMenuCard(
+        icon = Icons.Rounded.Notifications,
+        title = "Notifications",
+        subtitle = if (unreadNotificationsCount > 0) {
+          "$unreadNotificationsCount unread order or store alert(s)"
+        } else {
+          "View order status updates and store alerts"
+        },
+        badgeText = if (unreadNotificationsCount > 0) "$unreadNotificationsCount unread" else null,
+        onClick = onOpenNotifications,
+        modifier = Modifier.testTag("vendor_more_notifications")
+      )
+    }
+
+    item {
+      VendorMoreMenuCard(
         icon = Icons.Rounded.SupportAgent,
         title = "Cases & Support",
         subtitle = "Respond to customer cases and chat with JTBazar Support",
@@ -155,7 +173,8 @@ private fun VendorMoreMenuCard(
   title: String,
   subtitle: String,
   onClick: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  badgeText: String? = null
 ) {
   AppCard(
     onClick = onClick,
@@ -184,12 +203,23 @@ private fun VendorMoreMenuCard(
         modifier = Modifier.weight(1f),
         verticalArrangement = Arrangement.spacedBy(2.dp)
       ) {
-        Text(
-          text = title,
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.Bold,
-          color = VendorColors.TextPrimary
-        )
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
+        ) {
+          Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = VendorColors.TextPrimary
+          )
+          if (!badgeText.isNullOrBlank()) {
+            StatusBadge(
+              text = badgeText,
+              tone = StatusTone.WARNING
+            )
+          }
+        }
         Text(
           text = subtitle,
           style = MaterialTheme.typography.bodySmall,

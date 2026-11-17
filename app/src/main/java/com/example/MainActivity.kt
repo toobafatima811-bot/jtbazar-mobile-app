@@ -126,18 +126,21 @@ class MainActivity : ComponentActivity() {
     val kind = source.getStringExtra("notification_kind")
     val orderId = source.getStringExtra("related_order_id")
     val link = source.getStringExtra("notification_link")
-    if (id != null || kind != null || orderId != null || link != null) {
+    val audience = source.getStringExtra("notification_audience")
+    if (id != null || kind != null || orderId != null || link != null || audience != null) {
       notificationTap.value = NotificationNavigation(
         id = id,
         kind = kind,
         relatedOrderId = orderId,
-        link = link
+        link = link,
+        audience = audience
       )
       // Clear extras after consuming so activity recreation does not replay the same tap.
       source.removeExtra("notification_id")
       source.removeExtra("notification_kind")
       source.removeExtra("related_order_id")
       source.removeExtra("notification_link")
+      source.removeExtra("notification_audience")
     }
   }
 

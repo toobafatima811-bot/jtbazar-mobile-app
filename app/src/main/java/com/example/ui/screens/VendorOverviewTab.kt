@@ -1,9 +1,13 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.LocalShipping
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
@@ -49,11 +53,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.data.supabase.VendorOrderStatus
 import com.example.ui.components.AppCard
 import com.example.ui.components.EmptyState
 import com.example.ui.components.ErrorState
@@ -64,6 +70,7 @@ import com.example.ui.components.StatusTone
 import com.example.ui.components.VendorSkeletonCard
 import com.example.ui.components.VendorStatGridSkeleton
 import com.example.ui.components.formatPkrPrice
+import com.example.ui.components.vendorOrderStatusBadgeSpec
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
@@ -72,6 +79,7 @@ import org.json.JSONObject
 import java.text.NumberFormat
 import java.util.Locale
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VendorOverviewContent(
   uiState: VendorOverviewUiState,
@@ -79,6 +87,10 @@ fun VendorOverviewContent(
   onAddProduct: () -> Unit,
   onViewAllProducts: () -> Unit,
   onOpenProductDetails: (VendorProductUiModel) -> Unit,
+  onSelectOrderStatus: (VendorOrderStatus) -> Unit = {},
+  onOpenOrders: () -> Unit = {},
+  onOpenOrderDetails: (VendorOrderGroupUiModel) -> Unit = {},
+  onOpenNotifications: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val numberFormatter = remember { NumberFormat.getIntegerInstance(Locale.US) }
@@ -86,7 +98,8 @@ fun VendorOverviewContent(
   LazyColumn(
     modifier = modifier
       .fillMaxSize()
-      .background(VendorColors.Background),
+      .background(VendorColors.Background)
+      .testTag("vendor_overview_list"),
     contentPadding = PaddingValues(VendorSpacing.md),
     verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
   ) {
@@ -98,6 +111,49 @@ fun VendorOverviewContent(
         isRefreshing = uiState.isRefreshing,
         onRefresh = onRefresh
       )
+    }
+
+    // Optional live unread notifications banner
+    if (uiState.unreadNotificationsCount > 0) {
+      item {
+        AppCard(
+          onClick = onOpenNotifications,
+          containerColor = VendorColors.WarningAmberBg,
+          borderColor = VendorColors.WarningAmberAccent.copy(alpha = 0.35f),
+          modifier = Modifier.testTag("vendor_dashboard_notifications_banner")
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.NotificationsActive,
+              contentDescription = "Unread notifications",
+              tint = VendorColors.WarningAmber,
+              modifier = Modifier.size(22.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "${uiState.unreadNotificationsCount} unread notification(s)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = VendorColors.WarningAmber
+              )
+              Text(
+                text = "Tap to view live order & store updates",
+                style = MaterialTheme.typography.bodySmall,
+                color = VendorColors.TextPrimary
+              )
+            }
+            Icon(
+              imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+              contentDescription = "Open notifications",
+              tint = VendorColors.WarningAmber
+            )
+          }
+        }
+      }
     }
 
     // 2. 2x2 Stat Cards (equal height rows)
@@ -113,19 +169,25 @@ fun VendorOverviewContent(
             icon = Icons.Rounded.ShoppingBag,
             value = numberFormatter.format(uiState.totalListings),
             label = "Total listings",
+            supportingText = "Products in catalog",
             modifier = Modifier
               .weight(1f)
               .fillMaxHeight()
+              .clickable(onClick = onViewAllProducts)
+              .testTag("vendor_dashboard_total_listings")
           )
           StatCard(
             icon = Icons.Rounded.ReceiptLong,
-            value = numberFormatter.format(uiState.orderItemsCount),
-            label = "Order items",
+            value = numberFormatter.format(uiState.totalOrdersCount),
+            label = "Total orders",
+            supportingText = "${numberFormatter.format(uiState.orderItemsCount)} order item(s)",
             iconTint = VendorColors.NavyHeader,
             iconBackground = VendorColors.NavyHeader.copy(alpha = 0.10f),
             modifier = Modifier
               .weight(1f)
               .fillMaxHeight()
+              .clickable(onClick = onOpenOrders)
+              .testTag("vendor_dashboard_total_orders")
           )
         }
         Row(
@@ -137,15 +199,19 @@ fun VendorOverviewContent(
           StatCard(
             icon = Icons.Rounded.LocalShipping,
             value = numberFormatter.format(uiState.itemsToPrepareCount),
-            label = "Items to prepare",
+            label = "Needs prep",
+            supportingText = "Pending, confirmed & active",
             modifier = Modifier
               .weight(1f)
               .fillMaxHeight()
+              .clickable(onClick = onOpenOrders)
+              .testTag("vendor_dashboard_needs_prep")
           )
           StatCard(
             icon = Icons.Rounded.Storefront,
             value = uiState.shopStatusLabel,
             label = "Shop status",
+            supportingText = if (uiState.isSellerActive) "Live on JTBazar" else "Under review",
             iconTint = VendorColors.SuccessGreen,
             iconBackground = VendorColors.SuccessGreenBg,
             valueColor = VendorColors.SuccessGreen,
@@ -157,7 +223,181 @@ fun VendorOverviewContent(
       }
     }
 
-    // 3. Single "Add a new product" CTA Card
+    // 3. Live Order Status Badges Breakdown
+    item {
+      AppCard(modifier = Modifier.testTag("vendor_dashboard_status_breakdown")) {
+        Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Order status overview",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = VendorColors.TextPrimary
+              )
+              Text(
+                text = "Live Supabase counts across all order stages",
+                style = MaterialTheme.typography.bodySmall,
+                color = VendorColors.TextSecondary
+              )
+            }
+          }
+
+          FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs),
+            verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs),
+            maxItemsInEachRow = 2
+          ) {
+            VendorOrderStatus.entries.forEach { status ->
+              val count = uiState.statusCounts[status] ?: 0
+              val spec = vendorOrderStatusBadgeSpec(status)
+              val (bg, fg) = when (spec.tone) {
+                StatusTone.SUCCESS -> VendorColors.SuccessGreenBg to VendorColors.SuccessGreen
+                StatusTone.WARNING -> VendorColors.WarningAmberBg to VendorColors.WarningAmber
+                StatusTone.DANGER -> VendorColors.DangerRedBg to VendorColors.DangerRed
+                StatusTone.PRIMARY -> VendorColors.PrimaryOrangeTint to VendorColors.PrimaryOrange
+                StatusTone.NEUTRAL -> VendorColors.NeutralBadgeBg to VendorColors.NeutralBadgeText
+              }
+
+              Surface(
+                onClick = { onSelectOrderStatus(status) },
+                shape = VendorShapes.input,
+                color = VendorColors.Background,
+                border = BorderStroke(
+                  width = 1.dp,
+                  color = if (count > 0) fg.copy(alpha = 0.28f) else VendorColors.BorderSubtle
+                ),
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("vendor_dashboard_status_${status.key}")
+              ) {
+                Row(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = VendorSpacing.sm, vertical = VendorSpacing.xs),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
+                  ) {
+                    Box(
+                      modifier = Modifier
+                        .size(28.dp)
+                        .clip(VendorShapes.badge)
+                        .background(bg),
+                      contentAlignment = Alignment.Center
+                    ) {
+                      Icon(
+                        imageVector = spec.icon,
+                        contentDescription = null,
+                        tint = fg,
+                        modifier = Modifier.size(16.dp)
+                      )
+                    }
+                    Text(
+                      text = spec.label,
+                      style = MaterialTheme.typography.labelMedium,
+                      fontWeight = FontWeight.SemiBold,
+                      color = VendorColors.TextPrimary,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis
+                    )
+                  }
+                  Spacer(modifier = Modifier.width(VendorSpacing.xxs))
+                  Surface(
+                    shape = VendorShapes.pill,
+                    color = if (count > 0) bg else VendorColors.NeutralBadgeBg
+                  ) {
+                    Text(
+                      text = numberFormatter.format(count),
+                      style = MaterialTheme.typography.labelMedium,
+                      fontWeight = FontWeight.Bold,
+                      color = if (count > 0) fg else VendorColors.TextSecondary,
+                      modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Recent Orders Quick Preview
+    if (uiState.recentOrders.isNotEmpty()) {
+      item {
+        SectionHeader(
+          title = "Recent orders",
+          actionLabel = "View all",
+          onActionClick = onOpenOrders
+        )
+      }
+      items(
+        items = uiState.recentOrders.take(3),
+        key = { "overview_order_${it.orderId.ifBlank { it.orderNumber }}" }
+      ) { group ->
+        val badge = vendorOrderStatusBadgeSpec(group.canonicalStatus)
+        AppCard(
+          onClick = { onOpenOrderDetails(group) },
+          modifier = Modifier.testTag("vendor_dashboard_recent_order_${group.orderId}")
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+          ) {
+            Box(
+              modifier = Modifier
+                .size(40.dp)
+                .clip(VendorShapes.iconBox)
+                .background(VendorColors.PrimaryOrangeTint),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                imageVector = Icons.Rounded.ReceiptLong,
+                contentDescription = null,
+                tint = VendorColors.PrimaryOrange,
+                modifier = Modifier.size(20.dp)
+              )
+            }
+            Column(
+              modifier = Modifier.weight(1f),
+              verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+              Text(
+                text = "Order ${group.orderNumber}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = VendorColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Text(
+                text = "${group.items.size} item(s)" + if (group.createdAt.isNotBlank()) " • ${group.createdAt.take(10)}" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = VendorColors.TextSecondary
+              )
+            }
+            StatusBadge(
+              text = badge.label,
+              tone = badge.tone,
+              icon = badge.icon
+            )
+          }
+        }
+      }
+    }
+
+    // 5. Single "Add a new product" CTA Card
     item {
       AppCard(
         onClick = onAddProduct,
@@ -209,7 +449,7 @@ fun VendorOverviewContent(
       }
     }
 
-    // 4. Recent listings header
+    // 6. Recent listings header
     item {
       SectionHeader(
         title = "Recent listings",

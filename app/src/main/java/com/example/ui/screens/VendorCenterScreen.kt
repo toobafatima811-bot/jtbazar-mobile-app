@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Refresh
@@ -59,6 +60,8 @@ import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -100,9 +103,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
+import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseClient
+import com.example.data.supabase.SupabaseRealtimeClient
 import com.example.data.supabase.VendorApplication
+import com.example.data.supabase.VendorOrderStatus
 import com.example.data.supabase.VendorService
 import com.example.ui.components.AppCard
 import com.example.ui.components.ErrorState
@@ -113,6 +123,7 @@ import com.example.ui.components.StatusBadge
 import com.example.ui.components.StatusTone
 import com.example.ui.components.VendorAlertBanner
 import com.example.ui.components.VendorOutlinedTextField
+import com.example.ui.components.VendorSkeletonCard
 import com.example.ui.components.VendorStatGridSkeleton
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
@@ -124,7 +135,11 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import org.osmdroid.config.Configuration
@@ -138,7 +153,12 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VendorCenterScreen(onBack: () -> Unit) {
+fun VendorCenterScreen(
+  onBack: () -> Unit,
+  onOpenNotifications: () -> Unit = {},
+  initialTab: VendorBottomTab? = null,
+  initialOrderId: String? = null
+) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val user by SupabaseClient.currentUser.collectAsState()
@@ -149,11 +169,10 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var productDeletionRequests by remember { mutableStateOf(JSONArray()) }
   var deletionTarget by remember { mutableStateOf<JSONObject?>(null) }
   var deletionReason by remember { mutableStateOf("") }
-  var orders by remember { mutableStateOf(JSONArray()) }
+  var allOrdersRaw by remember { mutableStateOf(JSONArray()) }
   var ordersSearch by remember { mutableStateOf("") }
   var ordersStatus by remember { mutableStateOf("all") }
   var ordersPage by remember { mutableIntStateOf(0) }
-  var ordersTotal by remember { mutableIntStateOf(0) }
   var ordersLoading by remember { mutableStateOf(false) }
   var loading by remember { mutableStateOf(true) }
   var hasLoadedData by remember { mutableStateOf(false) }
@@ -179,12 +198,40 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   var shopImageUri by remember { mutableStateOf<Uri?>(null) }
   var editingProduct by remember { mutableStateOf<JSONObject?>(null) }
   var viewingProduct by remember { mutableStateOf<JSONObject?>(null) }
+  var selectedOrderId by remember { mutableStateOf(initialOrderId) }
 
-  var selectedTab by remember { mutableStateOf(VendorBottomTab.OVERVIEW) }
+  var selectedTab by remember { mutableStateOf(initialTab ?: VendorBottomTab.OVERVIEW) }
   var moreSection by remember { mutableStateOf(VendorMoreSection.MENU) }
-  var activeSubScreen by remember { mutableStateOf<String?>(null) } // "product_add", "product_edit", "product_details"
+  var activeSubScreen by remember {
+    mutableStateOf<String?>(if (!initialOrderId.isNullOrBlank()) "order_details" else null)
+  } // "product_add", "product_edit", "product_details", "order_details"
 
   val isApprovedVendor = isVendor && application?.status == "approved" && application?.vendorLocked != true
+  val notifications by MarketplaceRepository.notifications.collectAsState()
+  val unreadNotificationsCount = remember(notifications) { notifications.count { !it.isRead } }
+  val ordersSyncMutex = remember { Mutex() }
+  val lifecycleOwner = LocalLifecycleOwner.current
+
+  suspend fun refreshOrdersInternal(showLoader: Boolean, surfaceErrors: Boolean = showLoader) {
+    ordersSyncMutex.withLock {
+      if (showLoader) {
+        ordersLoading = true
+        actionErrorMessage = ""
+      }
+      try {
+        allOrdersRaw = VendorService.listAllOrderItemsReconciled()
+        MarketplaceRepository.refreshNotifications(user?.id)
+      } catch (e: Exception) {
+        if (surfaceErrors) {
+          actionErrorMessage = vendorLoadErrorMessage(e)
+        }
+      } finally {
+        if (showLoader) {
+          ordersLoading = false
+        }
+      }
+    }
+  }
 
   fun refresh() {
     scope.launch {
@@ -196,9 +243,9 @@ fun VendorCenterScreen(onBack: () -> Unit) {
         if (isVendor && application?.status == "approved") {
           products = VendorService.listProducts()
           productDeletionRequests = VendorService.listProductDeletionRequests()
-          orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus)
-          ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
+          refreshOrdersInternal(showLoader = false, surfaceErrors = false)
         }
+        MarketplaceRepository.refreshNotifications(user?.id)
         hasLoadedData = true
         actionErrorMessage = ""
       } catch (e: Exception) {
@@ -211,6 +258,68 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   }
 
   LaunchedEffect(user?.id) { refresh() }
+
+  LaunchedEffect(initialTab, initialOrderId) {
+    if (initialTab != null) {
+      selectedTab = initialTab
+    }
+    if (!initialOrderId.isNullOrBlank()) {
+      selectedOrderId = initialOrderId
+      selectedTab = VendorBottomTab.ORDERS
+      activeSubScreen = "order_details"
+    }
+  }
+
+  LaunchedEffect(selectedTab, activeSubScreen, isApprovedVendor) {
+    if (isApprovedVendor && hasLoadedData &&
+      (selectedTab == VendorBottomTab.OVERVIEW || selectedTab == VendorBottomTab.ORDERS || activeSubScreen == "order_details")
+    ) {
+      refreshOrdersInternal(showLoader = false, surfaceErrors = false)
+    }
+  }
+
+  DisposableEffect(lifecycleOwner, isApprovedVendor, user?.id) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME && isApprovedVendor) {
+        scope.launch {
+          refreshOrdersInternal(showLoader = false, surfaceErrors = false)
+        }
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose {
+      lifecycleOwner.lifecycle.removeObserver(observer)
+    }
+  }
+
+  LaunchedEffect(lifecycleOwner, isApprovedVendor, user?.id) {
+    val uid = user?.id
+    if (!isApprovedVendor || uid.isNullOrBlank()) return@LaunchedEffect
+    lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+      val realtime = SupabaseRealtimeClient(
+        subscribeToCatalogTables = false,
+        subscribeToVendorOrderTables = true,
+        subscribeToNotificationTables = true,
+        onOrdersChanged = {
+          scope.launch {
+            refreshOrdersInternal(showLoader = false, surfaceErrors = false)
+          }
+        },
+        onNotificationsChanged = {
+          MarketplaceRepository.refreshNotifications(uid)
+        }
+      )
+      realtime.start()
+      try {
+        while (isActive) {
+          delay(15_000L)
+          refreshOrdersInternal(showLoader = false, surfaceErrors = false)
+        }
+      } finally {
+        realtime.stop()
+      }
+    }
+  }
 
   // Pre-fetch product thumbnail URLs whenever the products array updates
   LaunchedEffect(products) {
@@ -231,22 +340,6 @@ fun VendorCenterScreen(onBack: () -> Unit) {
       }.awaitAll().toMap()
     }
     productImageUrls = loaded
-  }
-
-  fun fetchOrders(page: Int, search: String, status: String) {
-    scope.launch {
-      ordersLoading = true
-      actionErrorMessage = ""
-      try {
-        ordersPage = page
-        orders = VendorService.listOrders(page, search, status)
-        ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
-      } catch (e: Exception) {
-        actionErrorMessage = e.message ?: "Orders could not be loaded."
-      } finally {
-        ordersLoading = false
-      }
-    }
   }
 
   suspend fun upload(uri: Uri, side: String): String {
@@ -306,6 +399,10 @@ fun VendorCenterScreen(onBack: () -> Unit) {
       activeSubScreen == "product_add" -> {
         activeSubScreen = null
       }
+      activeSubScreen == "order_details" -> {
+        selectedOrderId = null
+        activeSubScreen = null
+      }
       isApprovedVendor && selectedTab == VendorBottomTab.MORE && moreSection != VendorMoreSection.MENU -> {
         moreSection = VendorMoreSection.MENU
       }
@@ -323,12 +420,26 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   val productUiModels = remember(products, productDeletionRequests, productImageUrls) {
     mapProductsToUiModels(products, productDeletionRequests, productImageUrls)
   }
-  val orderGroups = remember(orders) { mapOrdersToUiGroups(orders) }
+  val allOrderGroups = remember(allOrdersRaw) { mapOrdersToUiGroups(allOrdersRaw) }
+  val ordersSummary = remember(allOrderGroups, ordersSearch, ordersStatus, ordersPage) {
+    filterAndPaginateVendorOrders(
+      allGroups = allOrderGroups,
+      searchQuery = ordersSearch,
+      selectedStatus = ordersStatus,
+      page = ordersPage,
+      pageSize = 12
+    )
+  }
+  val selectedOrderGroup = remember(allOrderGroups, selectedOrderId) {
+    val target = selectedOrderId ?: return@remember null
+    allOrderGroups.firstOrNull { it.orderId == target }
+  }
 
   val topBarTitle = when {
     activeSubScreen == "product_add" -> "Add listing"
     activeSubScreen == "product_edit" -> "Edit product"
     activeSubScreen == "product_details" -> "Product details"
+    activeSubScreen == "order_details" -> "Order details"
     isApprovedVendor && selectedTab == VendorBottomTab.MORE -> when (moreSection) {
       VendorMoreSection.CASES_SUPPORT -> "Cases & Support"
       VendorMoreSection.SHOP_SETTINGS -> "Shop Settings"
@@ -339,6 +450,8 @@ fun VendorCenterScreen(onBack: () -> Unit) {
   }
 
   val topBarSubtitle = when {
+    activeSubScreen == "order_details" && selectedOrderGroup != null ->
+      "Order ${selectedOrderGroup.orderNumber}"
     activeSubScreen != null -> application?.shopName?.takeIf { it.isNotBlank() }
     isApprovedVendor -> application?.shopName?.takeIf { it.isNotBlank() } ?: "Your shop, products & pickup"
     else -> "Your shop, products & pickup preparation"
@@ -390,6 +503,37 @@ fun VendorCenterScreen(onBack: () -> Unit) {
               }
             },
             actions = {
+              if (user != null && activeSubScreen == null) {
+                IconButton(
+                  onClick = onOpenNotifications,
+                  modifier = Modifier
+                    .size(VendorSpacing.touchMin)
+                    .testTag("vendor_top_notifications_button")
+                ) {
+                  BadgedBox(
+                    badge = {
+                      if (unreadNotificationsCount > 0) {
+                        Badge(
+                          containerColor = VendorColors.DangerRed,
+                          contentColor = Color.White,
+                          modifier = Modifier.testTag("vendor_top_notifications_badge")
+                        ) {
+                          Text(
+                            text = unreadNotificationsCount.coerceAtMost(99).toString(),
+                            style = MaterialTheme.typography.labelSmall
+                          )
+                        }
+                      }
+                    }
+                  ) {
+                    Icon(
+                      imageVector = Icons.Rounded.Notifications,
+                      contentDescription = "Notifications",
+                      tint = VendorColors.TextPrimary
+                    )
+                  }
+                }
+              }
               if (activeSubScreen == null) {
                 IconButton(
                   onClick = { refresh() },
@@ -448,11 +592,43 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                     }
                   },
                   icon = {
-                    Icon(
-                      imageVector = icon,
-                      contentDescription = tab.label,
-                      modifier = Modifier.size(24.dp)
-                    )
+                    val ordersBadgeCount = if (tab == VendorBottomTab.ORDERS) ordersSummary.itemsToPrepareCount else 0
+                    val showMoreBadge = tab == VendorBottomTab.MORE && unreadNotificationsCount > 0
+                    if (ordersBadgeCount > 0 || showMoreBadge) {
+                      BadgedBox(
+                        badge = {
+                          if (ordersBadgeCount > 0) {
+                            Badge(
+                              containerColor = VendorColors.PrimaryOrange,
+                              contentColor = Color.White,
+                              modifier = Modifier.testTag("vendor_orders_nav_badge")
+                            ) {
+                              Text(
+                                text = ordersBadgeCount.coerceAtMost(99).toString(),
+                                style = MaterialTheme.typography.labelSmall
+                              )
+                            }
+                          } else if (showMoreBadge) {
+                            Badge(
+                              containerColor = VendorColors.DangerRed,
+                              modifier = Modifier.testTag("vendor_more_nav_badge")
+                            )
+                          }
+                        }
+                      ) {
+                        Icon(
+                          imageVector = icon,
+                          contentDescription = tab.label,
+                          modifier = Modifier.size(24.dp)
+                        )
+                      }
+                    } else {
+                      Icon(
+                        imageVector = icon,
+                        contentDescription = tab.label,
+                        modifier = Modifier.size(24.dp)
+                      )
+                    }
                   },
                   label = {
                     Text(
@@ -601,6 +777,62 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                 }
               }
 
+              "order_details" -> {
+                val group = selectedOrderGroup
+                when {
+                  group != null -> VendorOrderDetailsScreen(
+                    group = group,
+                    isBusy = saving || ordersLoading,
+                    actionError = actionErrorMessage,
+                    infoMessage = info,
+                    onBack = {
+                      selectedOrderId = null
+                      activeSubScreen = null
+                    },
+                    onRefresh = {
+                      scope.launch {
+                        refreshOrdersInternal(showLoader = true)
+                      }
+                    },
+                    onPrintPackingSlip = {
+                      printVendorPackingSlip(context, group.rawItems)
+                    },
+                    onMarkReady = { note ->
+                      scope.launch {
+                        saving = true
+                        actionErrorMessage = ""
+                        info = ""
+                        try {
+                          VendorService.markOrderReady(group.orderId, note)
+                          info = "Marked ready for JTBazar pickup."
+                          refreshOrdersInternal(showLoader = false)
+                        } catch (e: Exception) {
+                          actionErrorMessage = e.message ?: "Could not update order."
+                        } finally {
+                          saving = false
+                        }
+                      }
+                    },
+                    onDismissAlert = {
+                      actionErrorMessage = ""
+                      info = ""
+                    }
+                  )
+                  ordersLoading || !hasLoadedData -> Column(
+                    modifier = Modifier
+                      .fillMaxSize()
+                      .padding(VendorSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+                  ) {
+                    repeat(3) { VendorSkeletonCard() }
+                  }
+                  else -> LaunchedEffect(selectedOrderId) {
+                    selectedOrderId = null
+                    activeSubScreen = null
+                  }
+                }
+              }
+
               else -> {
                 when (selectedTab) {
                   VendorBottomTab.OVERVIEW -> {
@@ -616,11 +848,15 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                         shopName = application?.shopName.orEmpty(),
                         isSellerActive = true,
                         totalListings = products.length(),
-                        orderItemsCount = ordersTotal,
-                        itemsToPrepareCount = orders.length(),
+                        totalOrdersCount = ordersSummary.totalAllOrders,
+                        orderItemsCount = ordersSummary.totalOrderItemsCount,
+                        itemsToPrepareCount = ordersSummary.itemsToPrepareCount,
+                        statusCounts = ordersSummary.statusCounts,
+                        unreadNotificationsCount = unreadNotificationsCount,
+                        recentOrders = allOrderGroups.take(3),
                         shopStatusLabel = "Active",
                         recentProductsState = recentState,
-                        isRefreshing = loading
+                        isRefreshing = loading || ordersLoading
                       ),
                       onRefresh = { refresh() },
                       onAddProduct = { activeSubScreen = "product_add" },
@@ -628,7 +864,20 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                       onOpenProductDetails = { model ->
                         viewingProduct = model.rawJson
                         activeSubScreen = "product_details"
-                      }
+                      },
+                      onSelectOrderStatus = { status ->
+                        ordersStatus = status.key
+                        ordersPage = 0
+                        selectedTab = VendorBottomTab.ORDERS
+                      },
+                      onOpenOrders = {
+                        selectedTab = VendorBottomTab.ORDERS
+                      },
+                      onOpenOrderDetails = { group ->
+                        selectedOrderId = group.orderId
+                        activeSubScreen = "order_details"
+                      },
+                      onOpenNotifications = onOpenNotifications
                     )
                   }
 
@@ -718,35 +967,46 @@ fun VendorCenterScreen(onBack: () -> Unit) {
 
                   VendorBottomTab.ORDERS -> {
                     val ordersState = when {
-                      (loading && !hasLoadedData) || ordersLoading -> VendorSectionState.Loading
-                      errorMessage.isNotBlank() && orderGroups.isEmpty() ->
+                      (loading && !hasLoadedData) || (ordersLoading && allOrderGroups.isEmpty()) -> VendorSectionState.Loading
+                      errorMessage.isNotBlank() && allOrderGroups.isEmpty() ->
                         VendorSectionState.Error(errorMessage)
-                      orderGroups.isEmpty() -> VendorSectionState.Empty
-                      else -> VendorSectionState.Content(orderGroups)
+                      ordersSummary.pageOrders.isEmpty() -> VendorSectionState.Empty
+                      else -> VendorSectionState.Content(ordersSummary.pageOrders)
                     }
                     VendorOrdersContent(
                       uiState = VendorOrdersUiState(
                         searchQuery = ordersSearch,
                         selectedStatus = ordersStatus,
-                        page = ordersPage,
-                        totalOrders = ordersTotal,
+                        page = ordersSummary.effectivePage,
+                        totalOrders = ordersSummary.filteredOrders.size,
+                        totalAllOrders = ordersSummary.totalAllOrders,
+                        statusCounts = ordersSummary.statusCounts,
                         ordersState = ordersState,
                         isBusy = saving || ordersLoading,
                         actionError = actionErrorMessage,
                         infoMessage = info
                       ),
-                      onSearchChange = { ordersSearch = it },
-                      onSearchSubmit = { fetchOrders(0, ordersSearch, ordersStatus) },
+                      onSearchChange = {
+                        ordersSearch = it
+                        ordersPage = 0
+                      },
+                      onSearchSubmit = {
+                        ordersPage = 0
+                        scope.launch { refreshOrdersInternal(showLoader = false) }
+                      },
                       onStatusSelect = { status ->
                         ordersStatus = status
-                        fetchOrders(0, ordersSearch, status)
+                        ordersPage = 0
+                        scope.launch { refreshOrdersInternal(showLoader = false) }
                       },
                       onPrevPage = {
-                        if (ordersPage > 0) fetchOrders(ordersPage - 1, ordersSearch, ordersStatus)
+                        if (ordersSummary.effectivePage > 0) {
+                          ordersPage = ordersSummary.effectivePage - 1
+                        }
                       },
                       onNextPage = {
-                        if ((ordersPage + 1) * 12 < ordersTotal) {
-                          fetchOrders(ordersPage + 1, ordersSearch, ordersStatus)
+                        if ((ordersSummary.effectivePage + 1) * 12 < ordersSummary.filteredOrders.size) {
+                          ordersPage = ordersSummary.effectivePage + 1
                         }
                       },
                       onPrintPackingSlip = { group ->
@@ -760,8 +1020,7 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                           try {
                             VendorService.markOrderReady(group.orderId)
                             info = "Marked ready for JTBazar pickup."
-                            orders = VendorService.listOrders(ordersPage, ordersSearch, ordersStatus)
-                            ordersTotal = orders.optJSONObject(0)?.optInt("total_orders", 0) ?: 0
+                            refreshOrdersInternal(showLoader = false)
                           } catch (e: Exception) {
                             actionErrorMessage = e.message ?: "Could not update order."
                           } finally {
@@ -769,10 +1028,16 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                           }
                         }
                       },
-                      onRefresh = { fetchOrders(ordersPage, ordersSearch, ordersStatus) },
+                      onRefresh = {
+                        scope.launch { refreshOrdersInternal(showLoader = true) }
+                      },
                       onDismissAlert = {
                         actionErrorMessage = ""
                         info = ""
+                      },
+                      onOpenOrderDetails = { group ->
+                        selectedOrderId = group.orderId
+                        activeSubScreen = "order_details"
                       }
                     )
                   }
@@ -782,9 +1047,11 @@ fun VendorCenterScreen(onBack: () -> Unit) {
                       VendorMoreSection.MENU -> VendorMoreMenuContent(
                         shopName = application?.shopName.orEmpty(),
                         accountEmail = user?.email.orEmpty(),
+                        unreadNotificationsCount = unreadNotificationsCount,
                         onOpenCasesSupport = { moreSection = VendorMoreSection.CASES_SUPPORT },
                         onOpenShopSettings = { moreSection = VendorMoreSection.SHOP_SETTINGS },
-                        onOpenAdvancedTools = { moreSection = VendorMoreSection.ADVANCED_TOOLS }
+                        onOpenAdvancedTools = { moreSection = VendorMoreSection.ADVANCED_TOOLS },
+                        onOpenNotifications = onOpenNotifications
                       )
 
                       VendorMoreSection.CASES_SUPPORT -> VendorCasesScreen()

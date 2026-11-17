@@ -1,5 +1,7 @@
 package com.example.data.supabase
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -89,11 +91,172 @@ object VendorService {
       }
     }
   }
-  suspend fun listOrders(page: Int = 0, search: String = "", status: String = "all"): JSONArray =
-    JSONArray(fail(SupabaseClient.rpc("vendor_order_items_page", JSONObject()
+  suspend fun listOrders(page: Int = 0, search: String = "", status: String = "all"): JSONArray {
+    val normalizedStatus = VendorOrderStatus.parse(status)?.key
+    val raw = JSONArray(fail(SupabaseClient.rpc("vendor_order_items_page", JSONObject()
       .put("p_limit", 12).put("p_offset", page.coerceAtLeast(0) * 12)
       .put("p_search", search.trim().takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
-      .put("p_status", status.takeIf { it in setOf("pending", "delivered", "not_delivered") } ?: JSONObject.NULL).toString())))
+      .put("p_status", normalizedStatus ?: JSONObject.NULL).toString())))
+    return enrichOrderItemsRows(raw)
+  }
+
+  /**
+   * Fetches all vendor order items with unfiltered RPC pages and reconciles them against
+   * `orders`, `vendor_order_pickups`, and `order_items` so dashboard badges, tab counts,
+   * order cards, and order details reflect live Supabase status updates without stale Pending locks.
+   */
+  suspend fun listAllOrderItemsReconciled(maxItems: Int = 1000): JSONArray {
+    val pageSize = 200
+    val collected = mutableListOf<JSONObject>()
+    val seenItemKeys = HashSet<String>()
+    var offset = 0
+
+    while (offset < maxItems) {
+      val batch = JSONArray(
+        fail(
+          SupabaseClient.rpc(
+            "vendor_order_items_page",
+            JSONObject()
+              .put("p_limit", pageSize)
+              .put("p_offset", offset)
+              .put("p_search", JSONObject.NULL)
+              .put("p_status", JSONObject.NULL)
+              .toString()
+          )
+        )
+      )
+      if (batch.length() == 0) break
+
+      var addedInBatch = 0
+      for (i in 0 until batch.length()) {
+        val row = batch.optJSONObject(i) ?: continue
+        val itemId = text(row, "id").ifBlank { text(row, "order_item_id") }
+        val orderId = text(row, "order_id")
+        val dedupeKey = if (itemId.isNotBlank()) itemId else "$orderId:${text(row, "product_name_snapshot")}:$offset:$i"
+        if (seenItemKeys.add(dedupeKey)) {
+          collected.add(row)
+          addedInBatch++
+        }
+      }
+
+      val reportedTotal = batch.optJSONObject(0)?.optInt("total_orders", -1) ?: -1
+      val distinctOrderIds = collected.mapNotNull { text(it, "order_id").takeIf(String::isNotBlank) }.toSet().size
+      if (batch.length() < pageSize || addedInBatch == 0 || (reportedTotal in 0..distinctOrderIds)) {
+        break
+      }
+      offset += batch.length()
+    }
+
+    val combined = JSONArray()
+    collected.forEach { combined.put(it) }
+    return enrichOrderItemsRows(combined)
+  }
+
+  /**
+   * Best-effort enrichment of order item rows with latest `orders.order_status`,
+   * `orders.confirmation_status`, `vendor_order_pickups.status`, and `order_items`
+   * columns. If any table query is restricted by RLS, existing RPC fields are preserved.
+   */
+  suspend fun enrichOrderItemsRows(rows: JSONArray): JSONArray {
+    if (rows.length() == 0) return rows
+
+    val orderIds = (0 until rows.length())
+      .mapNotNull { rows.optJSONObject(it)?.let { row -> text(row, "order_id").takeIf(String::isNotBlank) } }
+      .distinct()
+    if (orderIds.isEmpty()) return rows
+
+    val ordersById = HashMap<String, JSONObject>()
+    val pickupsByOrderId = HashMap<String, JSONObject>()
+    val itemsById = HashMap<String, JSONObject>()
+
+    coroutineScope {
+      orderIds.chunked(50).forEach { chunk ->
+        val inFilter = chunk.joinToString(",")
+        val ordersJob = async {
+          runCatching {
+            val raw = SupabaseClient.get(
+              "orders?id=in.($inFilter)&select=id,order_status,confirmation_status,updated_at,delivered_at"
+            ).getOrNull().orEmpty()
+            if (raw.trim().startsWith("[")) JSONArray(raw) else JSONArray()
+          }.getOrDefault(JSONArray())
+        }
+        val pickupsJob = async {
+          runCatching {
+            val raw = SupabaseClient.get(
+              "vendor_order_pickups?order_id=in.($inFilter)&select=order_id,status,ready_at,picked_up_at,vendor_note,updated_at"
+            ).getOrNull().orEmpty()
+            if (raw.trim().startsWith("[")) JSONArray(raw) else JSONArray()
+          }.getOrDefault(JSONArray())
+        }
+        val itemsJob = async {
+          runCatching {
+            val raw = SupabaseClient.get(
+              "order_items?order_id=in.($inFilter)&select=id,order_id,vendor_fulfillment_status,vendor_note,vendor_updated_at,tracking_number,tracking_url"
+            ).getOrNull().orEmpty()
+            if (raw.trim().startsWith("[")) JSONArray(raw) else JSONArray()
+          }.getOrDefault(JSONArray())
+        }
+
+        val ordersArr = ordersJob.await()
+        for (i in 0 until ordersArr.length()) {
+          val o = ordersArr.optJSONObject(i) ?: continue
+          val id = text(o, "id")
+          if (id.isNotBlank()) ordersById[id] = o
+        }
+
+        val pickupsArr = pickupsJob.await()
+        for (i in 0 until pickupsArr.length()) {
+          val p = pickupsArr.optJSONObject(i) ?: continue
+          val oid = text(p, "order_id")
+          if (oid.isNotBlank()) pickupsByOrderId[oid] = p
+        }
+
+        val itemsArr = itemsJob.await()
+        for (i in 0 until itemsArr.length()) {
+          val itm = itemsArr.optJSONObject(i) ?: continue
+          val id = text(itm, "id")
+          if (id.isNotBlank()) itemsById[id] = itm
+        }
+      }
+    }
+
+    val enriched = JSONArray()
+    for (i in 0 until rows.length()) {
+      val src = rows.optJSONObject(i) ?: continue
+      val copy = JSONObject(src.toString())
+      val orderId = text(copy, "order_id")
+      val itemId = text(copy, "id").ifBlank { text(copy, "order_item_id") }
+
+      ordersById[orderId]?.let { liveOrder ->
+        text(liveOrder, "order_status").takeIf(String::isNotBlank)?.let { copy.put("order_status", it) }
+        text(liveOrder, "confirmation_status").takeIf(String::isNotBlank)?.let { copy.put("confirmation_status", it) }
+        text(liveOrder, "updated_at").takeIf(String::isNotBlank)?.let { copy.put("order_updated_at", it) }
+        text(liveOrder, "delivered_at").takeIf(String::isNotBlank)?.let { copy.put("delivered_at", it) }
+      }
+
+      pickupsByOrderId[orderId]?.let { livePickup ->
+        text(livePickup, "status").takeIf(String::isNotBlank)?.let { copy.put("pickup_status", it) }
+        text(livePickup, "ready_at").takeIf(String::isNotBlank)?.let { copy.put("pickup_ready_at", it) }
+        text(livePickup, "picked_up_at").takeIf(String::isNotBlank)?.let { copy.put("picked_up_at", it) }
+        text(livePickup, "vendor_note").takeIf(String::isNotBlank)?.let { copy.put("pickup_vendor_note", it) }
+        text(livePickup, "updated_at").takeIf(String::isNotBlank)?.let { copy.put("pickup_updated_at", it) }
+      }
+
+      itemsById[itemId]?.let { liveItem ->
+        text(liveItem, "vendor_fulfillment_status").takeIf(String::isNotBlank)?.let {
+          copy.put("vendor_fulfillment_status", it)
+        }
+        text(liveItem, "vendor_note").takeIf(String::isNotBlank)?.let { copy.put("vendor_note", it) }
+        text(liveItem, "vendor_updated_at").takeIf(String::isNotBlank)?.let { copy.put("vendor_updated_at", it) }
+        text(liveItem, "tracking_number").takeIf(String::isNotBlank)?.let { copy.put("tracking_number", it) }
+        text(liveItem, "tracking_url").takeIf(String::isNotBlank)?.let { copy.put("tracking_url", it) }
+      }
+
+      enriched.put(copy)
+    }
+    return enriched
+  }
+
   suspend fun markOrderReady(orderId: String, note: String = "") {
     val raw = try {
       fail(SupabaseClient.rpc("vendor_mark_order_ready", JSONObject().put("p_order_id", orderId).put("p_vendor_note", note.ifBlank { JSONObject.NULL }).toString()))

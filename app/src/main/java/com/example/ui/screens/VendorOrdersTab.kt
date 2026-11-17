@@ -22,12 +22,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.LocalShipping
 import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -38,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +48,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.data.supabase.VendorOrderStatus
 import com.example.ui.components.AppCard
 import com.example.ui.components.EmptyState
 import com.example.ui.components.ErrorState
@@ -55,22 +56,15 @@ import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecondaryButton
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.StatusBadge
-import com.example.ui.components.StatusTone
 import com.example.ui.components.VendorAlertBanner
 import com.example.ui.components.VendorOutlinedTextField
 import com.example.ui.components.VendorSkeletonCard
+import com.example.ui.components.vendorOrderStatusBadgeSpec
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
 import com.example.ui.theme.VendorSpacing
 import org.json.JSONObject
-
-private val orderFilterOptions = listOf(
-  "all" to "All",
-  "pending" to "Pending",
-  "delivered" to "Delivered",
-  "not_delivered" to "Not delivered"
-)
 
 @Composable
 fun VendorOrdersContent(
@@ -84,22 +78,33 @@ fun VendorOrdersContent(
   onMarkReady: (VendorOrderGroupUiModel) -> Unit,
   onRefresh: () -> Unit,
   onDismissAlert: () -> Unit,
+  onOpenOrderDetails: (VendorOrderGroupUiModel) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val hasPrev = uiState.page > 0
   val hasNext = (uiState.page + 1) * uiState.pageSize < uiState.totalOrders
+  val filterOptions = remember(uiState.totalAllOrders, uiState.statusCounts) {
+    buildList {
+      add("all" to "All (${uiState.totalAllOrders})")
+      VendorOrderStatus.entries.forEach { status ->
+        val count = uiState.statusCounts[status] ?: 0
+        add(status.key to "${status.label} ($count)")
+      }
+    }
+  }
 
   LazyColumn(
     modifier = modifier
       .fillMaxSize()
-      .background(VendorColors.Background),
+      .background(VendorColors.Background)
+      .testTag("vendor_orders_list"),
     contentPadding = PaddingValues(VendorSpacing.md),
     verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
   ) {
     item {
       SectionHeader(
         title = "Vendor orders",
-        subtitle = "Prepare your order items for JTBazar courier pickup.",
+        subtitle = "Track live order statuses and prepare items for courier pickup.",
         actionLabel = "Refresh",
         actionIcon = Icons.Rounded.Refresh,
         onActionClick = onRefresh
@@ -152,9 +157,11 @@ fun VendorOrdersContent(
 
         LazyRow(
           horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("vendor_orders_filter_row")
         ) {
-          items(orderFilterOptions, key = { it.first }) { (key, label) ->
+          items(filterOptions, key = { it.first }) { (key, label) ->
             val selected = uiState.selectedStatus == key
             FilterChip(
               selected = selected,
@@ -218,7 +225,7 @@ fun VendorOrdersContent(
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
             Text(
-              text = "Page ${uiState.page + 1} • ${uiState.totalOrders} orders",
+              text = "Page ${uiState.page + 1} • ${uiState.totalOrders} order(s)",
               style = MaterialTheme.typography.bodySmall,
               fontWeight = FontWeight.SemiBold,
               color = VendorColors.TextSecondary
@@ -271,10 +278,26 @@ fun VendorOrdersContent(
 
       VendorSectionState.Empty -> {
         item {
+          val selectedCanonical = VendorOrderStatus.parse(uiState.selectedStatus)
           EmptyState(
             icon = Icons.Rounded.LocalShipping,
-            title = "No orders yet",
-            description = "Customer contact, payment aur delivery JTBazar sambhalta hai. Aap sirf apne items pickup ke liye taiyar karte hain."
+            title = if (selectedCanonical != null) {
+              "No ${selectedCanonical.label} orders"
+            } else {
+              "No orders yet"
+            },
+            description = if (selectedCanonical != null) {
+              "There are currently no orders in ${selectedCanonical.label} status."
+            } else {
+              "Customer contact, payment aur delivery JTBazar sambhalta hai. Aap sirf apne items pickup ke liye taiyar karte hain."
+            },
+            actionLabel = if (selectedCanonical != null || uiState.searchQuery.isNotBlank()) "Show all orders" else null,
+            onAction = if (selectedCanonical != null || uiState.searchQuery.isNotBlank()) {
+              {
+                if (uiState.searchQuery.isNotBlank()) onSearchChange("")
+                onStatusSelect("all")
+              }
+            } else null
           )
         }
       }
@@ -284,6 +307,7 @@ fun VendorOrdersContent(
           VendorOrderGroupCard(
             group = group,
             isBusy = uiState.isBusy,
+            onOpenDetails = { onOpenOrderDetails(group) },
             onPrintPackingSlip = { onPrintPackingSlip(group) },
             onMarkReady = { onMarkReady(group) }
           )
@@ -297,27 +321,16 @@ fun VendorOrdersContent(
 private fun VendorOrderGroupCard(
   group: VendorOrderGroupUiModel,
   isBusy: Boolean,
+  onOpenDetails: () -> Unit,
   onPrintPackingSlip: () -> Unit,
   onMarkReady: () -> Unit
 ) {
-  val normalizedStatus = group.status.lowercase()
-  val isReady = normalizedStatus == "ready_for_pickup" || normalizedStatus == "delivered"
-  val (statusLabel, statusTone, statusIcon) = when (normalizedStatus) {
-    "ready_for_pickup" -> Triple("Ready for pickup", StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
-    "delivered" -> Triple("Delivered", StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
-    "not_delivered", "cancelled" -> Triple(
-      group.status.replace('_', ' ').replaceFirstChar { it.uppercase() },
-      StatusTone.DANGER,
-      Icons.Rounded.ErrorOutline
-    )
-    else -> Triple(
-      group.status.replace('_', ' ').replaceFirstChar { it.uppercase() },
-      StatusTone.WARNING,
-      Icons.Rounded.Schedule
-    )
-  }
+  val badgeSpec = vendorOrderStatusBadgeSpec(group.canonicalStatus)
 
-  AppCard {
+  AppCard(
+    onClick = onOpenDetails,
+    modifier = Modifier.testTag("vendor_order_card_${group.orderId}")
+  ) {
     Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -359,7 +372,12 @@ private fun VendorOrderGroupCard(
             color = VendorColors.TextSecondary
           )
         }
-        StatusBadge(text = statusLabel, tone = statusTone, icon = statusIcon)
+        StatusBadge(
+          text = badgeSpec.label,
+          tone = badgeSpec.tone,
+          icon = badgeSpec.icon,
+          modifier = Modifier.testTag("vendor_order_status_badge_${group.orderId}")
+        )
       }
 
       HorizontalDivider(color = VendorColors.Divider)
@@ -418,21 +436,39 @@ private fun VendorOrderGroupCard(
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
-        SecondaryButton(
-          text = "Print packing slip",
-          icon = Icons.Rounded.ReceiptLong,
-          enabled = group.orderId.isNotBlank(),
-          onClick = onPrintPackingSlip,
-          modifier = Modifier.fillMaxWidth()
-        )
-        PrimaryButton(
-          text = if (normalizedStatus == "ready_for_pickup") "Ready for pickup" else "Mark ready for pickup",
-          icon = Icons.Rounded.CheckCircle,
-          enabled = !isBusy && group.orderId.isNotBlank() && !isReady,
-          loading = isBusy,
-          onClick = onMarkReady,
-          modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
+        ) {
+          SecondaryButton(
+            text = "Order details",
+            icon = Icons.Rounded.Visibility,
+            enabled = group.orderId.isNotBlank(),
+            onClick = onOpenDetails,
+            modifier = Modifier
+              .weight(1f)
+              .testTag("vendor_order_details_${group.orderId}")
+          )
+          SecondaryButton(
+            text = "Packing slip",
+            icon = Icons.Rounded.ReceiptLong,
+            enabled = group.orderId.isNotBlank(),
+            onClick = onPrintPackingSlip,
+            modifier = Modifier.weight(1f)
+          )
+        }
+        if (group.canonicalStatus.canMarkReadyForPickup) {
+          PrimaryButton(
+            text = "Mark ready for pickup",
+            icon = Icons.Rounded.CheckCircle,
+            enabled = !isBusy && group.orderId.isNotBlank(),
+            loading = isBusy,
+            onClick = onMarkReady,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("vendor_mark_ready_${group.orderId}")
+          )
+        }
       }
     }
   }
@@ -445,13 +481,16 @@ private fun VendorOrdersContentPreview() {
     VendorOrdersContent(
       uiState = VendorOrdersUiState(
         totalOrders = 1,
+        totalAllOrders = 1,
+        statusCounts = mapOf(VendorOrderStatus.PROCESSING to 1),
         ordersState = VendorSectionState.Content(
           listOf(
             VendorOrderGroupUiModel(
               orderId = "ord-1",
               orderNumber = "#JT-94821",
               createdAt = "2026-11-12T10:30:00Z",
-              status = "processing",
+              status = VendorOrderStatus.PROCESSING.key,
+              canonicalStatus = VendorOrderStatus.PROCESSING,
               items = listOf(
                 VendorOrderLineItemUiModel(
                   productName = "Multani Hand-Glazed Ceramic Plate Set",

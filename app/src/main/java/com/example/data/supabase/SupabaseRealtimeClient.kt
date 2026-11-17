@@ -24,13 +24,18 @@ import java.util.concurrent.atomic.AtomicInteger
  * automatically on the Android homepage without manual refreshes.
  */
 class SupabaseRealtimeClient(
-  private val onPromotionsChanged: () -> Unit,
-  private val onCatalogChanged: () -> Unit
+  private val onPromotionsChanged: () -> Unit = {},
+  private val onCatalogChanged: () -> Unit = {},
+  private val onOrdersChanged: () -> Unit = {},
+  private val onNotificationsChanged: () -> Unit = {},
+  private val subscribeToCatalogTables: Boolean = true,
+  private val subscribeToVendorOrderTables: Boolean = true,
+  private val subscribeToNotificationTables: Boolean = true
 ) {
   companion object {
     private const val TAG = "SupabaseRealtime"
     private const val HEARTBEAT_INTERVAL_MS = 25_000L
-    private const val DEBOUNCE_MS = 1_500L
+    private const val DEBOUNCE_MS = 1_200L
   }
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -42,6 +47,8 @@ class SupabaseRealtimeClient(
   private var reconnectJob: Job? = null
   private var promoDebounceJob: Job? = null
   private var catalogDebounceJob: Job? = null
+  private var ordersDebounceJob: Job? = null
+  private var notificationsDebounceJob: Job? = null
   private var reconnectAttempts = 0
 
   fun start() {
@@ -58,6 +65,8 @@ class SupabaseRealtimeClient(
     reconnectJob?.cancel()
     promoDebounceJob?.cancel()
     catalogDebounceJob?.cancel()
+    ordersDebounceJob?.cancel()
+    notificationsDebounceJob?.cancel()
     runCatching { webSocket?.close(1000, "Lifecycle paused") }
     webSocket = null
   }
@@ -80,9 +89,19 @@ class SupabaseRealtimeClient(
         override fun onOpen(webSocket: WebSocket, response: Response) {
           Log.d(TAG, "Connected to Supabase Realtime")
           reconnectAttempts = 0
-          subscribeTable(webSocket, "realtime:public:promotions", "promotions")
-          subscribeTable(webSocket, "realtime:public:homepage_heroes", "homepage_heroes")
-          subscribeTable(webSocket, "realtime:public:product_campaigns", "product_campaigns")
+          if (subscribeToCatalogTables) {
+            subscribeTable(webSocket, "realtime:public:promotions", "promotions")
+            subscribeTable(webSocket, "realtime:public:homepage_heroes", "homepage_heroes")
+            subscribeTable(webSocket, "realtime:public:product_campaigns", "product_campaigns")
+          }
+          if (subscribeToVendorOrderTables && SupabaseClient.isAuthenticated) {
+            subscribeTable(webSocket, "realtime:public:orders", "orders")
+            subscribeTable(webSocket, "realtime:public:order_items", "order_items")
+            subscribeTable(webSocket, "realtime:public:vendor_order_pickups", "vendor_order_pickups")
+          }
+          if (subscribeToNotificationTables && SupabaseClient.isAuthenticated) {
+            subscribeTable(webSocket, "realtime:public:notifications", "notifications")
+          }
           startHeartbeat(webSocket)
         }
 
@@ -115,6 +134,9 @@ class SupabaseRealtimeClient(
       .put("presence", JSONObject().put("key", ""))
       .put("postgres_changes", JSONArray().put(pgRule))
     val payload = JSONObject().put("config", config)
+    SupabaseClient.session.value?.accessToken?.takeIf { it.isNotBlank() }?.let { token ->
+      payload.put("access_token", token)
+    }
     val joinMsg = JSONObject()
       .put("topic", topic)
       .put("event", "phx_join")
@@ -164,6 +186,20 @@ class SupabaseRealtimeClient(
         catalogDebounceJob = scope.launch {
           delay(DEBOUNCE_MS)
           onCatalogChanged()
+        }
+      }
+      "orders", "order_items", "vendor_order_pickups" -> {
+        ordersDebounceJob?.cancel()
+        ordersDebounceJob = scope.launch {
+          delay(DEBOUNCE_MS)
+          onOrdersChanged()
+        }
+      }
+      "notifications" -> {
+        notificationsDebounceJob?.cancel()
+        notificationsDebounceJob = scope.launch {
+          delay(DEBOUNCE_MS)
+          onNotificationsChanged()
         }
       }
     }

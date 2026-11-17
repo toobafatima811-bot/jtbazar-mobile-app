@@ -796,8 +796,89 @@ object MarketplaceRepository {
   private val promotionsRefreshMutex = Mutex()
   private val realtimeClient = SupabaseRealtimeClient(
     onPromotionsChanged = { refreshPromotions(force = true) },
-    onCatalogChanged = { refreshLiveCatalog(showLoading = false, refreshUserData = false) }
+    onCatalogChanged = { refreshLiveCatalog(showLoading = false, refreshUserData = false) },
+    onOrdersChanged = {
+      val uid = SupabaseClient.currentUserId
+      if (uid != null) {
+        scope.launch { refreshUserOrdersSuspending(uid) }
+      }
+    },
+    onNotificationsChanged = { refreshNotifications() }
   )
+
+  private suspend fun refreshUserOrdersSuspending(userId: String) = withContext(Dispatchers.IO) {
+    SupabaseApiService.fetchOrders(userId).onSuccess { orderDtoList ->
+      val existingById = _orders.value.associateBy { it.orderId }
+      val mapped = orderDtoList.map { dto ->
+        val items = existingById[dto.id]?.items ?: SupabaseApiService.fetchOrderItems(dto.id).getOrNull().orEmpty().map { line ->
+          CartItem(
+            id = line.id,
+            product = Product(
+              id = line.productId,
+              title = line.productTitle,
+              vendor = "",
+              category = "",
+              price = line.unitPrice,
+              originalPrice = line.unitPrice,
+              discountPercent = 0,
+              rating = 0.0,
+              reviewCount = 0,
+              imageUrl = line.imageUrl
+            ),
+            quantity = line.quantity,
+            selectedPalette = line.selectedPalette,
+            selectedSize = line.selectedSize
+          )
+        }
+        val canonical = VendorOrderStatus.parse(dto.orderStatus)
+        OrderRecord(
+          orderId = dto.id,
+          orderNumber = dto.orderNumber,
+          date = dto.createdAt,
+          items = items,
+          subtotal = dto.subtotal,
+          discount = dto.discount,
+          deliveryFee = dto.deliveryFee,
+          grandTotal = dto.grandTotal,
+          address = DeliveryAddress(
+            id = "addr_order",
+            name = dto.addressName,
+            phone = dto.addressPhone,
+            addressLine = dto.addressLine,
+            area = dto.addressArea,
+            city = dto.addressCity,
+            province = ""
+          ),
+          deliveryNote = dto.deliveryNote ?: "",
+          statusHeader = when (canonical) {
+            VendorOrderStatus.PENDING -> "Order Placed • Cash on Delivery"
+            VendorOrderStatus.CONFIRMED -> "Confirmed • Preparing Items"
+            VendorOrderStatus.PROCESSING -> "Vendor Coordination & QC"
+            VendorOrderStatus.READY_FOR_PICKUP -> "Ready for Pickup"
+            VendorOrderStatus.SHIPPED -> "Out for Delivery"
+            VendorOrderStatus.DELIVERED -> "Delivered"
+            VendorOrderStatus.NOT_DELIVERED -> "Not Delivered"
+            VendorOrderStatus.CANCELLED -> "Cancelled"
+            null -> VendorOrderStatus.formatLabel(dto.orderStatus)
+          },
+          orderStatus = canonical?.name ?: dto.orderStatus,
+          timeline = listOf(
+            OrderTimelineStep(
+              title = "Order status: ${canonical?.label ?: VendorOrderStatus.formatLabel(dto.orderStatus)}",
+              timestamp = dto.createdAt,
+              description = "Latest order status saved by JTBazar.",
+              state = StepState.COMPLETED
+            )
+          )
+        )
+      }
+      _orders.value = mapped
+      val currentSelectedId = _activeOrder.value?.orderId
+      _activeOrder.value = mapped.firstOrNull { it.orderId == currentSelectedId }
+        ?: mapped.firstOrNull { it.orderStatus != "DELIVERED" && it.orderStatus != "CANCELLED" }
+        ?: mapped.firstOrNull()
+    }
+  }
 
   fun startRealtimeCampaignSync() {
     realtimeClient.start()
@@ -1354,18 +1435,21 @@ object MarketplaceRepository {
                 province = ""
               ),
               deliveryNote = dto.deliveryNote ?: "",
-              statusHeader = when (dto.orderStatus) {
-                "PENDING" -> "Order Placed • Cash on Delivery"
-                "PROCESSING" -> "Vendor Coordination & QC"
-                "SHIPPED" -> "Out for Delivery"
-                "DELIVERED" -> "Delivered"
-                "CANCELLED" -> "Cancelled"
-                else -> dto.orderStatus
+              statusHeader = when (VendorOrderStatus.parse(dto.orderStatus)) {
+                VendorOrderStatus.PENDING -> "Order Placed • Cash on Delivery"
+                VendorOrderStatus.CONFIRMED -> "Confirmed • Preparing Items"
+                VendorOrderStatus.PROCESSING -> "Vendor Coordination & QC"
+                VendorOrderStatus.READY_FOR_PICKUP -> "Ready for Pickup"
+                VendorOrderStatus.SHIPPED -> "Out for Delivery"
+                VendorOrderStatus.DELIVERED -> "Delivered"
+                VendorOrderStatus.NOT_DELIVERED -> "Not Delivered"
+                VendorOrderStatus.CANCELLED -> "Cancelled"
+                null -> VendorOrderStatus.formatLabel(dto.orderStatus)
               },
-              orderStatus = dto.orderStatus,
+              orderStatus = VendorOrderStatus.parse(dto.orderStatus)?.name ?: dto.orderStatus,
               timeline = listOf(
                 OrderTimelineStep(
-                  title = "Order status: " + dto.orderStatus,
+                  title = "Order status: ${VendorOrderStatus.formatLabel(dto.orderStatus)}",
                   timestamp = dto.createdAt,
                   description = "Latest order status saved by JTBazar.",
                   state = StepState.COMPLETED

@@ -170,12 +170,33 @@ fun NotificationsScreen(
                   horizontalArrangement = Arrangement.SpaceBetween,
                   verticalAlignment = Alignment.CenterVertically
                 ) {
-                  Text(
-                    text = notif.title,
-                    fontWeight = if (!notif.isRead) FontWeight.Bold else FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = JTTextPrimary
-                  )
+                  Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                  ) {
+                    Text(
+                      text = notif.title,
+                      fontWeight = if (!notif.isRead) FontWeight.Bold else FontWeight.SemiBold,
+                      fontSize = 13.sp,
+                      color = JTTextPrimary,
+                      modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (notif.audience.equals("vendor", ignoreCase = true)) {
+                      Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = JTOrangeContainer
+                      ) {
+                        Text(
+                          text = "Vendor",
+                          fontSize = 10.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = JTOrangeDark,
+                          modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                      }
+                    }
+                  }
                   if (!notif.isRead) {
                     Box(
                       modifier = Modifier

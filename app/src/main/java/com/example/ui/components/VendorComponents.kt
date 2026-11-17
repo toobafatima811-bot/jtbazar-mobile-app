@@ -26,11 +26,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Autorenew
+import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.LocalShipping
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Verified
+import com.example.data.supabase.VendorOrderStatus
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -72,6 +79,75 @@ enum class StatusTone {
   DANGER,
   PRIMARY,
   NEUTRAL
+}
+
+data class VendorOrderBadgeSpec(
+  val label: String,
+  val tone: StatusTone,
+  val icon: ImageVector
+)
+
+fun vendorOrderStatusBadgeSpec(status: VendorOrderStatus): VendorOrderBadgeSpec = when (status) {
+  VendorOrderStatus.PENDING -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.WARNING,
+    icon = Icons.Rounded.Schedule
+  )
+  VendorOrderStatus.CONFIRMED -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.PRIMARY,
+    icon = Icons.Rounded.Verified
+  )
+  VendorOrderStatus.PROCESSING -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.PRIMARY,
+    icon = Icons.Rounded.Autorenew
+  )
+  VendorOrderStatus.READY_FOR_PICKUP -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.SUCCESS,
+    icon = Icons.Rounded.Inventory2
+  )
+  VendorOrderStatus.SHIPPED -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.PRIMARY,
+    icon = Icons.Rounded.LocalShipping
+  )
+  VendorOrderStatus.DELIVERED -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.SUCCESS,
+    icon = Icons.Rounded.CheckCircle
+  )
+  VendorOrderStatus.NOT_DELIVERED -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.DANGER,
+    icon = Icons.Rounded.ErrorOutline
+  )
+  VendorOrderStatus.CANCELLED -> VendorOrderBadgeSpec(
+    label = status.label,
+    tone = StatusTone.DANGER,
+    icon = Icons.Rounded.Cancel
+  )
+}
+
+fun vendorGenericStatusBadgeSpec(rawStatus: String?): VendorOrderBadgeSpec {
+  val normalized = rawStatus?.trim()?.lowercase().orEmpty()
+  return when (normalized) {
+    "open", "pending" -> VendorOrderBadgeSpec("Open", StatusTone.WARNING, Icons.Rounded.Schedule)
+    "in_progress", "under_review" -> VendorOrderBadgeSpec("In Review", StatusTone.PRIMARY, Icons.Rounded.Autorenew)
+    "seller_responded", "responded" -> VendorOrderBadgeSpec("Responded", StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
+    "resolved", "closed", "approved" -> VendorOrderBadgeSpec(
+      normalized.replaceFirstChar { it.uppercase() },
+      StatusTone.SUCCESS,
+      Icons.Rounded.CheckCircle
+    )
+    "rejected", "cancelled" -> VendorOrderBadgeSpec(
+      normalized.replaceFirstChar { it.uppercase() },
+      StatusTone.DANGER,
+      Icons.Rounded.ErrorOutline
+    )
+    else -> VendorOrderBadgeSpec("Open", StatusTone.NEUTRAL, Icons.Rounded.Schedule)
+  }
 }
 
 fun formatPkrPrice(raw: String?): String {

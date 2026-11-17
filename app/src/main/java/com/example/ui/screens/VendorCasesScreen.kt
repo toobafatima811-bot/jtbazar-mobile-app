@@ -58,6 +58,7 @@ import com.example.ui.components.StatusTone
 import com.example.ui.components.VendorAlertBanner
 import com.example.ui.components.VendorOutlinedTextField
 import com.example.ui.components.VendorSkeletonCard
+import com.example.ui.components.vendorGenericStatusBadgeSpec
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
@@ -410,9 +411,17 @@ fun VendorCasesContent(
 
       is VendorSectionState.Content -> {
         items(state.data, key = { it.id }) { item ->
-          val isResponded = item.status.equals("seller_responded", true) ||
-            item.status.equals("resolved", true)
+          val badgeSpec = vendorGenericStatusBadgeSpec(item.status)
           val draftReply = caseReplies[item.id].orEmpty()
+          val displayCaseType = item.caseType
+            .replace('_', ' ')
+            .trim()
+            .split(Regex("\\s+"))
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { word ->
+              word.lowercase().replaceFirstChar { it.uppercase() }
+            }
+            .ifBlank { "Customer Case" }
 
           AppCard {
             Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
@@ -422,16 +431,16 @@ fun VendorCasesContent(
                 verticalAlignment = Alignment.CenterVertically
               ) {
                 Text(
-                  text = item.caseType.replace('_', ' '),
+                  text = displayCaseType,
                   style = MaterialTheme.typography.titleSmall,
                   fontWeight = FontWeight.Bold,
                   color = VendorColors.TextPrimary,
                   modifier = Modifier.weight(1f)
                 )
                 StatusBadge(
-                  text = item.status.replace('_', ' ').replaceFirstChar { it.uppercase() },
-                  tone = if (isResponded) StatusTone.SUCCESS else StatusTone.WARNING,
-                  icon = if (isResponded) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber
+                  text = badgeSpec.label,
+                  tone = badgeSpec.tone,
+                  icon = badgeSpec.icon
                 )
               }
 
@@ -543,7 +552,8 @@ fun VendorCasesContent(
         is VendorSectionState.Content -> {
           items(tState.data, key = { it.id }) { ticket ->
             val isExpanded = uiState.selectedTicketId == ticket.id
-            val isResolved = ticket.status.equals("resolved", true)
+            val isResolved = ticket.status.equals("resolved", true) || ticket.status.equals("closed", true)
+            val ticketBadge = vendorGenericStatusBadgeSpec(ticket.status)
 
             AppCard {
               Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
@@ -560,9 +570,9 @@ fun VendorCasesContent(
                     modifier = Modifier.weight(1f)
                   )
                   StatusBadge(
-                    text = ticket.status.replace('_', ' ').replaceFirstChar { it.uppercase() },
-                    tone = if (isResolved) StatusTone.SUCCESS else StatusTone.PRIMARY,
-                    icon = if (isResolved) Icons.Rounded.MarkChatRead else Icons.Rounded.Forum
+                    text = ticketBadge.label,
+                    tone = ticketBadge.tone,
+                    icon = ticketBadge.icon
                   )
                 }
 

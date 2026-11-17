@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.OrderRecord
 import com.example.data.repository.MarketplaceRepository
+import com.example.data.supabase.VendorOrderStatus
 import com.example.ui.theme.*
 
 @Composable
@@ -142,24 +143,33 @@ fun MyOrdersScreen(
                     color = JTTextSecondary
                   )
                 }
+                val canonical = VendorOrderStatus.parse(order.orderStatus) ?: VendorOrderStatus.PENDING
                 Surface(
                   shape = RoundedCornerShape(8.dp),
-                  color = when (order.orderStatus.uppercase()) {
-                    "DELIVERED" -> Color(0xFFDEF7EC)
-                    "CANCELLED" -> Color(0xFFFDE8E8)
-                    "PROCESSING" -> Color(0xFFE1EFFE)
-                    else -> JTPurpleContainer
+                  color = when (canonical) {
+                    VendorOrderStatus.DELIVERED,
+                    VendorOrderStatus.READY_FOR_PICKUP -> Color(0xFFDEF7EC)
+                    VendorOrderStatus.CANCELLED,
+                    VendorOrderStatus.NOT_DELIVERED -> Color(0xFFFDE8E8)
+                    VendorOrderStatus.CONFIRMED,
+                    VendorOrderStatus.PROCESSING,
+                    VendorOrderStatus.SHIPPED -> Color(0xFFE1EFFE)
+                    VendorOrderStatus.PENDING -> JTPurpleContainer
                   }
                 ) {
                   Text(
-                    text = order.orderStatus,
+                    text = canonical.label,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = when (order.orderStatus.uppercase()) {
-                      "DELIVERED" -> Color(0xFF03543F)
-                      "CANCELLED" -> Color(0xFF9B1C1C)
-                      "PROCESSING" -> Color(0xFF1E429F)
-                      else -> JTPurplePrimary
+                    color = when (canonical) {
+                      VendorOrderStatus.DELIVERED,
+                      VendorOrderStatus.READY_FOR_PICKUP -> Color(0xFF03543F)
+                      VendorOrderStatus.CANCELLED,
+                      VendorOrderStatus.NOT_DELIVERED -> Color(0xFF9B1C1C)
+                      VendorOrderStatus.CONFIRMED,
+                      VendorOrderStatus.PROCESSING,
+                      VendorOrderStatus.SHIPPED -> Color(0xFF1E429F)
+                      VendorOrderStatus.PENDING -> JTPurplePrimary
                     },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                   )

@@ -61,7 +61,8 @@ data class NotificationNavigation(
   val id: String? = null,
   val kind: String? = null,
   val relatedOrderId: String? = null,
-  val link: String? = null
+  val link: String? = null,
+  val audience: String? = null
 )
 
 enum class AppScreen {
@@ -169,13 +170,20 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   val collectionListStates = remember { mutableStateMapOf<String, LazyListState>() }
   val collectionPaginators = remember { mutableStateMapOf<String, CatalogPaginator>() }
   var selectedDeliveryForNavigation by remember { mutableStateOf<JSONObject?>(null) }
+  var vendorInitialTab by remember { mutableStateOf<VendorBottomTab?>(null) }
+  var vendorInitialOrderId by remember { mutableStateOf<String?>(null) }
 
-  LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link) {
+  LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link, notificationTap?.audience) {
     val tap = notificationTap ?: return@LaunchedEffect
     if (!tap.id.isNullOrBlank()) MarketplaceRepository.markNotificationRead(tap.id)
     backStack.clear()
     selectedPublicShopId = null
     when {
+      tap.audience.equals("vendor", ignoreCase = true) || tap.link?.contains("vendor", ignoreCase = true) == true -> {
+        vendorInitialTab = VendorBottomTab.ORDERS
+        vendorInitialOrderId = tap.relatedOrderId
+        currentScreen = AppScreen.VENDOR_CENTER
+      }
       tap.kind.equals("order", ignoreCase = true) || !tap.relatedOrderId.isNullOrBlank() -> currentScreen = AppScreen.MY_ORDERS
       tap.kind.equals("account", ignoreCase = true) || tap.link?.contains("account", true) == true -> currentScreen = AppScreen.ACCOUNT
       else -> currentScreen = AppScreen.HOME
@@ -823,25 +831,31 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
           NotificationsScreen(
             onBack = { navigateBack() },
             onNotificationClick = { notification ->
-              when (notification.type.lowercase()) {
-                "order" -> {
-                  val order = notification.relatedOrderId?.let { relatedId ->
-                    MarketplaceRepository.orders.value.firstOrNull { it.orderId == relatedId }
+              if (notification.audience.equals("vendor", ignoreCase = true)) {
+                vendorInitialTab = VendorBottomTab.ORDERS
+                vendorInitialOrderId = notification.relatedOrderId
+                navigateTo(AppScreen.VENDOR_CENTER)
+              } else {
+                when (notification.type.lowercase()) {
+                  "order" -> {
+                    val order = notification.relatedOrderId?.let { relatedId ->
+                      MarketplaceRepository.orders.value.firstOrNull { it.orderId == relatedId }
+                    }
+                    if (order != null) {
+                      MarketplaceRepository.selectOrder(order)
+                      navigateTo(AppScreen.ORDER_TRACKING)
+                    } else {
+                      navigateTo(AppScreen.MY_ORDERS)
+                    }
                   }
-                  if (order != null) {
-                    MarketplaceRepository.selectOrder(order)
-                    navigateTo(AppScreen.ORDER_TRACKING)
-                  } else {
-                    navigateTo(AppScreen.MY_ORDERS)
+                  "account" -> {
+                    switchRootTab(AppScreen.ACCOUNT)
                   }
+                  "store", "product", "promotion" -> {
+                    switchRootTab(AppScreen.HOME)
+                  }
+                  else -> switchRootTab(AppScreen.HOME)
                 }
-                "account" -> {
-                  switchRootTab(AppScreen.ACCOUNT)
-                }
-                "store", "product", "promotion" -> {
-                  switchRootTab(AppScreen.HOME)
-                }
-                else -> switchRootTab(AppScreen.HOME)
               }
             }
           )
@@ -880,7 +894,16 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         }
 
         AppScreen.VENDOR_CENTER -> {
-          VendorCenterScreen(onBack = { navigateBack() })
+          VendorCenterScreen(
+            onBack = {
+              vendorInitialTab = null
+              vendorInitialOrderId = null
+              navigateBack()
+            },
+            onOpenNotifications = { navigateTo(AppScreen.NOTIFICATIONS) },
+            initialTab = vendorInitialTab,
+            initialOrderId = vendorInitialOrderId
+          )
         }
 
         AppScreen.DRIVER_CENTER -> {
