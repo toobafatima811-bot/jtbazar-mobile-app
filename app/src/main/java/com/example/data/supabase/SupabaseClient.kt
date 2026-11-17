@@ -463,18 +463,35 @@ object SupabaseClient {
   }
 
   /**
-   * Execute RPC function in Supabase
+   * Execute RPC function in Supabase.
+   * Protected customer/vendor/driver RPCs pass requireAuth = true so they fail fast
+   * instead of silently sending the anonymous publishableKey as a Bearer token.
    */
-  suspend fun rpc(functionName: String, paramsJson: String = "{}"): Result<String> = withContext(Dispatchers.IO) {
+  suspend fun rpc(
+    functionName: String,
+    paramsJson: String = "{}",
+    requireAuth: Boolean = false
+  ): Result<String> = withContext(Dispatchers.IO) {
     try {
+      val currentSession = _session.value
+      val accessToken = currentSession?.accessToken?.trim()
+      val userId = currentSession?.user?.id?.trim()
+      if (requireAuth && (currentSession == null || accessToken.isNullOrBlank() || userId.isNullOrBlank())) {
+        return@withContext Result.failure(
+          IllegalStateException("Authentication required: please sign in to continue.")
+        )
+      }
+
       val url = "${SupabaseConfig.restUrl}/rpc/$functionName"
-      val request = Request.Builder()
+      val builder = Request.Builder()
         .url(url)
         .post(paramsJson.toRequestBody(JSON_MEDIA_TYPE))
         .header("Prefer", "return=representation")
-        .build()
+      if (requireAuth && !accessToken.isNullOrBlank()) {
+        builder.header("Authorization", "Bearer $accessToken")
+      }
 
-      okHttpClient.newCall(request).execute().use { response ->
+      okHttpClient.newCall(builder.build()).execute().use { response ->
         val body = response.body?.string() ?: ""
         if (response.isSuccessful) {
           Result.success(body)
@@ -483,7 +500,7 @@ object SupabaseClient {
         }
       }
     } catch (e: Exception) {
-      Log.e(TAG, "RPC $functionName failed", e)
+      Log.e(TAG, "RPC $functionName failed (${e.javaClass.simpleName})")
       Result.failure(e)
     }
   }

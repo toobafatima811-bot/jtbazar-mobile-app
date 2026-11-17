@@ -28,9 +28,13 @@ class SupabaseRealtimeClient(
   private val onCatalogChanged: () -> Unit = {},
   private val onOrdersChanged: () -> Unit = {},
   private val onNotificationsChanged: () -> Unit = {},
+  private val onDriverTablesChanged: () -> Unit = {},
   private val subscribeToCatalogTables: Boolean = true,
   private val subscribeToVendorOrderTables: Boolean = true,
-  private val subscribeToNotificationTables: Boolean = true
+  private val subscribeToNotificationTables: Boolean = true,
+  private val subscribeToDriverTables: Boolean = false,
+  private val customerOrderFilterProvider: (() -> String?)? = null,
+  private val notificationFilterProvider: (() -> String?)? = null
 ) {
   companion object {
     private const val TAG = "SupabaseRealtime"
@@ -49,6 +53,7 @@ class SupabaseRealtimeClient(
   private var catalogDebounceJob: Job? = null
   private var ordersDebounceJob: Job? = null
   private var notificationsDebounceJob: Job? = null
+  private var driverDebounceJob: Job? = null
   private var reconnectAttempts = 0
 
   fun start() {
@@ -67,6 +72,7 @@ class SupabaseRealtimeClient(
     catalogDebounceJob?.cancel()
     ordersDebounceJob?.cancel()
     notificationsDebounceJob?.cancel()
+    driverDebounceJob?.cancel()
     runCatching { webSocket?.close(1000, "Lifecycle paused") }
     webSocket = null
   }
@@ -98,9 +104,21 @@ class SupabaseRealtimeClient(
             subscribeTable(webSocket, "realtime:public:orders", "orders")
             subscribeTable(webSocket, "realtime:public:order_items", "order_items")
             subscribeTable(webSocket, "realtime:public:vendor_order_pickups", "vendor_order_pickups")
+          } else if (customerOrderFilterProvider != null && SupabaseClient.isAuthenticated) {
+            val orderFilter = customerOrderFilterProvider.invoke()?.takeIf { it.isNotBlank() }
+            if (orderFilter != null) {
+              subscribeTable(webSocket, "realtime:public:orders:customer", "orders", filter = orderFilter)
+            }
           }
           if (subscribeToNotificationTables && SupabaseClient.isAuthenticated) {
-            subscribeTable(webSocket, "realtime:public:notifications", "notifications")
+            val notifFilter = notificationFilterProvider?.invoke()?.takeIf { it.isNotBlank() }
+            subscribeTable(webSocket, "realtime:public:notifications", "notifications", filter = notifFilter)
+          }
+          if (subscribeToDriverTables && SupabaseClient.isAuthenticated) {
+            subscribeTable(webSocket, "realtime:public:driver_order_assignments", "driver_order_assignments")
+            subscribeTable(webSocket, "realtime:public:driver_applications", "driver_applications")
+            subscribeTable(webSocket, "realtime:public:customer_driver_access", "customer_driver_access")
+            subscribeTable(webSocket, "realtime:public:orders:driver", "orders")
           }
           startHeartbeat(webSocket)
         }
@@ -124,11 +142,14 @@ class SupabaseRealtimeClient(
     }
   }
 
-  private fun subscribeTable(ws: WebSocket, topic: String, table: String) {
+  private fun subscribeTable(ws: WebSocket, topic: String, table: String, filter: String? = null) {
     val pgRule = JSONObject()
       .put("event", "*")
       .put("schema", "public")
       .put("table", table)
+    if (!filter.isNullOrBlank()) {
+      pgRule.put("filter", filter)
+    }
     val config = JSONObject()
       .put("broadcast", JSONObject().put("self", false))
       .put("presence", JSONObject().put("key", ""))
@@ -188,11 +209,26 @@ class SupabaseRealtimeClient(
           onCatalogChanged()
         }
       }
-      "orders", "order_items", "vendor_order_pickups" -> {
-        ordersDebounceJob?.cancel()
-        ordersDebounceJob = scope.launch {
+      "driver_order_assignments", "driver_applications", "customer_driver_access" -> {
+        driverDebounceJob?.cancel()
+        driverDebounceJob = scope.launch {
           delay(DEBOUNCE_MS)
-          onOrdersChanged()
+          onDriverTablesChanged()
+        }
+      }
+      "orders", "order_items", "vendor_order_pickups" -> {
+        if (subscribeToDriverTables && topic.endsWith(":driver")) {
+          driverDebounceJob?.cancel()
+          driverDebounceJob = scope.launch {
+            delay(DEBOUNCE_MS)
+            onDriverTablesChanged()
+          }
+        } else {
+          ordersDebounceJob?.cancel()
+          ordersDebounceJob = scope.launch {
+            delay(DEBOUNCE_MS)
+            onOrdersChanged()
+          }
         }
       }
       "notifications" -> {

@@ -10,6 +10,7 @@ import android.graphics.BitmapFactory
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.location.AddressReverseGeocoder
 import com.example.location.LocationFetchResult
 import com.example.location.LocationResolver
@@ -61,9 +62,16 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.supabase.SupabaseClient
+import com.example.data.supabase.SupabaseRealtimeClient
 import com.example.ui.theme.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -238,7 +246,8 @@ fun DriverCenterScreen(
         JSONObject()
           .put("p_assignment_id", assignmentId)
           .put("p_storage_path", storagePath)
-          .toString()
+          .toString(),
+        requireAuth = true
       ).getOrThrow()
 
       deliveries = updateAssignmentProofPathInList(deliveries, assignmentId, storagePath)
@@ -534,19 +543,22 @@ fun DriverCenterScreen(
     }
   }
 
-  suspend fun load() {
-    loading = true
-    error = null
-    val uid = user?.id?.takeIf { it.isNotBlank() }
-    if (!SupabaseClient.isAuthenticated || uid == null) {
-      enabled = false
-      application = null
-      deliveries = emptyList()
-      loading = false
-      return
-    }
+  val loadMutex = remember { Mutex() }
+
+  suspend fun load(showLoader: Boolean = true, surfaceErrors: Boolean = true) {
+    if (!loadMutex.tryLock()) return
+    if (showLoader) loading = true
+    if (surfaceErrors) error = null
     try {
-      val access = SupabaseClient.rpc("get_my_driver_access").getOrThrow()
+      val uid = user?.id?.takeIf { it.isNotBlank() }
+      if (!SupabaseClient.isAuthenticated || uid == null) {
+        enabled = false
+        application = null
+        deliveries = emptyList()
+        loading = false
+        return
+      }
+      val access = SupabaseClient.rpc("get_my_driver_access", requireAuth = true).getOrThrow()
       enabled = access.trim().equals("true", ignoreCase = true)
       val appRows = JSONArray(
         SupabaseClient.get("driver_applications?select=id,full_name,phone,vehicle_type,current_address,status,admin_note&user_id=eq.$uid&limit=1").getOrThrow()
@@ -557,21 +569,59 @@ fun DriverCenterScreen(
       // Strict security check: customer locations & assigned deliveries are ONLY accessible
       // to authenticated, approved drivers whose customer_driver_access is enabled.
       deliveries = if (hasDriverDeliveryAccess(true, enabled, fetchedStatus)) {
-        JSONArray(SupabaseClient.rpc("driver_list_assigned_orders_v2").getOrThrow()).let { rows ->
+        JSONArray(SupabaseClient.rpc("driver_list_assigned_orders_v2", requireAuth = true).getOrThrow()).let { rows ->
           (0 until rows.length()).map { rows.getJSONObject(it) }
         }
       } else {
         emptyList()
       }
     } catch (e: Exception) {
-      deliveries = emptyList()
-      error = extractDriverFriendlyError(e, "Could not load driver information. Please try again.")
+      if (surfaceErrors) {
+        if (deliveries.isEmpty()) deliveries = emptyList()
+        error = extractDriverFriendlyError(e, "Could not load driver information. Please try again.")
+      }
     } finally {
       loading = false
+      loadMutex.unlock()
     }
   }
 
-  LaunchedEffect(user?.id, session != null) { load() }
+  val lifecycleOwner = LocalLifecycleOwner.current
+  LaunchedEffect(user?.id, session != null) { load(showLoader = deliveries.isEmpty(), surfaceErrors = true) }
+
+  DisposableEffect(lifecycleOwner, isAuthenticatedSession, user?.id) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME && isAuthenticatedSession) {
+        scope.launch { load(showLoader = false, surfaceErrors = false) }
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+  }
+
+  LaunchedEffect(lifecycleOwner, isAuthenticatedSession, user?.id) {
+    if (!isAuthenticatedSession) return@LaunchedEffect
+    val realtime = SupabaseRealtimeClient(
+      subscribeToCatalogTables = false,
+      subscribeToVendorOrderTables = false,
+      subscribeToNotificationTables = false,
+      subscribeToDriverTables = true,
+      onDriverTablesChanged = {
+        scope.launch { load(showLoader = false, surfaceErrors = false) }
+      }
+    )
+    realtime.start()
+    try {
+      while (isActive) {
+        delay(20_000L)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+          load(showLoader = false, surfaceErrors = false)
+        }
+      }
+    } finally {
+      realtime.stop()
+    }
+  }
 
   // Delivery filter counts
   val allCount = deliveries.size
@@ -1446,8 +1496,11 @@ fun DriverCenterScreen(
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F172A)
               )
+              val closedHistoryCount = deliveries.count {
+                it.optString("assignment_status") in setOf("delivered", "cancelled", "failed")
+              }
               Text(
-                if (selectedTab == DriverBottomNavTab.HISTORY) "${deliveredCount + deliveries.count { it.optString("assignment_status") == "cancelled" }} completed / cancelled orders" else "$activeCount active delivery assignments",
+                if (selectedTab == DriverBottomNavTab.HISTORY) "$closedHistoryCount completed / closed orders" else "$activeCount active delivery assignments",
                 fontSize = 12.sp,
                 color = Color(0xFF64748B)
               )
@@ -1837,11 +1890,12 @@ fun DriverCenterScreen(
                         error = null
                         val r = SupabaseClient.rpc(
                           "driver_update_delivery_status",
-                          JSONObject().put("p_assignment_id", assignmentId).put("p_action", "picked_up").toString()
+                          JSONObject().put("p_assignment_id", assignmentId).put("p_action", "picked_up").toString(),
+                          requireAuth = true
                         )
                         if (r.isSuccess) {
                           message = "Parcel marked as picked up."
-                          load()
+                          load(showLoader = false)
                         } else {
                           error = extractDriverFriendlyError(r.exceptionOrNull(), "Could not update pickup status. Please try again.")
                         }
@@ -2125,11 +2179,12 @@ fun DriverCenterScreen(
                               JSONObject()
                                 .put("p_assignment_id", assignmentId)
                                 .put("p_action", "delivered")
-                                .toString()
+                                .toString(),
+                              requireAuth = true
                             ).getOrThrow()
                             proofPreviews = proofPreviews - assignmentId
                             message = "Delivery completed successfully."
-                            load()
+                            load(showLoader = false)
                           } catch (e: Exception) {
                             error = extractDriverFriendlyError(e, "Could not complete delivery. Please verify OTP and photo proof.")
                           } finally {
@@ -2209,6 +2264,10 @@ fun DriverCenterScreen(
   if (showOtpDialog) {
     AlertDialog(
       onDismissRequest = { if (!actionBusy) showOtpDialog = false },
+      properties = DialogProperties(usePlatformDefaultWidth = false),
+      modifier = Modifier
+        .padding(horizontal = 24.dp)
+        .widthIn(max = 560.dp),
       title = { Text("Verify Customer Delivery OTP", fontWeight = FontWeight.Bold) },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2261,7 +2320,8 @@ fun DriverCenterScreen(
                   JSONObject()
                     .put("p_assignment_id", actionAssignmentId)
                     .put("p_code", otpCode)
-                    .toString()
+                    .toString(),
+                  requireAuth = true
                 ).getOrThrow()
                 val verified = rawVerified.trim().equals("true", ignoreCase = true)
                 if (!verified) {
@@ -2272,7 +2332,7 @@ fun DriverCenterScreen(
                   otpCode = ""
                   otpDialogError = null
                   message = "Customer OTP verified! Upload delivery photo proof (if not done) and tap Complete Delivery."
-                  load()
+                  load(showLoader = false)
                 }
               } catch (e: Exception) {
                 otpDialogError = extractDriverFriendlyError(e, "Could not verify delivery OTP. Please try again.")
@@ -2342,11 +2402,12 @@ fun DriverCenterScreen(
                     .put("p_assignment_id", actionAssignmentId)
                     .put("p_reason", failureReason)
                     .put("p_note", failureNote)
-                    .toString()
+                    .toString(),
+                  requireAuth = true
                 ).getOrThrow()
                 showFailedDialog = false
                 message = "Delivery issue reported to JTBazar."
-                load()
+                load(showLoader = false)
               } catch (e: Exception) {
                 error = extractDriverFriendlyError(e, "Could not report delivery issue.")
               } finally {
@@ -2392,11 +2453,12 @@ fun DriverCenterScreen(
                   JSONObject()
                     .put("p_assignment_id", actionAssignmentId)
                     .put("p_amount", parsedAmount)
-                    .toString()
+                    .toString(),
+                  requireAuth = true
                 ).getOrThrow()
                 showCodDialog = false
                 message = "COD collection recorded."
-                load()
+                load(showLoader = false)
               } catch (e: Exception) {
                 error = extractDriverFriendlyError(e, "Could not record COD collection.")
               } finally {

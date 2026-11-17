@@ -121,14 +121,16 @@ fun HomeScreen(
     }
   }
 
-  val handleBannerClick: (String?) -> Unit = { rawDest ->
-    if (onBannerDestinationClick != null) {
-      onBannerDestinationClick(rawDest)
-    } else if (!rawDest.isNullOrBlank()) {
-      runCatching {
-        val uri = if (rawDest.startsWith("http")) Uri.parse(rawDest)
-        else Uri.parse("https://jtbazar.vercel.app" + if (rawDest.startsWith("/")) rawDest else "/$rawDest")
-        screenContext.startActivity(Intent(Intent.ACTION_VIEW, uri))
+  val handleBannerClick: (String?) -> Unit = remember(onBannerDestinationClick, screenContext) {
+    { rawDest: String? ->
+      if (onBannerDestinationClick != null) {
+        onBannerDestinationClick(rawDest)
+      } else if (!rawDest.isNullOrBlank()) {
+        runCatching {
+          val uri = if (rawDest.startsWith("http")) Uri.parse(rawDest)
+          else Uri.parse("https://jtbazar.vercel.app" + if (rawDest.startsWith("/")) rawDest else "/$rawDest")
+          screenContext.startActivity(Intent(Intent.ACTION_VIEW, uri))
+        }
       }
     }
   }
@@ -231,15 +233,7 @@ fun HomeScreen(
     )
   }
 
-  var sellerStatus by remember { mutableStateOf<String?>(null) }
-  LaunchedEffect(Unit) {
-    if (com.example.data.supabase.SupabaseClient.isAuthenticated) {
-      runCatching {
-        val app = com.example.data.supabase.VendorService.getOwnApplication()
-        sellerStatus = app?.status
-      }
-    }
-  }
+  val sellerStatus by MarketplaceRepository.ownVendorStatus.collectAsState()
 
   Scaffold(
     containerColor = Color(0xFFFCFAF7),
@@ -327,7 +321,7 @@ fun HomeScreen(
           )
         }
 
-        item {
+        item(key = "browse_trusted_shops", contentType = "action_button") {
           OutlinedButton(
             onClick = onExploreShopsClick,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
@@ -951,15 +945,17 @@ fun ProductGridRow(
     horizontalArrangement = Arrangement.spacedBy(12.dp)
   ) {
     rowItems.forEach { product ->
-      Box(modifier = Modifier.weight(1f)) {
-        ProductCard(
-          product = product,
-          onProductClick = { onProductClick(product) },
-          onAddToCart = { onAddToCart(product) },
-          onToggleWishlist = { onToggleWishlist(product) },
-          campaignStyle = campaignStyle,
-          isInCartOverride = product.id in cartProductIds
-        )
+      key(product.id) {
+        Box(modifier = Modifier.weight(1f)) {
+          ProductCard(
+            product = product,
+            onProductClick = { onProductClick(product) },
+            onAddToCart = { onAddToCart(product) },
+            onToggleWishlist = { onToggleWishlist(product) },
+            campaignStyle = campaignStyle,
+            isInCartOverride = product.id in cartProductIds
+          )
+        }
       }
     }
     repeat((columns - rowItems.size).coerceAtLeast(0)) {
@@ -1799,15 +1795,17 @@ private fun ProductCampaignSection(
           horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
           rowProducts.forEach { product ->
-            Box(Modifier.weight(1f)) {
-              ProductCard(
-                product = if (product.badge == null) product.copy(badge = dealLabel) else product,
-                onProductClick = { onProductClick(product) },
-                onAddToCart = { onAddToCart(product) },
-                onToggleWishlist = { onToggleWishlist(product) },
-                campaignStyle = true,
-                isInCartOverride = product.id in cartProductIds
-              )
+            key(product.id) {
+              Box(Modifier.weight(1f)) {
+                ProductCard(
+                  product = product,
+                  onProductClick = { onProductClick(product) },
+                  onAddToCart = { onAddToCart(product) },
+                  onToggleWishlist = { onToggleWishlist(product) },
+                  campaignStyle = true,
+                  isInCartOverride = product.id in cartProductIds
+                )
+              }
             }
           }
           repeat((dealColumns - rowProducts.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }

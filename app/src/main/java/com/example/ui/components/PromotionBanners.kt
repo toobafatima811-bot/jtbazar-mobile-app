@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import coil.size.Precision
 import com.example.data.repository.BannerPlacement
 import com.example.data.supabase.SupabasePromotionDto
 import com.example.ui.theme.JTOrange
@@ -87,7 +86,7 @@ fun PromotionBannerItem(
   val imageRequest = remember(imageUrl, cacheKey, context) {
     ImageRequest.Builder(context)
       .data(imageUrl)
-      .precision(Precision.INEXACT)
+      .allowRgb565(true)
       .memoryCacheKey(cacheKey)
       .diskCacheKey(cacheKey)
       .crossfade(true)

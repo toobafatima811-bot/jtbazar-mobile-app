@@ -56,12 +56,24 @@ fun OrderTrackingScreen(
   val cartCount by MarketplaceRepository.cartCount.collectAsState()
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
 
+  val session by SupabaseClient.session.collectAsState()
   var showInvoiceDialog by remember { mutableStateOf(false) }
   var isCancelling by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
-  var deliveryOtp by remember(activeOrder?.orderId) { mutableStateOf<String?>(null) }
+  var assignmentStatus by remember(activeOrder?.orderId) { mutableStateOf<String?>(null) }
+  var otpDispatchResult by remember(activeOrder?.orderId) { mutableStateOf<CustomerOtpDispatchResult?>(null) }
   var otpLoading by remember { mutableStateOf(false) }
-  var otpError by remember { mutableStateOf<String?>(null) }
+  var otpError by remember(activeOrder?.orderId) { mutableStateOf<String?>(null) }
+
+  LaunchedEffect(activeOrder?.orderId, session?.user?.id) {
+    val oid = activeOrder?.orderId ?: return@LaunchedEffect
+    if (!SupabaseClient.isAuthenticated) {
+      assignmentStatus = null
+      return@LaunchedEffect
+    }
+    MarketplaceRepository.refreshOrdersIfAuthenticated()
+    assignmentStatus = fetchCustomerAssignmentStatus(oid)
+  }
 
   if (showInvoiceDialog && activeOrder != null) {
     InvoiceDialog(
@@ -444,13 +456,23 @@ fun OrderTrackingScreen(
         }
       }
 
-      // 3A. Customer-only delivery OTP: the driver cannot complete delivery without this code.
+      // 3A. Customer-only delivery OTP: emailed only when parcel is picked up; never rendered as plaintext OTP.
       item {
+        val otpEligibility = evaluateDeliveryOtpEligibility(
+          isAuthenticated = session != null && !session?.user?.id.isNullOrBlank(),
+          orderStatus = activeOrder.orderStatus,
+          assignmentStatus = assignmentStatus
+        )
+        val eligibilityHint = deliveryOtpEligibilityHint(otpEligibility)
+
         Surface(
           shape = RoundedCornerShape(16.dp),
           color = Color(0xFFF5F3FF),
           border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDD6FE)),
-          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .testTag("customer_delivery_otp_card")
         ) {
           Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -458,29 +480,114 @@ fun OrderTrackingScreen(
               Spacer(Modifier.width(8.dp))
               Text("Secure delivery OTP", fontWeight = FontWeight.Bold, color = JTTextPrimary)
             }
-            Text("When the JTBazar driver has picked up your parcel, generate a one-time code and show it to the driver at your door. Do not share it before the parcel arrives.", fontSize = 11.sp, color = JTTextSecondary)
-            if (deliveryOtp != null) {
-              Text(deliveryOtp!!, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = JTPurplePrimary, letterSpacing = 5.sp)
-              Text("This code expires in 30 minutes. Generate a new one if it expires.", fontSize = 10.sp, color = JTTextSecondary)
+            Text(
+              "Once your JTBazar driver picks up the parcel, tap below to send a 6-digit verification OTP to your registered email. Share that email code only with the driver at your door.",
+              fontSize = 11.sp,
+              color = JTTextSecondary
+            )
+
+            otpDispatchResult?.let { dispatched ->
+              Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFECFDF5),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("delivery_otp_email_sent_card")
+              ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Filled.MarkEmailRead, contentDescription = null, tint = Color(0xFF047857), modifier = Modifier.size(16.dp))
+                    Text("OTP Sent to Registered Email", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF065F46))
+                  }
+                  Text(
+                    text = if (!dispatched.maskedEmail.isNullOrBlank()) {
+                      "A 6-digit verification code was sent to ${dispatched.maskedEmail}. Check your inbox or spam folder."
+                    } else {
+                      "A 6-digit verification code was sent to your registered email address."
+                    },
+                    fontSize = 11.sp,
+                    color = Color(0xFF065F46)
+                  )
+                  Text(
+                    text = "Valid for ${dispatched.expiresInMinutes} minutes. Do not share this code before the rider arrives.",
+                    fontSize = 10.sp,
+                    color = Color(0xFF047857)
+                  )
+                }
+              }
             }
-            otpError?.let { Text(it, color = JTRed, fontSize = 11.sp) }
+
+            if (eligibilityHint != null && otpDispatchResult == null) {
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0xFFFFFBEB),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("delivery_otp_status_hint")
+              ) {
+                Text(
+                  text = eligibilityHint,
+                  color = Color(0xFF92400E),
+                  fontSize = 11.sp,
+                  modifier = Modifier.padding(10.dp)
+                )
+              }
+            }
+
+            otpError?.let { errText ->
+              Text(
+                text = errText,
+                color = JTRed,
+                fontSize = 11.sp,
+                modifier = Modifier.testTag("delivery_otp_error_text")
+              )
+            }
+
             Button(
-              enabled = !otpLoading && activeOrder.orderStatus !in listOf("DELIVERED", "CANCELLED"),
+              enabled = !otpLoading && otpEligibility == CustomerDeliveryOtpEligibility.ELIGIBLE,
               onClick = {
+                if (otpLoading) return@Button
                 scope.launch {
-                  otpLoading = true; otpError = null
-                  try {
-                    val raw = SupabaseClient.rpc("customer_generate_delivery_otp", JSONObject().put("p_order_id", activeOrder.orderId).toString()).getOrThrow()
-                    deliveryOtp = raw.trim().removeSurrounding("\"")
-                  } catch (e: Exception) {
-                    otpError = e.message ?: "OTP is available after the driver picks up your parcel."
-                  } finally { otpLoading = false }
+                  otpLoading = true
+                  otpError = null
+                  MarketplaceRepository.refreshOrdersIfAuthenticated()
+                  val latestAssignmentStatus = fetchCustomerAssignmentStatus(activeOrder.orderId)
+                  if (latestAssignmentStatus != null) {
+                    assignmentStatus = latestAssignmentStatus
+                  }
+                  val effectiveOrderStatus = MarketplaceRepository.orders.value
+                    .firstOrNull { it.orderId == activeOrder.orderId }
+                    ?.orderStatus
+                    ?: activeOrder.orderStatus
+                  val result = requestCustomerDeliveryOtp(
+                    orderId = activeOrder.orderId,
+                    orderStatus = effectiveOrderStatus,
+                    assignmentStatus = latestAssignmentStatus ?: assignmentStatus
+                  )
+                  result.onSuccess { dispatched ->
+                    otpDispatchResult = dispatched
+                    otpError = null
+                  }.onFailure { err ->
+                    otpError = err.message ?: "Delivery OTP is available once the driver picks up your parcel."
+                  }
+                  otpLoading = false
                 }
               },
               colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
-              modifier = Modifier.fillMaxWidth()
+              modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag("generate_delivery_otp_button")
             ) {
-              Text(if (otpLoading) "Generating…" else if (deliveryOtp == null) "Generate delivery OTP" else "Generate new OTP")
+              Text(
+                when {
+                  otpLoading -> "Sending OTP to email…"
+                  otpDispatchResult == null -> "Send Delivery OTP to Email"
+                  else -> "Resend Delivery OTP to Email"
+                }
+              )
             }
           }
         }

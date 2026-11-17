@@ -11,8 +11,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.AnnotatedString
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.SupabaseConfig
 import com.example.data.supabase.SupabaseSession
@@ -435,7 +437,12 @@ class DriverDeliveryLifecycleTest {
 
       // Open OTP dialog & try incorrect OTP first -> dialog stays open with error
       composeTestRule.onNodeWithTag("verify_otp_button_assign-1").performScrollTo().performClick()
-      composeTestRule.onNodeWithTag("driver_otp_input").performTextInput("999999")
+      composeTestRule.waitUntil(timeoutMillis = 5000) {
+        composeTestRule.onAllNodesWithTag("driver_otp_input").fetchSemanticsNodes().isNotEmpty()
+      }
+
+      composeTestRule.onNodeWithTag("driver_otp_input")
+        .performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("999999")) }
       composeTestRule.onNodeWithTag("confirm_verify_otp_button").performClick()
 
       composeTestRule.waitUntil(timeoutMillis = 5000) {
@@ -444,12 +451,8 @@ class DriverDeliveryLifecycleTest {
       composeTestRule.onNodeWithTag("driver_otp_error").assertIsDisplayed()
 
       // Enter correct OTP -> ONLY driver_verify_delivery_otp is called; dialog closes; OTP Verified shown; Complete Delivery STILL disabled (proof missing)
-      composeTestRule.onNodeWithTag("driver_otp_input").performTextInput("")
-      composeTestRule.onNodeWithTag("confirm_verify_otp_button").assertIsDisplayed()
-      // Replace input via clear + valid 6 digits by setting code fresh after closing or direct replacement
-      composeTestRule.onNodeWithText("Cancel").performClick()
-      composeTestRule.onNodeWithTag("verify_otp_button_assign-1").performScrollTo().performClick()
-      composeTestRule.onNodeWithTag("driver_otp_input").performTextInput("123456")
+      composeTestRule.onNodeWithTag("driver_otp_input")
+        .performSemanticsAction(SemanticsActions.SetText) { it(AnnotatedString("123456")) }
       composeTestRule.onNodeWithTag("confirm_verify_otp_button").performClick()
 
       composeTestRule.waitUntil(timeoutMillis = 5000) {
