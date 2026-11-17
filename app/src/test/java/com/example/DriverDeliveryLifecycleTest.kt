@@ -329,7 +329,7 @@ class DriverDeliveryLifecycleTest {
 
     StubSupabaseServer { req ->
       when {
-        req.pathWithQuery.contains("/storage/v1/object/driver-documents/") ->
+        req.pathWithQuery.contains("/storage/v1/object/delivery-proofs/") ->
           StubResponse(200, """{"Key":"driver-documents/ok"}""")
         req.pathWithQuery.endsWith("/rest/v1/rpc/driver_set_delivery_proof_path") ->
           StubResponse(200, "true")
@@ -341,21 +341,23 @@ class DriverDeliveryLifecycleTest {
 
       val jpegBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x00, 0x10)
       val proofPath = buildDeliveryProofPath(uid, assignmentId, "jpg", 1700000000999L)
-      val uploadResult = SupabaseClient.uploadPrivateFile("driver-documents", proofPath, jpegBytes, "image/jpeg")
+      val uploadResult = SupabaseClient.uploadPrivateFile("delivery-proofs", proofPath, jpegBytes, "image/jpeg")
       assertTrue(uploadResult.isSuccess)
 
       val rpcResult = SupabaseClient.rpc(
         "driver_set_delivery_proof_path",
-        JSONObject().put("p_assignment_id", assignmentId).put("p_storage_path", proofPath).toString()
+        JSONObject().put("p_assignment_id", assignmentId).put("p_storage_path", proofPath).toString(),
+        requireAuth = true
       )
       assertTrue(rpcResult.isSuccess)
 
       val storageReq = server.recordedRequests.first { it.pathWithQuery.contains("/storage/v1/object/") }
-      assertEquals("/storage/v1/object/driver-documents/$uid/delivery_proofs/${assignmentId}_1700000000999.jpg", storageReq.pathWithQuery)
+      assertEquals("/storage/v1/object/delivery-proofs/$uid/delivery_proofs/${assignmentId}_1700000000999.jpg", storageReq.pathWithQuery)
       assertFalse("Private proof upload must not send x-upsert", storageReq.headers.containsKey("x-upsert"))
 
       val rpcReq = server.recordedRequests.first { it.pathWithQuery.endsWith("/rpc/driver_set_delivery_proof_path") }
       assertEquals(proofPath, JSONObject(rpcReq.body).getString("p_storage_path"))
+      assertEquals("Bearer test-access-token", rpcReq.headers["Authorization"])
     }
   }
 
