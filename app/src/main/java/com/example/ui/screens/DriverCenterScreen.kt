@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.os.Build
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -232,13 +234,37 @@ fun DriverCenterScreen(
         context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
       } ?: throw IllegalStateException("Could not read the selected delivery photo.")
 
-      val rawMime = context.contentResolver.getType(uri)
-        ?: if (isCameraCapture) "image/jpeg" else null
+      if (rawBytes.size > 12 * 1024 * 1024) {
+        throw IllegalArgumentException("Photo is too large. Please choose a photo under 12 MB.")
+      }
 
-      val validated = validateDeliveryProofImage(rawBytes, rawMime)
+      // Normalize every selected image to real JPEG bytes before validation/upload.
+      // Android ImageDecoder supports HEIC/HEIF on API 28+; this prevents the
+      // original image/heic MIME type from ever reaching Supabase Storage.
       val decodedBitmap = withContext(Dispatchers.Default) {
-        BitmapFactory.decodeByteArray(validated.bytes, 0, validated.bytes.size)
-      } ?: throw IllegalArgumentException("Selected file is not a valid image. Please choose a clear photo.")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+          ImageDecoder.decodeBitmap(
+            ImageDecoder.createSource(context.contentResolver, uri)
+          ) { decoder, _, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.isMutableRequired = false
+          }
+        } else {
+          BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size)
+        }
+      } ?: throw IllegalArgumentException(
+        "This photo format is not supported on this device. Please choose a JPG or PNG photo."
+      )
+
+      val jpegBytes = withContext(Dispatchers.Default) {
+        ByteArrayOutputStream().use { output ->
+          if (!decodedBitmap.compress(Bitmap.CompressFormat.JPEG, 88, output)) {
+            throw IllegalStateException("Could not convert the photo to JPEG.")
+          }
+          output.toByteArray()
+        }
+      }
+      val validated = validateDeliveryProofImage(jpegBytes, "image/jpeg")
 
       // Never trust a stale UI assignment: the server RPC also verifies that this
       // authenticated, approved driver owns the active assignment.
