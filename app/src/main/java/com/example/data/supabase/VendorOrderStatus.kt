@@ -19,7 +19,7 @@ enum class VendorOrderStatus(
   CONFIRMED("confirmed", "Confirmed", 2),
   PROCESSING("processing", "Processing", 3),
   READY_FOR_PICKUP("ready_for_pickup", "Ready for Pickup", 4),
-  SHIPPED("shipped", "Shipped", 5),
+  SHIPPED("shipped", "Collected by JTBazar", 5),
   DELIVERED("delivered", "Delivered", 6),
   NOT_DELIVERED("not_delivered", "Not Delivered", 7),
   CANCELLED("cancelled", "Cancelled", 8);
