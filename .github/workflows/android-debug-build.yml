@@ -38,6 +38,8 @@ jobs:
               -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
+      - name: Run Android unit and Compose tests
+        run: gradle :app:testDebugUnitTest --stacktrace
       - name: Build Android debug APK
         run: gradle :app:assembleDebug --stacktrace
       - name: Upload debug APK
