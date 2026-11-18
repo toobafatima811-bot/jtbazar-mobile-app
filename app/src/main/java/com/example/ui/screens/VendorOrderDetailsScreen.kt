@@ -403,7 +403,10 @@ fun VendorOrderDetailsScreen(
     items(group.items, key = { it.id.ifBlank { "${it.productName}:${it.sku}:${it.variantSummary}" } }) { item ->
       val itemBadge = vendorOrderStatusBadgeSpec(item.canonicalStatus)
       AppCard {
-        Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
+        Column(
+          modifier = Modifier.background(if (item.canonicalStatus == VendorOrderStatus.CANCELLED) Color(0xFFF3F4F6) else Color.Transparent, VendorShapes.card).padding(VendorSpacing.sm),
+          verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
+        ) {
           Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
@@ -452,7 +455,7 @@ fun VendorOrderDetailsScreen(
               text = "Quantity: ×${item.quantity}",
               style = MaterialTheme.typography.labelLarge,
               fontWeight = FontWeight.Bold,
-              color = VendorColors.NavyHeader
+              color = if (item.canonicalStatus == VendorOrderStatus.CANCELLED) VendorColors.TextSecondary else VendorColors.NavyHeader
             )
             val priceDisplay = item.lineTotal.ifBlank { item.unitPrice }
             if (priceDisplay.isNotBlank()) {
@@ -460,7 +463,7 @@ fun VendorOrderDetailsScreen(
                 text = formatPkrPrice(priceDisplay),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = VendorColors.PrimaryOrange
+                color = if (item.canonicalStatus == VendorOrderStatus.CANCELLED) VendorColors.TextSecondary else VendorColors.PrimaryOrange
               )
             }
           }
