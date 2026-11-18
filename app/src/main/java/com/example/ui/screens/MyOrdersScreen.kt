@@ -115,7 +115,7 @@ fun MyOrdersScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
       ) {
         items(orders, key = { it.orderId }) { order ->
-          val activeItems = order.items.filter { !it.vendorFulfillmentStatus.equals("cancelled", ignoreCase = true) }
+          val activeItems = order.items.filter { !it.vendorFulfillmentStatus.equals("cancelled", ignoreCase = true) && !it.deliveryStatus.equals("cancelled", ignoreCase = true) }
           val deliveredItems = if (order.orderStatus.equals("DELIVERED", ignoreCase = true)) activeItems.size else activeItems.count { it.deliveryStatus.equals("delivered", ignoreCase = true) }
           Surface(
             shape = RoundedCornerShape(14.dp),
