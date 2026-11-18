@@ -1665,15 +1665,11 @@ fun DriverCenterScreen(
 
           // Format items summary (e.g. "BOLT B155 20000mAh Power Bank × 1")
           val itemsArr = delivery.optJSONArray("items")
-          val itemsText = if (itemsArr != null && itemsArr.length() > 0) {
-            val list = mutableListOf<String>()
-            for (i in 0 until itemsArr.length()) {
-              val itm = itemsArr.optJSONObject(i) ?: continue
-              list.add("${itm.optCleanString("name").ifBlank { "Product" }} × ${itm.optInt("quantity", 1)}")
-            }
-            list.joinToString(", ")
+          val activeItems = if (itemsArr == null) emptyList() else (0 until itemsArr.length()).mapNotNull { itemsArr.optJSONObject(it) }.filter { it.optCleanString("vendor_fulfillment_status").lowercase() != "cancelled" }
+          val itemsText = if (activeItems.isNotEmpty()) {
+            activeItems.joinToString(", ") { itm -> "${itm.optCleanString("name").ifBlank { "Product" }} × ${itm.optInt("quantity", 1)}" }
           } else {
-            "No item details available"
+            "No active items in this delivery"
           }
 
           Card(
