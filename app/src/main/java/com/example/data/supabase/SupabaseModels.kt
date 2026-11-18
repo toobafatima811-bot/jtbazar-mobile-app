@@ -136,7 +136,9 @@ data class SupabaseOrderItemDto(
   val selectedPalette: String? = null,
   val selectedSize: String? = null,
   val imageUrl: String? = null,
-  val variantId: String? = null
+  val variantId: String? = null,
+  val vendorFulfillmentStatus: String = "pending",
+  val deliveryStatus: String = "pending"
 )
 
 data class SupabaseReviewDto(
