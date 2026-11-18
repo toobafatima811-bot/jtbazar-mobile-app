@@ -435,7 +435,7 @@ class DriverDeliveryLifecycleTest {
 
       // Manual completion is removed; the screen explains automatic OTP + photo completion.
       assertEquals(0, composeTestRule.onAllNodesWithTag("complete_delivery_button_assign-1").fetchSemanticsNodes().size)
-      composeTestRule.onNodeWithTag("automatic_completion_status_assign-1").assertIsDisplayed()
+      composeTestRule.onNodeWithTag("automatic_completion_status_assign-1").performScrollTo().assertIsDisplayed()
 
       // Open OTP dialog & try incorrect OTP first -> dialog stays open with error
       composeTestRule.onNodeWithTag("verify_otp_button_assign-1").performScrollTo().performClick()
@@ -467,7 +467,7 @@ class DriverDeliveryLifecycleTest {
 
       // OTP alone does not complete delivery; the backend still waits for the photo proof.
       assertEquals(0, composeTestRule.onAllNodesWithTag("complete_delivery_button_assign-1").fetchSemanticsNodes().size)
-      composeTestRule.onNodeWithText("Delivery will complete automatically when both OTP verification and photo proof are saved.").assertIsDisplayed()
+      composeTestRule.onNodeWithText("Delivery will complete automatically when both OTP verification and photo proof are saved.").performScrollTo().assertIsDisplayed()
     }
   }
 
@@ -539,7 +539,7 @@ class DriverDeliveryLifecycleTest {
       // Both persisted conditions are present; the app explains that the backend completes delivery automatically.
       composeTestRule.onNodeWithTag("otp_verified_badge_assign-2").assertIsDisplayed()
       composeTestRule.onNodeWithTag("proof_uploaded_badge_assign-2").assertIsDisplayed()
-      composeTestRule.onNodeWithText("OTP and photo verified. Delivery is completed automatically.").assertIsDisplayed()
+      composeTestRule.onNodeWithText("OTP and photo verified. Delivery is completed automatically.").performScrollTo().assertIsDisplayed()
       assertEquals(0, composeTestRule.onAllNodesWithTag("complete_delivery_button_assign-2").fetchSemanticsNodes().size)
 
       val statusCalls = server.recordedRequests.filter { it.pathWithQuery.endsWith("/rpc/driver_update_delivery_status") }
