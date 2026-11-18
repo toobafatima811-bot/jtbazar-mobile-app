@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -618,7 +619,7 @@ fun OrderTrackingScreen(
                 letterSpacing = 0.5.sp
               )
               Text(
-                text = activeOrder.items.size.toString() + " Items In Bag",
+                text = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) }.toString() + " Active Items · " + activeOrder.items.count { it.deliveryStatus.equals("delivered", true) }.toString() + " Delivered",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTPurplePrimary
@@ -687,13 +688,17 @@ fun OrderTrackingScreen(
             // Actual order lines returned by Supabase; no sample products.
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
               activeOrder.items.forEach { item ->
+                val itemCancelled = item.vendorFulfillmentStatus.equals("cancelled", ignoreCase = true)
+                val itemDelivered = item.deliveryStatus.equals("delivered", ignoreCase = true) || activeOrder.orderStatus.equals("DELIVERED", ignoreCase = true)
+                val itemReady = item.vendorFulfillmentStatus.lowercase() in listOf("ready", "ready_for_pickup", "picked_up", "shipped")
                 Row(
-                  modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp)).padding(10.dp),
+                  modifier = Modifier.fillMaxWidth().background(if (itemCancelled) Color(0xFFF3F4F6) else Color.White, RoundedCornerShape(10.dp)).padding(10.dp),
                   horizontalArrangement = Arrangement.SpaceBetween,
                   verticalAlignment = Alignment.CenterVertically
                 ) {
                   Column(modifier = Modifier.weight(1f)) {
-                    Text(item.product.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = JTTextPrimary)
+                    Text(item.product.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = if (itemCancelled) JTTextSecondary else JTTextPrimary, textDecoration = if (itemCancelled) TextDecoration.LineThrough else TextDecoration.None)
+                    Text(if (itemCancelled) "Cancelled by admin" else if (itemDelivered) "Delivered" else if (itemReady) "Ready" else "Pending", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (itemCancelled) JTTextSecondary else if (itemDelivered) JTEmerald else JTPurplePrimary)
                     Text("Qty: " + item.quantity.toString(), fontSize = 10.sp, color = JTTextSecondary)
                   }
                   Text("PKR " + String.format("%,d", item.totalPrice), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary)
