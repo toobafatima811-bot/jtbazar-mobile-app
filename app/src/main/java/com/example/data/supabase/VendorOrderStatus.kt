@@ -140,22 +140,23 @@ enum class VendorOrderStatus(
     fun resolveGroupStatus(items: List<JSONObject>): VendorOrderStatus {
       if (items.isEmpty()) return PENDING
 
-      val orderLevels = items.mapNotNull { extractOrderLevelStatus(it) }
-      val pickupLevels = items.mapNotNull { extractPickupStatus(it) }
-      val itemStatuses = items.map { resolveItemStatus(it) }
+      // A cancelled product must not block readiness or make the whole vendor order look cancelled.
+      val activeItems = items.filter { extractFulfillmentStatus(it) != CANCELLED }
+      if (activeItems.isEmpty()) return CANCELLED
 
-      // Terminal or shipped order-level status applies to the whole order.
+      val orderLevels = activeItems.mapNotNull { extractOrderLevelStatus(it) }
+      val pickupLevels = activeItems.mapNotNull { extractPickupStatus(it) }
+      val itemStatuses = activeItems.map { resolveItemStatus(it) }
+
+      // Terminal or shipped order-level status applies to the active items in this group.
       orderLevels.firstOrNull { it == CANCELLED }?.let { return it }
       orderLevels.firstOrNull { it == NOT_DELIVERED }?.let { return it }
       orderLevels.firstOrNull { it == DELIVERED }?.let { return it }
       orderLevels.firstOrNull { it == SHIPPED }?.let { return it }
 
-      // Pickup-level terminal/shipped status from `vendor_order_pickups`.
-      pickupLevels.firstOrNull { it == CANCELLED }?.let { return it }
+      // Pickup cancellation only closes the group when no active products remain.
       pickupLevels.firstOrNull { it == SHIPPED }?.let { return it }
 
-      // Uniform item-level terminal states.
-      if (itemStatuses.all { it == CANCELLED }) return CANCELLED
       if (itemStatuses.all { it == NOT_DELIVERED }) return NOT_DELIVERED
       if (itemStatuses.all { it == DELIVERED }) return DELIVERED
       if (itemStatuses.all { it == SHIPPED }) return SHIPPED
