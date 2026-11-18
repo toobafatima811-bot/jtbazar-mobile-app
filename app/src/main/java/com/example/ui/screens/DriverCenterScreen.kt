@@ -134,6 +134,7 @@ enum class DriverDeliveryFilter(val label: String) {
   ALL("All"),
   PENDING("Pending"),
   CONFIRMED("Confirmed"),
+  PARTIALLY_DELIVERED("Partially delivered"),
   PROCESSING("Processing"),
   ACTIVE("Active"),
   SHIPPED("Shipped"),
@@ -206,7 +207,6 @@ fun DriverCenterScreen(
   var uploadingProofAssignmentId by remember { mutableStateOf<String?>(null) }
   var failedProofUploads by remember { mutableStateOf<Map<String, Pair<Uri, Boolean>>>(emptyMap()) }
   var proofPreviews by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
-  var completingAssignmentIds by remember { mutableStateOf<Set<String>>(emptySet()) }
   var showOtpDialog by remember { mutableStateOf(false) }
   var otpDialogError by remember { mutableStateOf<String?>(null) }
   var showFailedDialog by remember { mutableStateOf(false) }
@@ -292,7 +292,7 @@ fun DriverCenterScreen(
       deliveries = updateAssignmentProofPathInList(deliveries, assignmentId, storagePath)
       proofPreviews = proofPreviews + (assignmentId to decodedBitmap)
       failedProofUploads = failedProofUploads - assignmentId
-      message = "Delivery photo proof saved securely."
+      message = "Delivery photo proof saved securely. Delivery status updated automatically when OTP is also verified."
     } catch (e: Exception) {
       failedProofUploads = failedProofUploads + (assignmentId to (uri to isCameraCapture))
       error = extractDriverFriendlyError(e, "Could not upload delivery photo proof.")
@@ -678,6 +678,7 @@ fun DriverCenterScreen(
         DriverDeliveryFilter.ALL -> deliveries
         DriverDeliveryFilter.PENDING -> deliveries.filter { it.optString("order_status").equals("pending", true) }
         DriverDeliveryFilter.CONFIRMED -> deliveries.filter { it.optString("order_status").equals("confirmed", true) }
+        DriverDeliveryFilter.PARTIALLY_DELIVERED -> deliveries.filter { it.optString("order_status").equals("partially_delivered", true) }
         DriverDeliveryFilter.PROCESSING -> deliveries.filter { it.optString("order_status").equals("processing", true) }
         DriverDeliveryFilter.ACTIVE -> deliveries.filter { it.optString("assignment_status", "assigned") in setOf("assigned", "pending") }
         DriverDeliveryFilter.SHIPPED -> deliveries.filter { it.optString("order_status").equals("shipped", true) }
@@ -1532,7 +1533,7 @@ fun DriverCenterScreen(
           ) {
             Column {
               Text(
-                if (selectedTab == DriverBottomNavTab.HISTORY) "Delivery History" else "My Assigned Deliveries",
+                if (selectedTab == DriverBottomNavTab.HISTORY) "Delivery History" else "My Delivery Batches",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F172A)
@@ -1541,7 +1542,7 @@ fun DriverCenterScreen(
                 it.optString("assignment_status") in setOf("delivered", "cancelled", "failed")
               }
               Text(
-                if (selectedTab == DriverBottomNavTab.HISTORY) "$closedHistoryCount completed / closed orders" else "$activeCount active delivery assignments",
+                if (selectedTab == DriverBottomNavTab.HISTORY) "$closedHistoryCount completed / closed orders" else "$activeCount active delivery batches",
                 fontSize = 12.sp,
                 color = Color(0xFF64748B)
               )
@@ -1586,6 +1587,7 @@ fun DriverCenterScreen(
               DriverDeliveryFilter.ALL to allCount,
               DriverDeliveryFilter.PENDING to deliveries.count { it.optString("order_status").equals("pending", true) },
               DriverDeliveryFilter.CONFIRMED to deliveries.count { it.optString("order_status").equals("confirmed", true) },
+              DriverDeliveryFilter.PARTIALLY_DELIVERED to deliveries.count { it.optString("order_status").equals("partially_delivered", true) },
               DriverDeliveryFilter.PROCESSING to deliveries.count { it.optString("order_status").equals("processing", true) },
               DriverDeliveryFilter.ACTIVE to activeCount,
               DriverDeliveryFilter.SHIPPED to deliveries.count { it.optString("order_status").equals("shipped", true) },
@@ -1657,8 +1659,6 @@ fun DriverCenterScreen(
           val otpVerified = isDeliveryOtpVerified(delivery)
           val proofSaved = hasDeliveryProofSaved(delivery)
           val isUploadingThisProof = uploadingProofAssignmentId == assignmentId
-          val isCompletingThisDelivery = completingAssignmentIds.contains(assignmentId)
-          val missingHint = missingCompletionStepsMessage(otpVerified, proofSaved)
           val batchNumber = delivery.optCleanString("delivery_batch_number")
           val failedReasonText = delivery.optCleanString("failed_reason").replace('_', ' ')
           val orderStatusText = delivery.optCleanString("order_status")
@@ -2190,78 +2190,17 @@ fun DriverCenterScreen(
 
                     HorizontalDivider(color = Color(0xFFE2E8F0))
 
-                    // Step C: Separate Complete Delivery button (strictly gated)
-                    if (missingHint != null) {
-                      Text(
-                        text = missingHint,
-                        fontSize = 11.sp,
-                        color = Color(0xFF92400E),
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.testTag("completion_requirement_hint_$assignmentId")
-                      )
-                    }
-
-                    val canCompleteThis = canCompleteDelivery(
-                      assignmentStatus = assignmentStatus,
-                      otpVerified = otpVerified,
-                      proofSaved = proofSaved,
-                      isBusy = busy || actionBusy || isUploadingThisProof || isCompletingThisDelivery
-                    )
-
-                    Button(
-                      enabled = canCompleteThis,
-                      onClick = {
-                        if (!canCompleteDelivery(assignmentStatus, otpVerified, proofSaved, isBusy = false)) {
-                          error = missingCompletionStepsMessage(otpVerified, proofSaved)
-                          return@Button
-                        }
-                        if (completingAssignmentIds.contains(assignmentId) || actionBusy || busy) return@Button
-                        scope.launch {
-                          completingAssignmentIds = completingAssignmentIds + assignmentId
-                          actionBusy = true
-                          error = null
-                          try {
-                            SupabaseClient.rpc(
-                              "driver_update_delivery_status",
-                              JSONObject()
-                                .put("p_assignment_id", assignmentId)
-                                .put("p_action", "delivered")
-                                .toString(),
-                              requireAuth = true
-                            ).getOrThrow()
-                            proofPreviews = proofPreviews - assignmentId
-                            message = "Delivery completed successfully."
-                            load(showLoader = false)
-                          } catch (e: Exception) {
-                            error = extractDriverFriendlyError(e, "Could not complete delivery. Please verify OTP and photo proof.")
-                          } finally {
-                            completingAssignmentIds = completingAssignmentIds - assignmentId
-                            actionBusy = false
-                          }
-                        }
-                      },
-                      modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("complete_delivery_button_$assignmentId"),
-                      shape = RoundedCornerShape(12.dp),
-                      colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF16A34A),
-                        contentColor = Color.White,
-                        disabledContainerColor = Color(0xFFE2E8F0),
-                        disabledContentColor = Color(0xFF64748B)
-                      )
-                    ) {
-                      if (isCompletingThisDelivery) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Completing Delivery…", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                      text = if (otpVerified && proofSaved) {
+                        "OTP and photo verified. Delivery is completed automatically."
                       } else {
-                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Complete Delivery", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
-                      }
-                    }
+                        "Delivery will complete automatically when both OTP verification and photo proof are saved."
+                      },
+                      fontSize = 11.sp,
+                      color = if (otpVerified && proofSaved) Color(0xFF15803D) else Color(0xFF64748B),
+                      fontWeight = FontWeight.Medium,
+                      modifier = Modifier.testTag("automatic_completion_status_$assignmentId")
+                    )
                   }
                 }
               } else if (assignmentStatus == "assigned") {
@@ -2378,7 +2317,7 @@ fun DriverCenterScreen(
                   showOtpDialog = false
                   otpCode = ""
                   otpDialogError = null
-                  message = "Customer OTP verified! Upload delivery photo proof (if not done) and tap Complete Delivery."
+                  message = "Customer OTP verified. Delivery will complete automatically once the photo proof is saved."
                   load(showLoader = false)
                 }
               } catch (e: Exception) {
