@@ -217,6 +217,7 @@ fun DriverCenterScreen(
   var failureNote by remember { mutableStateOf("") }
   var codAmount by remember { mutableStateOf("") }
   var actionBusy by remember { mutableStateOf(false) }
+  var refreshDriverList: suspend () -> Unit = {}
 
   suspend fun uploadDeliveryProofFromUri(
     assignmentId: String,
@@ -293,6 +294,7 @@ fun DriverCenterScreen(
       proofPreviews = proofPreviews + (assignmentId to decodedBitmap)
       failedProofUploads = failedProofUploads - assignmentId
       message = "Delivery photo proof saved securely. Delivery status updated automatically when OTP is also verified."
+      refreshDriverList()
     } catch (e: Exception) {
       failedProofUploads = failedProofUploads + (assignmentId to (uri to isCameraCapture))
       error = extractDriverFriendlyError(e, "Could not upload delivery photo proof.")
@@ -626,6 +628,8 @@ fun DriverCenterScreen(
       loadMutex.unlock()
     }
   }
+  refreshDriverList = { load(showLoader = false, surfaceErrors = false) }
+
 
   val lifecycleOwner = LocalLifecycleOwner.current
   LaunchedEffect(user?.id, session != null) { load(showLoader = deliveries.isEmpty(), surfaceErrors = true) }
