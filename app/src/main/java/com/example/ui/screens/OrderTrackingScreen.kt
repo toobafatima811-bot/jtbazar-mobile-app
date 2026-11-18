@@ -690,7 +690,7 @@ fun OrderTrackingScreen(
               activeOrder.items.forEach { item ->
                 val itemCancelled = item.vendorFulfillmentStatus.equals("cancelled", ignoreCase = true)
                 val itemDelivered = item.deliveryStatus.equals("delivered", ignoreCase = true) || activeOrder.orderStatus.equals("DELIVERED", ignoreCase = true)
-                val itemReady = item.vendorFulfillmentStatus.lowercase() in listOf("ready", "ready_for_pickup", "picked_up", "shipped")
+                val itemReady = item.deliveryStatus.lowercase() in listOf("ready", "ready_for_pickup", "picked_up", "shipped") || item.vendorFulfillmentStatus.lowercase() in listOf("ready", "ready_for_pickup", "picked_up", "shipped")
                 Row(
                   modifier = Modifier.fillMaxWidth().background(if (itemCancelled) Color(0xFFF3F4F6) else Color.White, RoundedCornerShape(10.dp)).padding(10.dp),
                   horizontalArrangement = Arrangement.SpaceBetween,
