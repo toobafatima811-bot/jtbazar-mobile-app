@@ -433,9 +433,9 @@ class DriverDeliveryLifecycleTest {
         composeTestRule.onAllNodesWithTag("verify_otp_button_assign-1").fetchSemanticsNodes().isNotEmpty()
       }
 
-      // Complete Delivery must start disabled with incomplete-steps hint
-      composeTestRule.onNodeWithTag("complete_delivery_button_assign-1").performScrollTo().assertIsNotEnabled()
-      composeTestRule.onNodeWithTag("completion_requirement_hint_assign-1").assertIsDisplayed()
+      // Manual completion is removed; the screen explains automatic OTP + photo completion.
+      assertEquals(0, composeTestRule.onAllNodesWithTag("complete_delivery_button_assign-1").fetchSemanticsNodes().size)
+      composeTestRule.onNodeWithTag("automatic_completion_status_assign-1").assertIsDisplayed()
 
       // Open OTP dialog & try incorrect OTP first -> dialog stays open with error
       composeTestRule.onNodeWithTag("verify_otp_button_assign-1").performScrollTo().performClick()
@@ -465,9 +465,9 @@ class DriverDeliveryLifecycleTest {
       val statusCalls = server.recordedRequests.count { it.pathWithQuery.endsWith("/rpc/driver_update_delivery_status") }
       assertEquals("Step A must not call driver_update_delivery_status", 0, statusCalls)
 
-      // Complete Delivery remains disabled because delivery_proof_path is still missing
-      composeTestRule.onNodeWithTag("complete_delivery_button_assign-1").performScrollTo().assertIsNotEnabled()
-      composeTestRule.onNodeWithText("Incomplete step: Upload a delivery photo proof before completing delivery.").assertIsDisplayed()
+      // OTP alone does not complete delivery; the backend still waits for the photo proof.
+      assertEquals(0, composeTestRule.onAllNodesWithTag("complete_delivery_button_assign-1").fetchSemanticsNodes().size)
+      composeTestRule.onNodeWithText("Delivery will complete automatically when both OTP verification and photo proof are saved.").assertIsDisplayed()
     }
   }
 
