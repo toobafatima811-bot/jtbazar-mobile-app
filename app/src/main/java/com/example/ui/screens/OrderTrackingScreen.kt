@@ -619,7 +619,7 @@ fun OrderTrackingScreen(
                 letterSpacing = 0.5.sp
               )
               Text(
-                text = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) }.toString() + " Active Items · " + activeOrder.items.count { it.deliveryStatus.equals("delivered", true) }.toString() + " Delivered",
+                text = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && (it.deliveryStatus.equals("delivered", true) || activeOrder.orderStatus.equals("DELIVERED", true)) }.toString() + " of " + activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) }.toString() + " items delivered",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTPurplePrimary
