@@ -873,7 +873,9 @@ object MarketplaceRepository {
             ),
             quantity = line.quantity,
             selectedPalette = line.selectedPalette,
-            selectedSize = line.selectedSize
+            selectedSize = line.selectedSize,
+            vendorFulfillmentStatus = line.vendorFulfillmentStatus,
+            deliveryStatus = line.deliveryStatus
           )
         }
         val canonical = VendorOrderStatus.parse(dto.orderStatus)
@@ -1482,7 +1484,9 @@ object MarketplaceRepository {
                   product = product,
                   quantity = line.quantity,
                   selectedPalette = line.selectedPalette,
-                  selectedSize = line.selectedSize
+                  selectedSize = line.selectedSize,
+                  vendorFulfillmentStatus = line.vendorFulfillmentStatus,
+                  deliveryStatus = line.deliveryStatus
                 )
               }
             }
