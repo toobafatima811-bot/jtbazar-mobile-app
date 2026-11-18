@@ -115,6 +115,8 @@ fun MyOrdersScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
       ) {
         items(orders, key = { it.orderId }) { order ->
+          val activeItems = order.items.filter { !it.vendorFulfillmentStatus.equals("cancelled", ignoreCase = true) }
+          val deliveredItems = activeItems.count { it.deliveryStatus.equals("delivered", ignoreCase = true) }
           Surface(
             shape = RoundedCornerShape(14.dp),
             color = JTCardBg,
@@ -181,7 +183,7 @@ fun MyOrdersScreen(
               Spacer(modifier = Modifier.height(10.dp))
 
               Text(
-                text = "${order.items.size} item(s) • Total: Rs. ${String.format("%,d", order.grandTotal)}",
+                text = "${deliveredItems} of ${activeItems.size} items delivered • Total: Rs. ${String.format("%,d", order.grandTotal)}",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = JTTextPrimary
