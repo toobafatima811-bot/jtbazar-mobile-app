@@ -619,7 +619,7 @@ fun OrderTrackingScreen(
                 letterSpacing = 0.5.sp
               )
               Text(
-                text = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && (it.deliveryStatus.equals("delivered", true) || activeOrder.orderStatus.equals("DELIVERED", true)) }.toString() + " of " + activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) }.toString() + " items delivered",
+                text = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && !it.deliveryStatus.equals("cancelled", true) && (it.deliveryStatus.equals("delivered", true) || activeOrder.orderStatus.equals("DELIVERED", true)) }.toString() + " of " + activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && !it.deliveryStatus.equals("cancelled", true) }.toString() + " items delivered",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTPurplePrimary
@@ -688,7 +688,7 @@ fun OrderTrackingScreen(
             // Actual order lines returned by Supabase; no sample products.
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
               activeOrder.items.forEach { item ->
-                val itemCancelled = item.vendorFulfillmentStatus.equals("cancelled", ignoreCase = true)
+                val itemCancelled = item.vendorFulfillmentStatus.equals("cancelled", ignoreCase = true) || item.deliveryStatus.equals("cancelled", ignoreCase = true)
                 val itemDelivered = item.deliveryStatus.equals("delivered", ignoreCase = true) || activeOrder.orderStatus.equals("DELIVERED", ignoreCase = true)
                 val itemReady = item.deliveryStatus.lowercase() in listOf("ready", "ready_for_pickup", "picked_up", "shipped") || item.vendorFulfillmentStatus.lowercase() in listOf("ready", "ready_for_pickup", "picked_up", "shipped")
                 Row(
