@@ -404,7 +404,7 @@ fun VendorOrderDetailsScreen(
       val itemBadge = vendorOrderStatusBadgeSpec(item.canonicalStatus)
       AppCard {
         Column(
-          modifier = Modifier.background(if (item.canonicalStatus == VendorOrderStatus.CANCELLED) Color(0xFFF3F4F6) else Color.Transparent, VendorShapes.card).padding(VendorSpacing.sm),
+          modifier = Modifier.background(if (item.canonicalStatus == VendorOrderStatus.CANCELLED) Color(0xFFF3F4F6) else Color.Transparent, RoundedCornerShape(12.dp)).padding(VendorSpacing.sm),
           verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
         ) {
           Row(
