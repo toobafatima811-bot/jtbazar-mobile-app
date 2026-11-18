@@ -472,7 +472,7 @@ class DriverDeliveryLifecycleTest {
   }
 
   @Test
-  fun stepCCompleteDeliveryEnabledWhenBackendHasOtpVerifiedAndProofSavedAndCallsDeliveredOnce() {
+  fun stepCAutomaticCompletionIsShownWhenOtpAndProofAreSavedWithoutManualDeliveredCall() {
     val uid = "11111111-1111-4111-8111-111111111111"
     setAuthenticatedDriver(uid)
 
@@ -533,21 +533,17 @@ class DriverDeliveryLifecycleTest {
         .performScrollToNode(hasTestTag("driver_delivery_card_assign-2"))
 
       composeTestRule.waitUntil(timeoutMillis = 5000) {
-        composeTestRule.onAllNodesWithTag("complete_delivery_button_assign-2").fetchSemanticsNodes().isNotEmpty()
+        composeTestRule.onAllNodesWithTag("automatic_completion_status_assign-2").fetchSemanticsNodes().isNotEmpty()
       }
 
-      // Reloaded from backend with otp_verified_at + delivery_proof_path -> OTP Verified, Uploaded, and Complete Delivery enabled!
+      // Both persisted conditions are present; the app explains that the backend completes delivery automatically.
       composeTestRule.onNodeWithTag("otp_verified_badge_assign-2").assertIsDisplayed()
       composeTestRule.onNodeWithTag("proof_uploaded_badge_assign-2").assertIsDisplayed()
-      composeTestRule.onNodeWithTag("complete_delivery_button_assign-2").performScrollTo().assertIsEnabled().performClick()
-
-      composeTestRule.waitUntil(timeoutMillis = 5000) {
-        composeTestRule.onAllNodesWithText("Delivery completed successfully.").fetchSemanticsNodes().isNotEmpty()
-      }
+      composeTestRule.onNodeWithText("OTP and photo verified. Delivery is completed automatically.").assertIsDisplayed()
+      assertEquals(0, composeTestRule.onAllNodesWithTag("complete_delivery_button_assign-2").fetchSemanticsNodes().size)
 
       val statusCalls = server.recordedRequests.filter { it.pathWithQuery.endsWith("/rpc/driver_update_delivery_status") }
-      assertEquals(1, statusCalls.size)
-      assertEquals("delivered", JSONObject(statusCalls.first().body).getString("p_action"))
+      assertEquals("Driver app must not call the manual delivered action.", 0, statusCalls.size)
     }
   }
 
