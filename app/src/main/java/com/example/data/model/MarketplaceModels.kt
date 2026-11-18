@@ -60,7 +60,9 @@ data class CartItem(
   var quantity: Int,
   val selectedPalette: String? = null,
   val selectedSize: String? = null,
-  val variantId: String? = null
+  val variantId: String? = null,
+  val vendorFulfillmentStatus: String = "pending",
+  val deliveryStatus: String = "pending"
 ) {
   val totalPrice: Int
     get() = product.price * quantity
