@@ -417,8 +417,16 @@ fun VendorOrderDetailsScreen(
                 text = item.productName,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = VendorColors.TextPrimary
+                color = if (item.canonicalStatus == VendorOrderStatus.CANCELLED) VendorColors.TextSecondary else VendorColors.TextPrimary
               )
+              if (item.canonicalStatus == VendorOrderStatus.CANCELLED) {
+                Text(
+                  text = "Cancelled by admin",
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.Bold,
+                  color = VendorColors.TextSecondary
+                )
+              }
               Text(
                 text = "SKU: ${item.sku} • Variant: ${item.variantSummary}",
                 style = MaterialTheme.typography.bodySmall,
