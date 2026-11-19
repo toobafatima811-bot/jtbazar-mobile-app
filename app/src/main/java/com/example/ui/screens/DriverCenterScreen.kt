@@ -272,8 +272,14 @@ fun DriverCenterScreen(
       val storagePath = buildDeliveryProofPath(uid, assignmentId, validated.extension)
       SupabaseClient.uploadPrivateFile("delivery-proofs", storagePath, validated.bytes, validated.mimeType).getOrThrow()
       try {
-        SupabaseClient.rpc(
+        val deliveryForProof = deliveries.firstOrNull { it.optCleanString("assignment_id") == assignmentId } ?: JSONObject()
+        val proofRpc = driverDeliveryRpcName(
+          deliveryForProof,
           "driver_set_delivery_proof_path",
+          "driver_set_manual_order_delivery_proof_path"
+        )
+        SupabaseClient.rpc(
+          proofRpc,
           JSONObject()
             .put("p_assignment_id", assignmentId)
             .put("p_storage_path", storagePath)
@@ -612,8 +618,11 @@ fun DriverCenterScreen(
       // Strict security check: customer locations & assigned deliveries are ONLY accessible
       // to authenticated, approved drivers whose customer_driver_access is enabled.
       deliveries = if (hasDriverDeliveryAccess(true, enabled, fetchedStatus)) {
-        JSONArray(SupabaseClient.rpc("driver_list_assigned_orders_v2", requireAuth = true).getOrThrow()).let { rows ->
-          (0 until rows.length()).map { rows.getJSONObject(it) }
+        JSONArray(SupabaseClient.rpc("driver_list_assigned_orders_v3", requireAuth = true).getOrThrow()).let { rows ->
+          (0 until rows.length()).map { rows.getJSONObject(it) }.sortedWith(
+            compareBy<JSONObject> { it.optCleanString("assignment_status") in setOf("delivered", "cancelled", "failed") }
+              .thenByDescending { it.optCleanString("assigned_at") }
+          )
         }
       } else {
         emptyList()
@@ -1934,8 +1943,13 @@ fun DriverCenterScreen(
                       scope.launch {
                         busy = true
                         error = null
-                        val r = SupabaseClient.rpc(
+                        val pickupRpc = driverDeliveryRpcName(
+                          delivery,
                           "driver_update_delivery_status",
+                          "driver_update_manual_order_delivery_status"
+                        )
+                        val r = SupabaseClient.rpc(
+                          pickupRpc,
                           JSONObject().put("p_assignment_id", assignmentId).put("p_action", "picked_up").toString(),
                           requireAuth = true
                         )
@@ -2261,8 +2275,13 @@ fun DriverCenterScreen(
       title = { Text("Verify Customer Delivery OTP", fontWeight = FontWeight.Bold) },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          val otpDelivery = deliveries.firstOrNull { it.optCleanString("assignment_id") == actionAssignmentId } ?: JSONObject()
           Text(
-            "Ask the customer to open JTBazar order tracking and share their 6-digit delivery code. After 5 incorrect attempts the code locks and a new code must be generated.",
+            if (isManualOrderDelivery(otpDelivery)) {
+              "Ask the customer for the 6-digit delivery code shared by JTBazar admin. After 5 incorrect attempts, ask admin to generate a new code."
+            } else {
+              "Ask the customer to open JTBazar order tracking and share their 6-digit delivery code. After 5 incorrect attempts the code locks and a new code must be generated."
+            },
             fontSize = 12.sp
           )
           OutlinedTextField(
@@ -2305,8 +2324,14 @@ fun DriverCenterScreen(
               actionBusy = true
               otpDialogError = null
               try {
-                val rawVerified = SupabaseClient.rpc(
+                val otpDelivery = deliveries.firstOrNull { it.optCleanString("assignment_id") == actionAssignmentId } ?: JSONObject()
+                val otpRpc = driverDeliveryRpcName(
+                  otpDelivery,
                   "driver_verify_delivery_otp",
+                  "driver_verify_manual_order_delivery_otp"
+                )
+                val rawVerified = SupabaseClient.rpc(
+                  otpRpc,
                   JSONObject()
                     .put("p_assignment_id", actionAssignmentId)
                     .put("p_code", otpCode)
@@ -2386,8 +2411,14 @@ fun DriverCenterScreen(
             scope.launch {
               actionBusy = true
               try {
-                SupabaseClient.rpc(
+                val failedDelivery = deliveries.firstOrNull { it.optCleanString("assignment_id") == actionAssignmentId } ?: JSONObject()
+                val failedRpc = driverDeliveryRpcName(
+                  failedDelivery,
                   "driver_mark_delivery_failed",
+                  "driver_mark_manual_order_delivery_failed"
+                )
+                SupabaseClient.rpc(
+                  failedRpc,
                   JSONObject()
                     .put("p_assignment_id", actionAssignmentId)
                     .put("p_reason", failureReason)
@@ -2438,8 +2469,14 @@ fun DriverCenterScreen(
             scope.launch {
               actionBusy = true
               try {
-                SupabaseClient.rpc(
+                val codDelivery = deliveries.firstOrNull { it.optCleanString("assignment_id") == actionAssignmentId } ?: JSONObject()
+                val codRpc = driverDeliveryRpcName(
+                  codDelivery,
                   "driver_record_cod_collection",
+                  "driver_record_manual_order_cod_collection"
+                )
+                SupabaseClient.rpc(
+                  codRpc,
                   JSONObject()
                     .put("p_assignment_id", actionAssignmentId)
                     .put("p_amount", parsedAmount)

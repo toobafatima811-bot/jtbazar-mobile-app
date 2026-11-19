@@ -386,7 +386,7 @@ class DriverDeliveryLifecycleTest {
               .put("admin_note", JSONObject.NULL)
           ).toString()
         )
-        req.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v2") -> StubResponse(
+        req.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v3") -> StubResponse(
           200,
           JSONArray().put(
             JSONObject()
@@ -493,7 +493,7 @@ class DriverDeliveryLifecycleTest {
               .put("status", "approved")
           ).toString()
         )
-        req.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v2") -> {
+        req.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v3") -> {
           val currentStatus = assignmentStatusOnBackend.get()
           StubResponse(
             200,
@@ -583,9 +583,9 @@ class DriverDeliveryLifecycleTest {
 
       composeTestRule.onNodeWithTag("driver_access_disabled_card").assertIsDisplayed()
       assertEquals(
-        "Disabled driver must NOT call driver_list_assigned_orders_v2",
+        "Disabled driver must NOT call driver_list_assigned_orders_v3",
         0,
-        server.recordedRequests.count { it.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v2") }
+        server.recordedRequests.count { it.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v3") }
       )
     }
   }
@@ -631,7 +631,7 @@ class DriverDeliveryLifecycleTest {
       composeTestRule.onNodeWithTag("submit_driver_application_button").performScrollTo().assertIsDisplayed()
       assertEquals(
         0,
-        server.recordedRequests.count { it.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v2") }
+        server.recordedRequests.count { it.pathWithQuery.endsWith("/rpc/driver_list_assigned_orders_v3") }
       )
     }
   }

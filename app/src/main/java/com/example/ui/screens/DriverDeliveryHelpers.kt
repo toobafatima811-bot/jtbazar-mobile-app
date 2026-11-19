@@ -18,6 +18,14 @@ internal fun JSONObject.optCleanString(key: String): String {
   return if (raw.equals("null", ignoreCase = true)) "" else raw
 }
 
+internal fun isManualOrderDelivery(delivery: JSONObject): Boolean {
+  return delivery.optCleanString("order_type").equals("manual", ignoreCase = true)
+}
+
+internal fun driverDeliveryRpcName(delivery: JSONObject, normalRpc: String, manualRpc: String): String {
+  return if (isManualOrderDelivery(delivery)) manualRpc else normalRpc
+}
+
 internal fun hasDriverDeliveryAccess(
   isAuthenticated: Boolean,
   accessEnabled: Boolean,

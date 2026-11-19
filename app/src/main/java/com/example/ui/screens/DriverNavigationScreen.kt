@@ -332,7 +332,21 @@ fun DriverNavigationScreen(
               Text("Phone: $customerPhone", fontSize = 12.sp, color = Color(0xFF2563EB))
             }
           }
-          Spacer(Modifier.height(20.dp))
+          Spacer(Modifier.height(16.dp))
+          if (deliveryAddress.isNotBlank()) {
+            OutlinedButton(
+              onClick = {
+                val mapUri = Uri.parse("geo:0,0?q=${Uri.encode(deliveryAddress)}")
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, mapUri)) }
+              },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Icon(Icons.Filled.Map, contentDescription = null)
+              Spacer(Modifier.width(8.dp))
+              Text("Open Address in Maps")
+            }
+          }
+          Spacer(Modifier.height(10.dp))
           if (customerPhone.isNotBlank()) {
             Button(
               onClick = {

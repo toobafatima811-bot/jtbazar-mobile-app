@@ -116,6 +116,7 @@ class SupabaseRealtimeClient(
           }
           if (subscribeToDriverTables && SupabaseClient.isAuthenticated) {
             subscribeTable(webSocket, "realtime:public:driver_order_assignments", "driver_order_assignments")
+            subscribeTable(webSocket, "realtime:public:manual_order_driver_assignment_updates", "manual_order_driver_assignment_updates")
             subscribeTable(webSocket, "realtime:public:driver_applications", "driver_applications")
             subscribeTable(webSocket, "realtime:public:customer_driver_access", "customer_driver_access")
             subscribeTable(webSocket, "realtime:public:orders:driver", "orders")
@@ -209,7 +210,7 @@ class SupabaseRealtimeClient(
           onCatalogChanged()
         }
       }
-      "driver_order_assignments", "driver_applications", "customer_driver_access" -> {
+      "driver_order_assignments", "manual_order_driver_assignment_updates", "driver_applications", "customer_driver_access" -> {
         driverDebounceJob?.cancel()
         driverDebounceJob = scope.launch {
           delay(DEBOUNCE_MS)
