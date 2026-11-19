@@ -31,6 +31,8 @@ import com.example.R
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,14 +79,14 @@ fun LoginOtpVerificationScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Image(
           painter = painterResource(id = R.drawable.logo_jtbazar_header),
-          contentDescription = "JTBazar Logo",
+          contentDescription = appText("JTBazar Logo", "JTBazar لوگو"),
           contentScale = ContentScale.Fit,
           modifier = Modifier.height(26.dp)
         )
@@ -118,7 +120,7 @@ fun LoginOtpVerificationScreen(
       Spacer(modifier = Modifier.height(20.dp))
 
       Text(
-        text = "Security Verification",
+        text = appText("Security Verification", "سیکیورٹی تصدیق"),
         fontSize = 22.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
@@ -127,7 +129,7 @@ fun LoginOtpVerificationScreen(
       Spacer(modifier = Modifier.height(6.dp))
 
       Text(
-        text = "Enter the 6-digit sign-in code sent to:",
+        text = appText("Enter the 6-digit sign-in code sent to:", "اس ای میل پر بھیجا گیا 6 ہندسوں کا سائن ان کوڈ درج کریں:"),
         fontSize = 13.sp,
         color = JTTextSecondary,
         textAlign = TextAlign.Center
@@ -201,7 +203,7 @@ fun LoginOtpVerificationScreen(
             errorMessage = null
           }
         },
-        label = { Text("6-Digit Code") },
+        label = { Text(appText("6-Digit Code", "6 ہندسوں کا کوڈ")) },
         placeholder = { Text("123456") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
         singleLine = true,
@@ -222,7 +224,7 @@ fun LoginOtpVerificationScreen(
       Button(
         onClick = {
           if (otpCode.length != 6) {
-            errorMessage = "Please enter the complete 6-digit code."
+            errorMessage = AppLanguageManager.tr("Please enter the complete 6-digit code.", "براہ کرم مکمل 6 ہندسوں کا کوڈ درج کریں۔")
             return@Button
           }
 
@@ -236,7 +238,7 @@ fun LoginOtpVerificationScreen(
             )
             isLoading = false
             if (result.isSuccess) {
-              Toast.makeText(context, "Welcome back to JTBazar!", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, AppLanguageManager.tr("Welcome back to JTBazar!", "JTBazar میں خوش آمدید!"), Toast.LENGTH_SHORT).show()
               onVerified()
             } else {
               errorMessage = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.AUTH)
@@ -254,9 +256,9 @@ fun LoginOtpVerificationScreen(
         if (isLoading) {
           CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Verifying...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Verifying...", "تصدیق ہو رہی ہے..."), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         } else {
-          Text("Verify & Sign In", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text(appText("Verify & Sign In", "تصدیق کریں اور سائن ان ہوں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
       }
 
@@ -269,13 +271,13 @@ fun LoginOtpVerificationScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         Text(
-          text = "Didn't receive the code? ",
+          text = appText("Didn't receive the code? ", "کوڈ موصول نہیں ہوا؟ "),
           fontSize = 12.sp,
           color = JTTextSecondary
         )
         if (canResend) {
           Text(
-            text = "Resend Code",
+            text = appText("Resend Code", "کوڈ دوبارہ بھیجیں"),
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = JTOrange,
@@ -286,7 +288,7 @@ fun LoginOtpVerificationScreen(
                   resendCountdown = 60
                   val res = SupabaseAuthService.sendLoginOtp(email.trim())
                   if (res.isSuccess) {
-                    successMessage = "A new verification code has been sent."
+                    successMessage = AppLanguageManager.tr("A new verification code has been sent.", "نیا تصدیقی کوڈ بھیج دیا گیا ہے۔")
                   } else {
                     errorMessage = AppErrorMapper.toCustomerMessage(res.exceptionOrNull(), ErrorContext.AUTH)
                   }
@@ -301,7 +303,7 @@ fun LoginOtpVerificationScreen(
           )
         } else {
           Text(
-            text = "Resend in ${resendCountdown}s",
+            text = appText("Resend in ${resendCountdown}s", "${resendCountdown} سیکنڈ میں دوبارہ بھیجیں"),
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = JTTextSecondary

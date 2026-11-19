@@ -431,7 +431,7 @@ class CatalogPaginationTest {
       val errMsg = errorState.paginationError
       assertNotNull(errMsg)
       assertFalse("Must never leak PostgREST/SQL details", errMsg!!.contains("42P01") || errMsg.contains("500"))
-      assertEquals("Products load nahi ho sake. Please try again.", errMsg)
+      assertEquals("Could not load products. Please try again.", errMsg)
 
       paginator.retry()?.join()
       val recovered = paginator.state.value

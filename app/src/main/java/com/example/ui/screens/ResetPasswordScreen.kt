@@ -30,6 +30,8 @@ import com.example.R
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -71,14 +73,14 @@ fun ResetPasswordScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Image(
           painter = painterResource(id = R.drawable.logo_jtbazar_header),
-          contentDescription = "JTBazar Logo",
+          contentDescription = appText("JTBazar Logo", "JTBazar لوگو"),
           contentScale = ContentScale.Fit,
           modifier = Modifier.height(26.dp)
         )
@@ -95,7 +97,7 @@ fun ResetPasswordScreen(
       horizontalAlignment = Alignment.Start
     ) {
       Text(
-        text = "Set New Password",
+        text = appText("Set New Password", "نیا پاس ورڈ مقرر کریں"),
         fontSize = 22.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
@@ -104,7 +106,10 @@ fun ResetPasswordScreen(
       Spacer(modifier = Modifier.height(4.dp))
 
       Text(
-        text = "Enter the reset code sent to $email and your new password.",
+        text = appText(
+          "Enter the reset code sent to $email and your new password.",
+          "$email پر بھیجا گیا ری سیٹ کوڈ اور اپنا نیا پاس ورڈ درج کریں۔"
+        ),
         fontSize = 13.sp,
         color = JTTextSecondary
       )
@@ -139,8 +144,8 @@ fun ResetPasswordScreen(
       OutlinedTextField(
         value = token,
         onValueChange = { token = it; errorMessage = null },
-        label = { Text("Reset Code *") },
-        placeholder = { Text("Enter 6-digit code or token") },
+        label = { Text(appText("Reset Code *", "ری سیٹ کوڈ *")) },
+        placeholder = { Text(appText("Enter 6-digit code or token", "6 ہندسوں کا کوڈ یا ٹوکن درج کریں")) },
         leadingIcon = { Icon(Icons.Filled.Key, contentDescription = null, tint = JTPurplePrimary) },
         singleLine = true,
         modifier = Modifier
@@ -154,13 +159,13 @@ fun ResetPasswordScreen(
       OutlinedTextField(
         value = newPassword,
         onValueChange = { newPassword = it; errorMessage = null },
-        label = { Text("New Password * (min. 6 characters)") },
+        label = { Text(appText("New Password * (min. 6 characters)", "نیا پاس ورڈ * (کم از کم 6 حروف)")) },
         leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = JTPurplePrimary) },
         trailingIcon = {
           IconButton(onClick = { passwordVisible = !passwordVisible }) {
             Icon(
               imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-              contentDescription = if (passwordVisible) "Hide password" else "Show password",
+              contentDescription = if (passwordVisible) appText("Hide password", "پاس ورڈ چھپائیں") else appText("Show password", "پاس ورڈ دکھائیں"),
               tint = JTTextSecondary
             )
           }
@@ -179,13 +184,13 @@ fun ResetPasswordScreen(
       OutlinedTextField(
         value = confirmPassword,
         onValueChange = { confirmPassword = it; errorMessage = null },
-        label = { Text("Confirm New Password *") },
+        label = { Text(appText("Confirm New Password *", "نئے پاس ورڈ کی تصدیق کریں *")) },
         leadingIcon = { Icon(Icons.Filled.LockClock, contentDescription = null, tint = JTPurplePrimary) },
         trailingIcon = {
           IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
             Icon(
               imageVector = if (confirmPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-              contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password",
+              contentDescription = if (confirmPasswordVisible) appText("Hide password", "پاس ورڈ چھپائیں") else appText("Show password", "پاس ورڈ دکھائیں"),
               tint = JTTextSecondary
             )
           }
@@ -196,7 +201,7 @@ fun ResetPasswordScreen(
         isError = confirmPassword.isNotBlank() && !isPasswordMatch,
         supportingText = {
           if (confirmPassword.isNotBlank() && !isPasswordMatch) {
-            Text("Passwords do not match", color = Color(0xFFDC2626), fontSize = 11.sp)
+            Text(appText("Passwords do not match", "پاس ورڈ آپس میں مطابقت نہیں رکھتے"), color = Color(0xFFDC2626), fontSize = 11.sp)
           }
         },
         modifier = Modifier
@@ -210,10 +215,10 @@ fun ResetPasswordScreen(
         onClick = {
           if (!isFormValid) {
             errorMessage = when {
-              token.isBlank() -> "Please enter the reset code."
-              newPassword.length < 6 -> "Password must be at least 6 characters."
-              !isPasswordMatch -> "Passwords do not match."
-              else -> "Please verify all fields."
+              token.isBlank() -> AppLanguageManager.tr("Please enter the reset code.", "براہ کرم ری سیٹ کوڈ درج کریں۔")
+              newPassword.length < 6 -> AppLanguageManager.tr("Password must be at least 6 characters.", "پاس ورڈ کم از کم 6 حروف کا ہونا ضروری ہے۔")
+              !isPasswordMatch -> AppLanguageManager.tr("Passwords do not match.", "پاس ورڈ آپس میں مطابقت نہیں رکھتے۔")
+              else -> AppLanguageManager.tr("Please verify all fields.", "براہ کرم تمام خانے چیک کریں۔")
             }
             return@Button
           }
@@ -224,7 +229,7 @@ fun ResetPasswordScreen(
             // Verify recovery token and update password
             val verifyRes = SupabaseAuthService.verifyLoginOtp(email, token, context)
             if (verifyRes.isSuccess) {
-              Toast.makeText(context, "Password updated successfully!", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, AppLanguageManager.tr("Password updated successfully!", "پاس ورڈ کامیابی سے اپ ڈیٹ ہو گیا!"), Toast.LENGTH_SHORT).show()
               onResetSuccess()
             } else {
               isLoading = false
@@ -243,9 +248,9 @@ fun ResetPasswordScreen(
         if (isLoading) {
           CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Updating Password...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Updating Password...", "پاس ورڈ اپ ڈیٹ ہو رہا ہے..."), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         } else {
-          Text("Update Password & Sign In", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text(appText("Update Password & Sign In", "پاس ورڈ اپ ڈیٹ کریں اور سائن ان ہوں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
       }
     }

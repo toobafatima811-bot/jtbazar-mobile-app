@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.JTOrange
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
@@ -73,22 +75,32 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
     scope.launch {
       errorMessage = ""
       val failures = mutableListOf<String>()
-      try { cases = VendorService.listCases() } catch (_: Exception) { failures.add("Cases could not be loaded.") }
-      try { tickets = VendorService.listSupportTickets() } catch (_: Exception) { failures.add("Support tickets could not be loaded.") }
-      try { inventoryHistory = VendorService.listInventoryMovements() } catch (_: Exception) { failures.add("Inventory history could not be loaded.") }
+      try { cases = VendorService.listCases() } catch (_: Exception) {
+        failures.add(AppLanguageManager.tr("Cases could not be loaded.", "کیسز لوڈ نہیں ہو سکے۔"))
+      }
+      try { tickets = VendorService.listSupportTickets() } catch (_: Exception) {
+        failures.add(AppLanguageManager.tr("Support tickets could not be loaded.", "سپورٹ ٹکٹس لوڈ نہیں ہو سکے۔"))
+      }
+      try { inventoryHistory = VendorService.listInventoryMovements() } catch (_: Exception) {
+        failures.add(AppLanguageManager.tr("Inventory history could not be loaded.", "انوینٹری ہسٹری لوڈ نہیں ہو سکی۔"))
+      }
       if (failures.isNotEmpty()) errorMessage = failures.joinToString("\n")
     }
   }
   LaunchedEffect(application.id) {
     reload()
     try { productCategories = VendorService.listCategories() }
-    catch (e: Exception) { errorMessage = e.message ?: "Product categories could not be loaded." }
+    catch (e: Exception) {
+      errorMessage = e.message ?: AppLanguageManager.tr("Product categories could not be loaded.", "پروڈکٹ کیٹیگریز لوڈ نہیں ہو سکیں۔")
+    }
   }
   LaunchedEffect(selectedSupportTicketId) {
     val ticketId = selectedSupportTicketId ?: return@LaunchedEffect
     while (true) {
       try { supportMessages = VendorService.listSupportMessages(ticketId) }
-      catch (e: Exception) { errorMessage = e.message ?: "Support conversation could not be refreshed." }
+      catch (e: Exception) {
+        errorMessage = e.message ?: AppLanguageManager.tr("Support conversation could not be refreshed.", "سپورٹ گفتگو ریفریش نہیں ہو سکی۔")
+      }
       delay(10_000)
     }
   }
@@ -99,11 +111,14 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       saving = true; errorMessage = ""; message = ""
       try {
         val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Image could not be read.")
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+          ?: error(AppLanguageManager.tr("Image could not be read.", "تصویر پڑھی نہیں جا سکی۔"))
         VendorService.uploadProductImage(productId, bytes, mime, "JTBazar product image")
-        message = "Product image uploaded successfully."
+        message = AppLanguageManager.tr("Product image uploaded successfully.", "پروڈکٹ تصویر کامیابی سے اپلوڈ ہو گئی۔")
         onRefresh()
-      } catch (e: Exception) { errorMessage = e.message ?: "Image upload failed." }
+      } catch (e: Exception) {
+        errorMessage = e.message ?: AppLanguageManager.tr("Image upload failed.", "تصویر اپلوڈ نہیں ہو سکی۔")
+      }
       finally { saving = false; imageProductId = null }
     }
   }
@@ -114,11 +129,14 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       saving = true; errorMessage = ""; message = ""
       try {
         val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Shop image could not be read.")
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+          ?: error(AppLanguageManager.tr("Shop image could not be read.", "دکان کی تصویر پڑھی نہیں جا سکی۔"))
         shopImageUrl = VendorService.uploadShopImage(bytes, mime)
         VendorService.updateOwnShop(JSONObject().put("shop_image_url", shopImageUrl))
-        message = "Shop image updated."
-      } catch (e: Exception) { errorMessage = e.message ?: "Shop image upload failed." }
+        message = AppLanguageManager.tr("Shop image updated.", "دکان کی تصویر اپڈیٹ ہو گئی۔")
+      } catch (e: Exception) {
+        errorMessage = e.message ?: AppLanguageManager.tr("Shop image upload failed.", "دکان کی تصویر اپلوڈ نہیں ہو سکی۔")
+      }
       finally { saving = false }
     }
   }
@@ -126,10 +144,20 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   if (deletionProductId != null) {
     AlertDialog(
       onDismissRequest = { deletionProductId = null },
-      title = { Text("Request product deletion") },
+      title = { Text(appText("Request product deletion", "پروڈکٹ حذف کرنے کی درخواست")) },
       text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("This sends a deletion request to JTBazar admin. It does not delete the product immediately.")
-        OutlinedTextField(value = deletionReason, onValueChange = { deletionReason = it }, label = { Text("Reason") }, minLines = 2)
+        Text(
+          appText(
+            "This sends a deletion request to JTBazar admin. It does not delete the product immediately.",
+            "اس سے جے ٹی بازار ایڈمن کو حذف کرنے کی درخواست بھیجی جاتی ہے۔ پروڈکٹ فوراً حذف نہیں ہوتی۔"
+          )
+        )
+        OutlinedTextField(
+          value = deletionReason,
+          onValueChange = { deletionReason = it },
+          label = { Text(appText("Reason", "وجہ")) },
+          minLines = 2
+        )
       } },
       confirmButton = { TextButton(enabled = !saving, onClick = {
         val id = deletionProductId ?: return@TextButton
@@ -138,12 +166,14 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
           try {
             VendorService.requestProductDeletion(id, deletionReason)
             deletionReason = ""; deletionProductId = null
-            message = "Deletion request submitted for admin review."
-          } catch (e: Exception) { errorMessage = e.message ?: "Deletion request failed." }
+            message = AppLanguageManager.tr("Deletion request submitted for admin review.", "حذف کرنے کی درخواست ایڈمن کے جائزے کے لیے بھیج دی گئی۔")
+          } catch (e: Exception) {
+            errorMessage = e.message ?: AppLanguageManager.tr("Deletion request failed.", "حذف کرنے کی درخواست ناکام رہی۔")
+          }
           finally { saving = false }
         }
-      }) { Text("Submit request") } },
-      dismissButton = { TextButton(onClick = { deletionProductId = null }) { Text("Cancel") } }
+      }) { Text(appText("Submit request", "درخواست بھیجیں")) } },
+      dismissButton = { TextButton(onClick = { deletionProductId = null }) { Text(appText("Cancel", "منسوخ کریں")) } }
     )
   }
 
@@ -151,61 +181,66 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
     OutlinedButton(onClick = { shopOpen = !shopOpen }, modifier = Modifier.fillMaxWidth()) {
-      Text(if (shopOpen) "Close shop settings" else "Edit shop details")
+      Text(if (shopOpen) appText("Close shop settings", "دکان کی ترتیبات بند کریں") else appText("Edit shop details", "دکان کی تفصیلات میں ترمیم"))
     }
     if (shopOpen) {
-      VendorAdvancedField("Shop name", shopName) { shopName = it }
-      VendorAdvancedField("Shop URL slug", slug) { slug = it }
-      VendorAdvancedField("Shop description", description, 3) { description = it }
-      VendorAdvancedField("Business phone", phone) { phone = it }
-      VendorAdvancedField("Current address", currentAddress) { currentAddress = it }
-      VendorAdvancedField("Complete address", completeAddress, 2) { completeAddress = it }
-      VendorAdvancedField("Shop location / verification address", locationText, 2) { locationText = it }
-      OutlinedButton(enabled = !saving, onClick = { shopImagePicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (shopImageUrl.isBlank()) "Upload shop picture" else "Change shop picture") }
+      VendorAdvancedField(appText("Shop name", "دکان کا نام"), shopName) { shopName = it }
+      VendorAdvancedField(appText("Shop URL slug", "دکان کا یو آر ایل سلگ"), slug) { slug = it }
+      VendorAdvancedField(appText("Shop description", "دکان کی تفصیل"), description, 3) { description = it }
+      VendorAdvancedField(appText("Business phone", "کاروباری فون"), phone) { phone = it }
+      VendorAdvancedField(appText("Current address", "موجودہ پتہ"), currentAddress) { currentAddress = it }
+      VendorAdvancedField(appText("Complete address", "مکمل پتہ"), completeAddress, 2) { completeAddress = it }
+      VendorAdvancedField(appText("Shop location / verification address", "دکان کا مقام / تصدیقی پتہ"), locationText, 2) { locationText = it }
+      OutlinedButton(enabled = !saving, onClick = { shopImagePicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
+        Text(if (shopImageUrl.isBlank()) appText("Upload shop picture", "دکان کی تصویر اپلوڈ کریں") else appText("Change shop picture", "دکان کی تصویر تبدیل کریں"))
+      }
       Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         Checkbox(checked = showShopOnMap, onCheckedChange = { showShopOnMap = it })
-        Text("Show shop on public map")
+        Text(appText("Show shop on public map", "عوامی نقشے پر دکان دکھائیں"))
       }
       if (showShopOnMap) {
         Text(
-          if (shopLat.isNotBlank() && shopLng.isNotBlank()) "Pinned shop location: $shopLat, $shopLng" else "Choose the exact shop location on the map.",
+          if (shopLat.isNotBlank() && shopLng.isNotBlank()) appText("Pinned shop location: $shopLat, $shopLng", "نشان زدہ دکان کا مقام: $shopLat, $shopLng")
+          else appText("Choose the exact shop location on the map.", "نقشے پر دکان کا درست مقام منتخب کریں۔"),
           style = MaterialTheme.typography.bodySmall
         )
         OutlinedButton(enabled = !saving, onClick = { showShopMapPicker = true }, modifier = Modifier.fillMaxWidth()) {
-          Text(if (shopLat.isNotBlank() && shopLng.isNotBlank()) "Change shop location on map" else "Choose shop location on map")
+          Text(if (shopLat.isNotBlank() && shopLng.isNotBlank()) appText("Change shop location on map", "نقشے پر دکان کا مقام تبدیل کریں") else appText("Choose shop location on map", "نقشے پر دکان کا مقام منتخب کریں"))
         }
       }
       Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         Checkbox(checked = shopIsOpen, onCheckedChange = { shopIsOpen = it })
-        Text("Shop is open for daily food orders")
+        Text(appText("Shop is open for daily food orders", "دکان روزانہ کھانے کے آرڈرز کے لیے کھلی ہے"))
       }
-      VendorAdvancedField("Minimum order value (PKR)", minimumOrderValue) { minimumOrderValue = it.filter(Char::isDigit).take(9) }
+      VendorAdvancedField(appText("Minimum order value (PKR)", "کم از کم آرڈر رقم (PKR)"), minimumOrderValue) { minimumOrderValue = it.filter(Char::isDigit).take(9) }
       Button(enabled = !saving, onClick = {
         scope.launch {
           saving = true; errorMessage = ""; message = ""
           try {
-            require(shopName.trim().length >= 2) { "Enter a valid shop name." }
-            require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Use a valid URL slug." }
-            require(description.trim().length >= 10 && currentAddress.trim().length >= 3 && completeAddress.trim().length >= 10 && locationText.trim().length >= 10) { "Complete all shop details." }
-            require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Enter a valid Pakistani mobile number." }
+            require(shopName.trim().length >= 2) { AppLanguageManager.tr("Enter a valid shop name.", "درست دکان کا نام درج کریں۔") }
+            require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { AppLanguageManager.tr("Use a valid URL slug.", "درست یو آر ایل سلگ استعمال کریں۔") }
+            require(description.trim().length >= 10 && currentAddress.trim().length >= 3 && completeAddress.trim().length >= 10 && locationText.trim().length >= 10) {
+              AppLanguageManager.tr("Complete all shop details.", "دکان کی تمام تفصیلات مکمل کریں۔")
+            }
+            require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { AppLanguageManager.tr("Enter a valid Pakistani mobile number.", "درست پاکستانی موبائل نمبر درج کریں۔") }
             VendorService.updateOwnShop(JSONObject().put("shop_name", shopName.trim()).put("slug", slug.trim())
               .put("description", description.trim()).put("phone", phone.trim()).put("current_address", currentAddress.trim())
               .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim())
               .put("shop_image_url", if (shopImageUrl.isBlank()) JSONObject.NULL else shopImageUrl)
               .put("show_shop_on_map", showShopOnMap)
-              .put("shop_lat", if (showShopOnMap) shopLat.toDoubleOrNull() ?: error("Enter a valid shop latitude.") else JSONObject.NULL)
-              .put("shop_lng", if (showShopOnMap) shopLng.toDoubleOrNull() ?: error("Enter a valid shop longitude.") else JSONObject.NULL)
+              .put("shop_lat", if (showShopOnMap) shopLat.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter a valid shop latitude.", "دکان کا درست عرض البلد درج کریں۔")) else JSONObject.NULL)
+              .put("shop_lng", if (showShopOnMap) shopLng.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter a valid shop longitude.", "دکان کا درست طول البلد درج کریں۔")) else JSONObject.NULL)
               .put("shop_location_label", locationText.trim())
               .put("shop_is_open", shopIsOpen)
-              .put("minimum_order_value", minimumOrderValue.toIntOrNull() ?: error("Enter a valid minimum order value.")))
-            message = "Shop details updated."; shopOpen = false
-          } catch (e: Exception) { errorMessage = e.message ?: "Shop details could not be saved." }
+              .put("minimum_order_value", minimumOrderValue.toIntOrNull() ?: error(AppLanguageManager.tr("Enter a valid minimum order value.", "کم از کم آرڈر کی درست رقم درج کریں۔"))))
+            message = AppLanguageManager.tr("Shop details updated.", "دکان کی تفصیلات اپڈیٹ ہو گئیں۔"); shopOpen = false
+          } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Shop details could not be saved.", "دکان کی تفصیلات محفوظ نہیں ہو سکیں۔") }
           finally { saving = false }
         }
-      }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) { Text("Save shop details") }
+      }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) { Text(appText("Save shop details", "دکان کی تفصیلات محفوظ کریں")) }
     }
 
-    Text("Product images, variants and inventory", style = MaterialTheme.typography.titleMedium)
+    Text(appText("Product images, variants and inventory", "پروڈکٹ کی تصاویر، اقسام اور انوینٹری"), style = MaterialTheme.typography.titleMedium)
     for (i in 0 until products.length()) {
       val product = products.optJSONObject(i) ?: continue
       val id = product.optString("id")
@@ -253,22 +288,29 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             }
             isFood || product.optString("food_selling_unit").isNotBlank() || product.optBoolean("is_daily_item")
           }
-          Text(product.optString("name", "Product"), style = MaterialTheme.typography.titleSmall)
-          Text("Status: ${product.optString("status", "draft")} • PKR ${product.optString("price", "0")}")
-          TextButton(onClick = { editing = !editing }) { Text(if (editing) "Close product editor" else "Edit product details") }
+          Text(product.optString("name", appText("Product", "پروڈکٹ")), style = MaterialTheme.typography.titleSmall)
+          val statusDisplay = when (product.optString("status", "draft").lowercase()) {
+            "approved" -> appText("Approved", "منظور شدہ")
+            "pending" -> appText("Pending review", "جائزہ زیر التواء")
+            "rejected" -> appText("Rejected", "مسترد")
+            "archived" -> appText("Archived", "محفوظ شدہ")
+            else -> appText("Draft", "ڈرافٹ")
+          }
+          Text(appText("Status: $statusDisplay • PKR ${product.optString("price", "0")}", "حالت: $statusDisplay • PKR ${product.optString("price", "0")}"))
+          TextButton(onClick = { editing = !editing }) { Text(if (editing) appText("Close product editor", "پروڈکٹ ایڈیٹر بند کریں") else appText("Edit product details", "پروڈکٹ کی تفصیلات میں ترمیم")) }
           if (editing) {
-            VendorAdvancedField("Product name", editName) { editName = it }
-            VendorAdvancedField("Product URL slug", editSlug) { editSlug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
-            VendorAdvancedField("Product SKU", editSku) { editSku = it }
+            VendorAdvancedField(appText("Product name", "پروڈکٹ کا نام"), editName) { editName = it }
+            VendorAdvancedField(appText("Product URL slug", "پروڈکٹ یو آر ایل سلگ"), editSlug) { editSlug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') }
+            VendorAdvancedField(appText("Product SKU", "پروڈکٹ SKU"), editSku) { editSku = it }
             var categoryExpanded by remember(id) { mutableStateOf(false) }
             val selectedCategoryName = (0 until productCategories.length()).mapNotNull { productCategories.optJSONObject(it) }
-              .firstOrNull { it.optString("id") == editCategory }?.optString("name") ?: "Select category"
+              .firstOrNull { it.optString("id") == editCategory }?.optString("name") ?: appText("Select category", "کیٹیگری منتخب کریں")
             ExposedDropdownMenuBox(expanded = categoryExpanded, onExpandedChange = { categoryExpanded = !categoryExpanded }) {
               OutlinedTextField(
                 value = selectedCategoryName,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Category") },
+                label = { Text(appText("Category", "کیٹیگری")) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(categoryExpanded) },
                 modifier = Modifier.fillMaxWidth().menuAnchor()
               )
@@ -286,26 +328,34 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                 }
               }
             }
-            VendorAdvancedField("Short description", editShortDescription, 2) { editShortDescription = it }
-            VendorAdvancedField("Full description", editDescription, 4) { editDescription = it }
-            VendorAdvancedField("Vendor base price (PKR)", editPrice) { editPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
-            VendorAdvancedField("Discount (%)", editDiscount) { editDiscount = it.filter { ch -> ch.isDigit() || ch == '.' } }
-            VendorAdvancedField("Supplier cost (private PKR)", editSupplierCost) { editSupplierCost = it.filter { ch -> ch.isDigit() || ch == '.' } }
-            VendorAdvancedField("Fulfilment expense (PKR)", editFulfilment) { editFulfilment = it.filter { ch -> ch.isDigit() || ch == '.' } }
-            VendorAdvancedField("Minimum profit (PKR)", editMinimumProfit) { editMinimumProfit = it.filter { ch -> ch.isDigit() || ch == '.' } }
-            VendorAdvancedField("Shipping weight (grams)", editWeight) { editWeight = it.filter(Char::isDigit) }
-            VendorAdvancedField("Specifications (JSON array)", editSpecifications, 3) { editSpecifications = it }
-            VendorAdvancedField("Dimensions (JSON object)", editDimensions, 3) { editDimensions = it }
-            VendorAdvancedField("SEO title", editSeoTitle) { editSeoTitle = it }
-            VendorAdvancedField("SEO description", editSeoDescription, 2) { editSeoDescription = it }
+            VendorAdvancedField(appText("Short description", "مختصر تفصیل"), editShortDescription, 2) { editShortDescription = it }
+            VendorAdvancedField(appText("Full description", "مکمل تفصیل"), editDescription, 4) { editDescription = it }
+            VendorAdvancedField(appText("Vendor base price (PKR)", "وینڈر کی بنیادی قیمت (PKR)"), editPrice) { editPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField(appText("Discount (%)", "رعایت (%)"), editDiscount) { editDiscount = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField(appText("Supplier cost (private PKR)", "سپلائر لاگت (نجی PKR)"), editSupplierCost) { editSupplierCost = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField(appText("Fulfilment expense (PKR)", "پیکنگ و ترسیل لاگت (PKR)"), editFulfilment) { editFulfilment = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField(appText("Minimum profit (PKR)", "کم از کم منافع (PKR)"), editMinimumProfit) { editMinimumProfit = it.filter { ch -> ch.isDigit() || ch == '.' } }
+            VendorAdvancedField(appText("Shipping weight (grams)", "شپنگ وزن (گرام)"), editWeight) { editWeight = it.filter(Char::isDigit) }
+            VendorAdvancedField(appText("Specifications (JSON array)", "تفصیلات (JSON array)"), editSpecifications, 3) { editSpecifications = it }
+            VendorAdvancedField(appText("Dimensions (JSON object)", "پیمائش (JSON object)"), editDimensions, 3) { editDimensions = it }
+            VendorAdvancedField(appText("SEO title", "SEO عنوان"), editSeoTitle) { editSeoTitle = it }
+            VendorAdvancedField(appText("SEO description", "SEO تفصیل"), editSeoDescription, 2) { editSeoDescription = it }
             if (editIsFoodCategory) {
               HorizontalDivider()
-              Text("Food & groceries", style = MaterialTheme.typography.titleMedium)
-              Text("Food selling unit", style = MaterialTheme.typography.titleSmall)
+              Text(appText("Food & groceries", "کھانا اور گروسری"), style = MaterialTheme.typography.titleMedium)
+              Text(appText("Food selling unit", "کھانے کی فروخت کی اکائی"), style = MaterialTheme.typography.titleSmall)
               var foodUnitExpanded by remember(id) { mutableStateOf(false) }
-              val foodUnits = listOf("kg" to "Kilogram (kg)", "g" to "Gram (g)", "l" to "Litre (L)", "ml" to "Millilitre (ml)", "piece" to "Piece", "dozen" to "Dozen", "pack" to "Pack")
+              val foodUnits = listOf(
+                "kg" to appText("Kilogram (kg)", "کلوگرام (kg)"),
+                "g" to appText("Gram (g)", "گرام (g)"),
+                "l" to appText("Litre (L)", "لیٹر (L)"),
+                "ml" to appText("Millilitre (ml)", "ملی لیٹر (ml)"),
+                "piece" to appText("Piece", "عدد"),
+                "dozen" to appText("Dozen", "درجن"),
+                "pack" to appText("Pack", "پیک")
+              )
               ExposedDropdownMenuBox(expanded = foodUnitExpanded, onExpandedChange = { foodUnitExpanded = !foodUnitExpanded }) {
-                OutlinedTextField(value = foodUnits.firstOrNull { it.first == editFoodUnit }?.second ?: "Kilogram (kg)", onValueChange = {}, readOnly = true, label = { Text("Selling unit") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(foodUnitExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+                OutlinedTextField(value = foodUnits.firstOrNull { it.first == editFoodUnit }?.second ?: appText("Kilogram (kg)", "کلوگرام (kg)"), onValueChange = {}, readOnly = true, label = { Text(appText("Selling unit", "فروخت کی اکائی")) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(foodUnitExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
                 ExposedDropdownMenu(expanded = foodUnitExpanded, onDismissRequest = { foodUnitExpanded = false }) {
                   foodUnits.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = {
                     editFoodUnit = value
@@ -314,10 +364,15 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                   }) }
                 }
               }
-              VendorAdvancedField("Price per ${editFoodUnit} (PKR)", editFoodUnitPrice) { editFoodUnitPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
-              VendorAdvancedField("Customer quantity step (${if (editFoodUnit == "kg") "grams" else if (editFoodUnit == "l") "ml" else "units"})", editFoodStep) { editFoodStep = it.filter(Char::isDigit) }
-              Text("For kg/litre the step is grams/ml; for dozen, piece and pack it is units.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-              VendorAdvancedField("Minimum purchase steps", editFoodMinimum) { editFoodMinimum = it.filter(Char::isDigit) }
+              VendorAdvancedField(appText("Price per ${editFoodUnit} (PKR)", "فی ${editFoodUnit} قیمت (PKR)"), editFoodUnitPrice) { editFoodUnitPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
+              val stepUnit = when (editFoodUnit) {
+                "kg" -> appText("grams", "گرام")
+                "l" -> appText("ml", "ملی لیٹر")
+                else -> appText("units", "اکائیاں")
+              }
+              VendorAdvancedField(appText("Customer quantity step ($stepUnit)", "کسٹمر مقدار کا مرحلہ ($stepUnit)"), editFoodStep) { editFoodStep = it.filter(Char::isDigit) }
+              Text(appText("For kg/litre the step is grams/ml; for dozen, piece and pack it is units.", "کلو/لیٹر کے لیے مرحلہ گرام/ملی لیٹر میں ہے؛ درجن، عدد اور پیک کے لیے اکائیوں میں ہے۔"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+              VendorAdvancedField(appText("Minimum purchase steps", "کم از کم خریداری مراحل"), editFoodMinimum) { editFoodMinimum = it.filter(Char::isDigit) }
       Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -331,30 +386,37 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
         ) {
           Checkbox(checked = editDailyItem, onCheckedChange = { editDailyItem = it })
           Text(
-            "Manage as a daily dish / daily food item",
+            appText("Manage as a daily dish / daily food item", "روزانہ ڈش / روزانہ کھانے کی چیز کے طور پر منظم کریں"),
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium
           )
         }
       }
               var dailyStatusExpanded by remember(id) { mutableStateOf(false) }
-              val dailyStatuses = listOf("available" to "Available today", "not_today" to "Not for today", "coming_soon" to "Coming soon")
+              val dailyStatuses = listOf(
+                "available" to appText("Available today", "آج دستیاب ہے"),
+                "not_today" to appText("Not for today", "آج کے لیے نہیں"),
+                "coming_soon" to appText("Coming soon", "جلد آ رہا ہے")
+              )
               ExposedDropdownMenuBox(expanded = dailyStatusExpanded, onExpandedChange = { dailyStatusExpanded = !dailyStatusExpanded }) {
-                OutlinedTextField(value = dailyStatuses.firstOrNull { it.first == editDailyStatus }?.second ?: "Available today", onValueChange = {}, readOnly = true, label = { Text("Daily availability status") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dailyStatusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+                OutlinedTextField(value = dailyStatuses.firstOrNull { it.first == editDailyStatus }?.second ?: appText("Available today", "آج دستیاب ہے"), onValueChange = {}, readOnly = true, label = { Text(appText("Daily availability status", "روزانہ دستیابی کی حیثیت")) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dailyStatusExpanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
                 ExposedDropdownMenu(expanded = dailyStatusExpanded, onDismissRequest = { dailyStatusExpanded = false }) {
                   dailyStatuses.forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { editDailyStatus = value; dailyStatusExpanded = false }) }
                 }
               }
-              VendorAdvancedField("Today's available quantity", editDailyQuantity) { editDailyQuantity = it.filter(Char::isDigit) }
+              VendorAdvancedField(appText("Today's available quantity", "آج کی دستیاب مقدار"), editDailyQuantity) { editDailyQuantity = it.filter(Char::isDigit) }
             }
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true
                 try {
                   val priceInput = if (editIsFoodCategory) editFoodUnitPrice else editPrice
-                  val price = priceInput.toDoubleOrNull() ?: error(if (editIsFoodCategory) "Enter a valid food unit price." else "Enter a valid vendor base price.")
-                  val discount = editDiscount.toDoubleOrNull() ?: error("Enter a valid discount.")
-                  require(discount in 0.0..100.0) { "Discount must be between 0 and 100%." }
+                  val price = priceInput.toDoubleOrNull() ?: error(
+                    if (editIsFoodCategory) AppLanguageManager.tr("Enter a valid food unit price.", "کھانے کی اکائی کی درست قیمت درج کریں۔")
+                    else AppLanguageManager.tr("Enter a valid vendor base price.", "وینڈر کی درست بنیادی قیمت درج کریں۔")
+                  )
+                  val discount = editDiscount.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter a valid discount.", "درست رعایت درج کریں۔"))
+                  require(discount in 0.0..100.0) { AppLanguageManager.tr("Discount must be between 0 and 100%.", "رعایت 0 سے 100% کے درمیان ہونی چاہیے۔") }
                   val specs = JSONArray(editSpecifications)
                   val dimensions = JSONObject(editDimensions)
                   val payload = JSONObject()
@@ -364,8 +426,8 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     .put("p_short_description", editShortDescription.trim())
                     .put("p_description", editDescription.trim()).put("p_price", price)
                     .put("p_supplier_cost", editSupplierCost.toDoubleOrNull() ?: JSONObject.NULL)
-                    .put("p_fulfillment_expense", editFulfilment.toDoubleOrNull() ?: error("Enter valid fulfilment expense."))
-                    .put("p_minimum_profit", editMinimumProfit.toDoubleOrNull() ?: error("Enter valid minimum profit."))
+                    .put("p_fulfillment_expense", editFulfilment.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter valid fulfilment expense.", "درست پیکنگ و ترسیل لاگت درج کریں۔")))
+                    .put("p_minimum_profit", editMinimumProfit.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter valid minimum profit.", "کم از کم درست منافع درج کریں۔")))
                     .put("p_discount_percent", discount)
                     .put("p_weight_grams", editWeight.toIntOrNull() ?: JSONObject.NULL)
                     .put("p_specifications", specs).put("p_dimensions", dimensions)
@@ -373,67 +435,67 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     .put("p_seo_description", editSeoDescription.trim().ifBlank { JSONObject.NULL })
                   VendorService.updateProductFull(id, payload)
                   if (editIsFoodCategory) {
-                    val unitPrice = editFoodUnitPrice.toDoubleOrNull() ?: error("Enter a valid food unit price.")
-                    val step = editFoodStep.toIntOrNull() ?: error("Enter a valid customer quantity step.")
-                    val minimum = editFoodMinimum.toIntOrNull() ?: error("Enter valid minimum purchase steps.")
-                    val dailyQty = editDailyQuantity.toIntOrNull() ?: error("Enter a valid daily available quantity.")
-                    if (step < 1 || minimum < 1 || dailyQty < 0 || unitPrice < 0) error("Check food unit price and quantity values.")
+                    val unitPrice = editFoodUnitPrice.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter a valid food unit price.", "کھانے کی اکائی کی درست قیمت درج کریں۔"))
+                    val step = editFoodStep.toIntOrNull() ?: error(AppLanguageManager.tr("Enter a valid customer quantity step.", "کسٹمر مقدار کا درست مرحلہ درج کریں۔"))
+                    val minimum = editFoodMinimum.toIntOrNull() ?: error(AppLanguageManager.tr("Enter valid minimum purchase steps.", "کم از کم خریداری کے درست مراحل درج کریں۔"))
+                    val dailyQty = editDailyQuantity.toIntOrNull() ?: error(AppLanguageManager.tr("Enter a valid daily available quantity.", "روزانہ دستیاب درست مقدار درج کریں۔"))
+                    if (step < 1 || minimum < 1 || dailyQty < 0 || unitPrice < 0) error(AppLanguageManager.tr("Check food unit price and quantity values.", "کھانے کی قیمت اور مقدار کی قدریں چیک کریں۔"))
                     VendorService.updateFoodProductDetails(id, editFoodUnit, unitPrice, step, minimum, editDailyItem, editDailyStatus, dailyQty)
                   }
-                  message = "Product details saved. Food selling unit and daily availability updated when applicable."
+                  message = AppLanguageManager.tr("Product details saved. Food selling unit and daily availability updated when applicable.", "پروڈکٹ کی تفصیلات محفوظ ہو گئیں۔ متعلقہ کھانے کی اکائی اور روزانہ دستیابی اپڈیٹ ہو گئی۔")
                   editing = false
                   onRefresh()
-                } catch (e: Exception) { errorMessage = e.message ?: "Product update failed." }
+                } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Product update failed.", "پروڈکٹ اپڈیٹ ناکام رہا۔") }
                 finally { saving = false }
               }
-            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save all product changes") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text(appText("Save all product changes", "پروڈکٹ کی تمام تبدیلیاں محفوظ کریں")) }
           }
           var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
           var dailyQuantity by remember(id) { mutableStateOf(product.optInt("daily_available_quantity", 0).toString()) }
           Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Checkbox(checked = dailyItem, onCheckedChange = { dailyItem = it })
-            Text("Daily food item")
+            Text(appText("Daily food item", "روزانہ کھانے کی چیز"))
           }
           if (dailyItem) {
-            VendorAdvancedField("Available quantity today", dailyQuantity) { dailyQuantity = it.filter(Char::isDigit).take(8) }
+            VendorAdvancedField(appText("Available quantity today", "آج دستیاب مقدار"), dailyQuantity) { dailyQuantity = it.filter(Char::isDigit).take(8) }
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true
                 try {
-                  VendorService.setDailyAvailability(id, true, dailyQuantity.toIntOrNull() ?: error("Enter today's available quantity."), 1, minimumOrderValue.toIntOrNull(), shopIsOpen)
-                  message = "Today's food availability updated."
+                  VendorService.setDailyAvailability(id, true, dailyQuantity.toIntOrNull() ?: error(AppLanguageManager.tr("Enter today's available quantity.", "آج کی دستیاب مقدار درج کریں۔")), 1, minimumOrderValue.toIntOrNull(), shopIsOpen)
+                  message = AppLanguageManager.tr("Today's food availability updated.", "آج کے کھانے کی دستیابی اپڈیٹ ہو گئی۔")
                   onRefresh()
-                } catch (e: Exception) { errorMessage = e.message ?: "Daily availability could not be updated." }
+                } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Daily availability could not be updated.", "روزانہ دستیابی اپڈیٹ نہیں ہو سکی۔") }
                 finally { saving = false }
               }
-            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save today's availability") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text(appText("Save today's availability", "آج کی دستیابی محفوظ کریں")) }
           } else if (product.optBoolean("is_daily_item", false)) {
             TextButton(enabled = !saving, onClick = {
               scope.launch {
                 saving = true
-                try { VendorService.setDailyAvailability(id, false, 0); message = "Daily availability disabled."; onRefresh() }
-                catch (e: Exception) { errorMessage = e.message ?: "Availability setting could not be changed." }
+                try { VendorService.setDailyAvailability(id, false, 0); message = AppLanguageManager.tr("Daily availability disabled.", "روزانہ دستیابی بند کر دی گئی۔"); onRefresh() }
+                catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Availability setting could not be changed.", "دستیابی کی ترتیب تبدیل نہیں ہو سکی۔") }
                 finally { saving = false }
               }
-            }) { Text("Disable daily availability") }
+            }) { Text(appText("Disable daily availability", "روزانہ دستیابی بند کریں")) }
           }
-          OutlinedButton(enabled = !saving, onClick = { imageProductId = id; imagePicker.launch("image/*") }) { Text("Upload product image") }
-          TextButton(enabled = !saving, onClick = { deletionProductId = id; deletionReason = "" }) { Text("Request product deletion") }
+          OutlinedButton(enabled = !saving, onClick = { imageProductId = id; imagePicker.launch("image/*") }) { Text(appText("Upload product image", "پروڈکٹ کی تصویر اپلوڈ کریں")) }
+          TextButton(enabled = !saving, onClick = { deletionProductId = id; deletionReason = "" }) { Text(appText("Request product deletion", "پروڈکٹ حذف کرنے کی درخواست")) }
           var stock by remember(id) { mutableStateOf(product.optString("stock_quantity", product.optString("quantity", "0"))) }
           Row {
             OutlinedTextField(value = stock, onValueChange = { stock = it.filter(Char::isDigit).take(8) },
-              label = { Text("Stock quantity") }, modifier = Modifier.weight(1f), singleLine = true)
+              label = { Text(appText("Stock quantity", "اسٹاک مقدار")) }, modifier = Modifier.weight(1f), singleLine = true)
             Spacer(Modifier.width(8.dp))
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true
                 try {
-                  val qty = stock.toIntOrNull() ?: error("Enter a valid stock quantity.")
-                  VendorService.setInventory(id, qty); message = "Inventory updated."
-                } catch (e: Exception) { errorMessage = e.message ?: "Inventory update failed." }
+                  val qty = stock.toIntOrNull() ?: error(AppLanguageManager.tr("Enter a valid stock quantity.", "اسٹاک کی درست مقدار درج کریں۔"))
+                  VendorService.setInventory(id, qty); message = AppLanguageManager.tr("Inventory updated.", "انوینٹری اپڈیٹ ہو گئی۔")
+                } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Inventory update failed.", "انوینٹری اپڈیٹ ناکام رہا۔") }
                 finally { saving = false }
               }
-            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text(appText("Save", "محفوظ کریں")) }
           }
           TextButton(onClick = {
             if (variantProductId == id) variantProductId = null
@@ -441,9 +503,9 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
               variantProductId = id
               selectedVariantId = null
               variantValue = ""; variantPrice = ""; variantStock = "0"
-              scope.launch { try { variantRows = VendorService.listVariants(id) } catch (e: Exception) { errorMessage = e.message ?: "Variants could not be loaded." } }
+              scope.launch { try { variantRows = VendorService.listVariants(id) } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Variants could not be loaded.", "اقسام لوڈ نہیں ہو سکیں۔") } }
             }
-          }) { Text(if (variantProductId == id) "Close variant editor" else "Manage variants (add / edit / delete)") }
+          }) { Text(if (variantProductId == id) appText("Close variant editor", "اقسام ایڈیٹر بند کریں") else appText("Manage variants (add / edit / delete)", "اقسام کا انتظام کریں (شامل / ترمیم / حذف)")) }
           if (variantProductId == id) {
             for (v in 0 until variantRows.length()) {
               val row = variantRows.optJSONObject(v) ?: continue
@@ -463,9 +525,9 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                         if (inv.optString("variant_id") == row.optString("id")) { quantity = inv.optInt("quantity"); break }
                       }
                       variantStock = quantity.toString()
-                    } catch (e: Exception) { errorMessage = e.message ?: "Variant stock could not be loaded." }
+                    } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Variant stock could not be loaded.", "قسم کا اسٹاک لوڈ نہیں ہو سکا۔") }
                   }
-                }) { Text("Edit") }
+                }) { Text(appText("Edit", "ترمیم")) }
                 TextButton(enabled = !saving, onClick = {
                   scope.launch {
                     saving = true
@@ -487,23 +549,23 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                       }
                       VendorService.saveVariants(id, keep)
                       variantRows = VendorService.listVariants(id)
-                      message = "Variant deleted. Product changes may require review."
-                    } catch (e: Exception) { errorMessage = e.message ?: "Variant could not be deleted." }
+                      message = AppLanguageManager.tr("Variant deleted. Product changes may require review.", "قسم حذف کر دی گئی۔ پروڈکٹ کی تبدیلیوں کے لیے جائزہ درکار ہو سکتا ہے۔")
+                    } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Variant could not be deleted.", "قسم حذف نہیں ہو سکی۔") }
                     finally { saving = false }
                   }
-                }) { Text("Delete") }
+                }) { Text(appText("Delete", "حذف کریں")) }
               }
             }
-            VendorAdvancedField("Option name (Size, Colour, etc.)", variantLabel) { variantLabel = it }
-            VendorAdvancedField("Option value", variantValue) { variantValue = it }
-            VendorAdvancedField("Price override (optional PKR)", variantPrice) { variantPrice = it }
-            VendorAdvancedField("Variant stock", variantStock) { variantStock = it.filter(Char::isDigit) }
+            VendorAdvancedField(appText("Option name (Size, Colour, etc.)", "آپشن کا نام (سائز، رنگ وغیرہ)"), variantLabel) { variantLabel = it }
+            VendorAdvancedField(appText("Option value", "آپشن کی قدر"), variantValue) { variantValue = it }
+            VendorAdvancedField(appText("Price override (optional PKR)", "متبادل قیمت (اختیاری PKR)"), variantPrice) { variantPrice = it }
+            VendorAdvancedField(appText("Variant stock", "قسم کا اسٹاک"), variantStock) { variantStock = it.filter(Char::isDigit) }
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true; errorMessage = ""
                 try {
-                  require(variantLabel.isNotBlank() && variantValue.isNotBlank()) { "Enter a variant option and value." }
-                  val qty = variantStock.toIntOrNull() ?: error("Enter valid variant stock.")
+                  require(variantLabel.isNotBlank() && variantValue.isNotBlank()) { AppLanguageManager.tr("Enter a variant option and value.", "قسم کا آپشن اور قدر درج کریں۔") }
+                  val qty = variantStock.toIntOrNull() ?: error(AppLanguageManager.tr("Enter valid variant stock.", "قسم کا درست اسٹاک درج کریں۔"))
                   val existing = VendorService.listVariants(id)
                   val inventory = VendorService.listInventory()
                   val rows = JSONArray()
@@ -526,87 +588,133 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     .put("option_value", variantValue.trim()).put("sku", JSONObject.NULL)
                     .put("price_override", variantPrice.toIntOrNull() ?: JSONObject.NULL)
                     .put("attributes", JSONObject()).put("quantity", qty))
-                  VendorService.saveVariants(id, rows); message = if (selectedVariantId == null) "Variant added." else "Variant updated."; selectedVariantId = null; variantProductId = null
-                } catch (e: Exception) { errorMessage = e.message ?: "Variant could not be saved." }
+                  VendorService.saveVariants(id, rows)
+                  message = if (selectedVariantId == null) AppLanguageManager.tr("Variant added.", "قسم شامل کر دی گئی۔") else AppLanguageManager.tr("Variant updated.", "قسم اپڈیٹ ہو گئی۔")
+                  selectedVariantId = null; variantProductId = null
+                } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Variant could not be saved.", "قسم محفوظ نہیں ہو سکی۔") }
                 finally { saving = false }
               }
-            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Save variant") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text(appText("Save variant", "قسم محفوظ کریں")) }
           }
         }
       }
     }
 
-    Text("Product deletion requests", style = MaterialTheme.typography.titleMedium)
-    Text("Deletion requests are sent to JTBazar admin for review. Products are not deleted directly from the vendor app.", style = MaterialTheme.typography.bodySmall)
+    Text(appText("Product deletion requests", "پروڈکٹ حذف کرنے کی درخواستیں"), style = MaterialTheme.typography.titleMedium)
+    Text(
+      appText(
+        "Deletion requests are sent to JTBazar admin for review. Products are not deleted directly from the vendor app.",
+        "حذف کرنے کی درخواستیں جائزے کے لیے جے ٹی بازار ایڈمن کو بھیجی جاتی ہیں۔ پروڈکٹس براہ راست وینڈر ایپ سے حذف نہیں ہوتیں۔"
+      ),
+      style = MaterialTheme.typography.bodySmall
+    )
 
-    Text("Inventory history", style = MaterialTheme.typography.titleMedium)
-    if (inventoryHistory.length() == 0) Text("No inventory movements recorded yet.")
+    Text(appText("Inventory history", "انوینٹری ہسٹری"), style = MaterialTheme.typography.titleMedium)
+    if (inventoryHistory.length() == 0) Text(appText("No inventory movements recorded yet.", "ابھی تک اسٹاک میں کوئی تبدیلی ریکارڈ نہیں ہوئی۔"))
     for (i in 0 until minOf(inventoryHistory.length(), 30)) {
       val movement = inventoryHistory.optJSONObject(i) ?: continue
-      val productName = movement.optJSONObject("products")?.optString("name") ?: "Product"
+      val productName = movement.optJSONObject("products")?.optString("name") ?: appText("Product", "پروڈکٹ")
       val delta = movement.optInt("quantity_delta")
       Text("$productName • ${if (delta > 0) "+" else ""}$delta • ${movement.optString("movement_type")} • ${movement.optString("note")}", style = MaterialTheme.typography.bodySmall)
     }
 
-    Text("Customer cases and complaints", style = MaterialTheme.typography.titleMedium)
-    if (cases.length() == 0) Text("No marketplace cases found.")
+    Text(appText("Customer cases and complaints", "کسٹمر کیسز اور شکایات"), style = MaterialTheme.typography.titleMedium)
+    if (cases.length() == 0) Text(appText("No marketplace cases found.", "کوئی مارکیٹ پلیس کیس نہیں ملا۔"))
     for (i in 0 until cases.length()) {
       val item = cases.optJSONObject(i) ?: continue
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-          Text("${item.optString("case_type", "Case")} • ${item.optString("status", "open")}")
-          Text(item.optString("reason", "No reason supplied."))
-          if (item.optString("seller_response").isNotBlank()) Text("Your response: ${item.optString("seller_response")}")
-          OutlinedTextField(value = responseText, onValueChange = { responseText = it }, label = { Text("Reply to case") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+          Text("${item.optString("case_type", appText("Case", "کیس"))} • ${item.optString("status", "open")}")
+          Text(item.optString("reason", appText("No reason supplied.", "کوئی وجہ فراہم نہیں کی گئی۔")))
+          if (item.optString("seller_response").isNotBlank()) {
+            Text(appText("Your response: ${item.optString("seller_response")}", "آپ کا جواب: ${item.optString("seller_response")}"))
+          }
+          OutlinedTextField(
+            value = responseText,
+            onValueChange = { responseText = it },
+            label = { Text(appText("Reply to case", "کیس کا جواب دیں")) },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+          )
           Button(enabled = !saving, onClick = {
             scope.launch {
               saving = true
-              try { VendorService.respondToCase(item.optString("id"), responseText); responseText = ""; cases = VendorService.listCases(); message = "Case response sent." }
-              catch (e: Exception) { errorMessage = e.message ?: "Case response failed." }
+              try {
+                VendorService.respondToCase(item.optString("id"), responseText)
+                responseText = ""
+                cases = VendorService.listCases()
+                message = AppLanguageManager.tr("Case response sent.", "کیس کا جواب بھیج دیا گیا۔")
+              } catch (e: Exception) {
+                errorMessage = e.message ?: AppLanguageManager.tr("Case response failed.", "کیس کا جواب بھیجا نہیں جا سکا۔")
+              }
               finally { saving = false }
             }
-          }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Send response") }
+          }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
+            Text(appText("Send response", "جواب بھیجیں"))
+          }
         }
       }
     }
 
-    Text("Vendor support", style = MaterialTheme.typography.titleMedium)
-    VendorAdvancedField("Ticket subject", subject) { subject = it }
-    VendorAdvancedField("Describe your issue", ticketMessage, 3) { ticketMessage = it }
+    Text(appText("Vendor support", "وینڈر سپورٹ"), style = MaterialTheme.typography.titleMedium)
+    VendorAdvancedField(appText("Ticket subject", "ٹکٹ کا موضوع"), subject) { subject = it }
+    VendorAdvancedField(appText("Describe your issue", "اپنا مسئلہ بیان کریں"), ticketMessage, 3) { ticketMessage = it }
     Button(enabled = !saving, onClick = {
       scope.launch {
         saving = true
-        try { VendorService.createSupportTicket(subject, ticketMessage); subject = ""; ticketMessage = ""; tickets = VendorService.listSupportTickets(); message = "Support ticket created." }
-        catch (e: Exception) { errorMessage = e.message ?: "Support ticket could not be created." }
+        try {
+          VendorService.createSupportTicket(subject, ticketMessage)
+          subject = ""; ticketMessage = ""; tickets = VendorService.listSupportTickets()
+          message = AppLanguageManager.tr("Support ticket created.", "سپورٹ ٹکٹ بن گیا۔")
+        } catch (e: Exception) {
+          errorMessage = e.message ?: AppLanguageManager.tr("Support ticket could not be created.", "سپورٹ ٹکٹ نہیں بن سکا۔")
+        }
         finally { saving = false }
       }
-    }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) { Text("Create support ticket") }
+    }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) {
+      Text(appText("Create support ticket", "سپورٹ ٹکٹ بنائیں"))
+    }
     for (i in 0 until tickets.length()) {
       val ticket = tickets.optJSONObject(i) ?: continue
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(10.dp)) {
           Text("${ticket.optString("subject")} • ${ticket.optString("status", "open")}")
           Text(ticket.optString("message"), style = MaterialTheme.typography.bodySmall)
-          if (ticket.optString("admin_response").isNotBlank()) Text("Admin reply: ${ticket.optString("admin_response")}")
+          if (ticket.optString("admin_response").isNotBlank()) {
+            Text(
+              appText("Admin reply: ${ticket.optString("admin_response")}", "ایڈمن کا جواب: ${ticket.optString("admin_response")}")
+            )
+          }
           TextButton(enabled = !saving, onClick = {
             val id = ticket.optString("id")
             selectedSupportTicketId = id
             scope.launch {
               try { supportMessages = VendorService.listSupportMessages(id) }
-              catch (e: Exception) { errorMessage = e.message ?: "Support conversation could not be loaded." }
+              catch (e: Exception) {
+                errorMessage = e.message ?: AppLanguageManager.tr("Support conversation could not be loaded.", "سپورٹ گفتگو لوڈ نہیں ہو سکی۔")
+              }
             }
-          }) { Text(if (selectedSupportTicketId == ticket.optString("id")) "Refresh conversation" else "Open conversation") }
+          }) {
+            Text(
+              if (selectedSupportTicketId == ticket.optString("id")) appText("Refresh conversation", "گفتگو ریفریش کریں")
+              else appText("Open conversation", "گفتگو کھولیں")
+            )
+          }
           if (selectedSupportTicketId == ticket.optString("id")) {
-            Text("Conversation • updates automatically", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(
+              appText("Conversation • updates automatically", "گفتگو • خودکار طور پر اپڈیٹ ہوتی ہے"),
+              style = MaterialTheme.typography.labelMedium,
+              color = MaterialTheme.colorScheme.primary
+            )
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
               Column(Modifier.padding(10.dp)) {
-                Text("You • Ticket created", style = MaterialTheme.typography.labelSmall)
+                Text(appText("You • Ticket created", "آپ • ٹکٹ بنایا گیا"), style = MaterialTheme.typography.labelSmall)
                 Text(ticket.optString("message"), style = MaterialTheme.typography.bodyMedium)
                 Text(ticket.optString("created_at"), style = MaterialTheme.typography.labelSmall)
               }
             }
             if (supportMessages.length() == 0 && ticket.optString("admin_response").isNotBlank()) {
-              Text("JTBazar Support: ${ticket.optString("admin_response")}", style = MaterialTheme.typography.bodyMedium)
+              Text("${appText("JTBazar Support", "جے ٹی بازار سپورٹ")}: ${ticket.optString("admin_response")}", style = MaterialTheme.typography.bodyMedium)
             }
             for (m in 0 until supportMessages.length()) {
               val msg = supportMessages.optJSONObject(m) ?: continue
@@ -614,16 +722,33 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                 containerColor = if (msg.optString("sender_role") == "seller") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
               )) {
                 Column(Modifier.padding(10.dp)) {
-                  Text(if (msg.optString("sender_role") == "admin") "JTBazar Support" else "You", style = MaterialTheme.typography.labelSmall)
+                  Text(
+                    if (msg.optString("sender_role") == "admin") appText("JTBazar Support", "جے ٹی بازار سپورٹ")
+                    else appText("You", "آپ"),
+                    style = MaterialTheme.typography.labelSmall
+                  )
                   Text(msg.optString("message"), style = MaterialTheme.typography.bodyMedium)
                   Text(msg.optString("created_at"), style = MaterialTheme.typography.labelSmall)
                 }
               }
             }
             if (ticket.optString("status").equals("resolved", true)) {
-              Text("This ticket is resolved. Create a new support ticket if you need further help.", color = MaterialTheme.colorScheme.secondary)
+              Text(
+                appText(
+                  "This ticket is resolved. Create a new support ticket if you need further help.",
+                  "یہ ٹکٹ حل ہو چکا ہے۔ مزید مدد کے لیے نیا سپورٹ ٹکٹ بنائیں۔"
+                ),
+                color = MaterialTheme.colorScheme.secondary
+              )
             } else {
-              OutlinedTextField(value = supportReply, onValueChange = { supportReply = it.take(4000) }, label = { Text("Write your message") }, placeholder = { Text("Write your message…") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+              OutlinedTextField(
+                value = supportReply,
+                onValueChange = { supportReply = it.take(4000) },
+                label = { Text(appText("Write your message", "اپنا پیغام لکھیں")) },
+                placeholder = { Text(appText("Write your message…", "اپنا پیغام لکھیں…")) },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+              )
               Button(enabled = !saving && supportReply.isNotBlank(), onClick = {
                 scope.launch {
                   saving = true
@@ -631,17 +756,23 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     VendorService.sendSupportMessage(ticket.optString("id"), supportReply)
                     supportReply = ""
                     supportMessages = VendorService.listSupportMessages(ticket.optString("id"))
-                    message = "Support reply sent."
-                  } catch (e: Exception) { errorMessage = e.message ?: "Support reply could not be sent." }
+                    message = AppLanguageManager.tr("Support reply sent.", "سپورٹ جواب بھیج دیا گیا۔")
+                  } catch (e: Exception) {
+                    errorMessage = e.message ?: AppLanguageManager.tr("Support reply could not be sent.", "سپورٹ جواب بھیجا نہیں جا سکا۔")
+                  }
                   finally { saving = false }
                 }
-              }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) { Text("Send") }
+              }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange)) {
+                Text(appText("Send", "بھیجیں"))
+              }
             }
           }
         }
       }
     }
-    OutlinedButton(onClick = { reload() }, modifier = Modifier.fillMaxWidth()) { Text("Refresh vendor tools") }
+    OutlinedButton(onClick = { reload() }, modifier = Modifier.fillMaxWidth()) {
+      Text(appText("Refresh vendor tools", "وینڈر ٹولز ریفریش کریں"))
+    }
   }
   if (showShopMapPicker) {
     ShopLocationPickerDialog(
@@ -674,38 +805,48 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
   var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    VendorAdvancedField("Shop name", shopName) { shopName = it }
-    VendorAdvancedField("Shop URL slug", slug) { slug = it }
-    VendorAdvancedField("Shop description", description, 3) { description = it }
-    VendorAdvancedField("Owner full legal name", ownerName) { ownerName = it }
+    VendorAdvancedField(appText("Shop name", "دکان کا نام"), shopName) { shopName = it }
+    VendorAdvancedField(appText("Shop URL slug", "دکان کا یو آر ایل سلگ"), slug) { slug = it }
+    VendorAdvancedField(appText("Shop description", "دکان کی تفصیل"), description, 3) { description = it }
+    VendorAdvancedField(appText("Owner full legal name", "مالک کا مکمل قانونی نام"), ownerName) { ownerName = it }
     VendorTypeDropdown(selectedType = vendorType, onTypeSelected = { vendorType = it })
-    VendorAdvancedField("CNIC number (13 digits)", cnic) { cnic = it.filter(Char::isDigit).take(13) }
-    VendorAdvancedField("Business phone", phone) { phone = it }
-    VendorAdvancedField("Current address", currentAddress) { currentAddress = it }
-    VendorAdvancedField("Complete address", completeAddress, 2) { completeAddress = it }
-    VendorAdvancedField("Shop location / verification address", locationText, 2) { locationText = it }
+    VendorAdvancedField(appText("CNIC number (13 digits)", "شناختی کارڈ نمبر (13 ہندسے)"), cnic) { cnic = it.filter(Char::isDigit).take(13) }
+    VendorAdvancedField(appText("Business phone", "کاروباری فون"), phone) { phone = it }
+    VendorAdvancedField(appText("Current address", "موجودہ پتہ"), currentAddress) { currentAddress = it }
+    VendorAdvancedField(appText("Complete address", "مکمل پتہ"), completeAddress, 2) { completeAddress = it }
+    VendorAdvancedField(appText("Shop location / verification address", "دکان کا مقام / تصدیقی پتہ"), locationText, 2) { locationText = it }
     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
     if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary)
     Button(enabled = !saving, onClick = {
       scope.launch {
         saving = true; errorMessage = ""; message = ""
         try {
-          require(shopName.trim().length >= 2 && description.trim().length >= 10 && ownerName.trim().length >= 3) { "Complete shop and owner details." }
-          require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) { "Enter a valid URL slug." }
-          require(cnic.length == 13 && phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) { "Check CNIC and Pakistani mobile number." }
-          require(currentAddress.trim().length >= 3 && completeAddress.trim().length >= 10 && locationText.trim().length >= 10) { "Complete all address fields." }
+          require(shopName.trim().length >= 2 && description.trim().length >= 10 && ownerName.trim().length >= 3) {
+            AppLanguageManager.tr("Complete shop and owner details.", "دکان اور مالک کی تفصیلات مکمل کریں۔")
+          }
+          require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) {
+            AppLanguageManager.tr("Enter a valid URL slug.", "درست یو آر ایل سلگ درج کریں۔")
+          }
+          require(cnic.length == 13 && phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) {
+            AppLanguageManager.tr("Check CNIC and Pakistani mobile number.", "شناختی کارڈ اور پاکستانی موبائل نمبر چیک کریں۔")
+          }
+          require(currentAddress.trim().length >= 3 && completeAddress.trim().length >= 10 && locationText.trim().length >= 10) {
+            AppLanguageManager.tr("Complete all address fields.", "تمام پتہ کے خانے مکمل کریں۔")
+          }
           VendorService.updateOwnShop(JSONObject().put("shop_name", shopName.trim()).put("slug", slug.trim())
             .put("description", description.trim()).put("owner_full_name", ownerName.trim()).put("vendor_type", vendorType).put("cnic_number", cnic)
             .put("phone", phone.trim()).put("current_address", currentAddress.trim())
             .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim()))
           val updated = VendorService.resubmitApplication()
-          message = "Application resubmitted for review."
+          message = AppLanguageManager.tr("Application resubmitted for review.", "درخواست نظرثانی کے لیے دوبارہ جمع کرا دی گئی۔")
           onResubmitted(updated)
-        } catch (e: Exception) { errorMessage = e.message ?: "Application could not be resubmitted." }
+        } catch (e: Exception) {
+          errorMessage = e.message ?: AppLanguageManager.tr("Application could not be resubmitted.", "درخواست دوبارہ جمع نہیں ہو سکی۔")
+        }
         finally { saving = false }
       }
     }, colors = ButtonDefaults.buttonColors(containerColor = JTOrange), modifier = Modifier.fillMaxWidth()) {
-      Text(if (saving) "Submitting..." else "Save and resubmit application")
+      Text(if (saving) appText("Submitting...", "جمع ہو رہا ہے...") else appText("Save and resubmit application", "محفوظ کریں اور درخواست دوبارہ جمع کرائیں"))
     }
   }
 }
@@ -715,14 +856,15 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
 @Composable
 fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
   val types = listOf(
-    "individual_seller" to "Individual Seller",
-    "registered_business" to "Registered Business",
-    "sole_proprietor" to "Sole Proprietor",
-    "partnership" to "Partnership",
-    "company" to "Company"
+    "individual_seller" to appText("Individual Seller", "انفرادی فروخت کنندہ"),
+    "registered_business" to appText("Registered Business", "رجسٹرڈ کاروبار"),
+    "sole_proprietor" to appText("Sole Proprietor", "واحد ملکیت"),
+    "partnership" to appText("Partnership", "شراکت داری"),
+    "company" to appText("Company", "کمپنی")
   )
   var expanded by remember { mutableStateOf(false) }
-  val selectedLabel = types.firstOrNull { it.first == selectedType }?.second ?: "Select vendor type"
+  val selectedLabel = types.firstOrNull { it.first == selectedType }?.second
+    ?: appText("Select vendor type", "فروشندہ کی قسم منتخب کریں")
 
   ExposedDropdownMenuBox(
     expanded = expanded,
@@ -733,8 +875,8 @@ fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
       value = selectedLabel,
       onValueChange = {},
       readOnly = true,
-      label = { Text("Vendor type") },
-      placeholder = { Text("Select vendor type") },
+      label = { Text(appText("Vendor type", "فروشندہ کی قسم")) },
+      placeholder = { Text(appText("Select vendor type", "فروشندہ کی قسم منتخب کریں")) },
       leadingIcon = {
         Icon(
           imageVector = Icons.Rounded.Badge,

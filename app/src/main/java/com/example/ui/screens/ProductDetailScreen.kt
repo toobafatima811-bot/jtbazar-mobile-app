@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
@@ -104,16 +106,16 @@ fun ProductDetailScreen(
   if (showWriteReviewDialog) {
     AlertDialog(
       onDismissRequest = { showWriteReviewDialog = false },
-      title = { Text("Write a Product Review", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+      title = { Text(appText("Write a Product Review", "پروڈکٹ کا جائزہ لکھیں"), fontWeight = FontWeight.Bold, fontSize = 16.sp) },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("Rating", fontSize = 12.sp, color = JTTextSecondary)
+          Text(appText("Rating", "درجہ بندی"), fontSize = 12.sp, color = JTTextSecondary)
           Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (i in 1..5) {
               IconButton(onClick = { reviewRating = i }, modifier = Modifier.size(32.dp)) {
                 Icon(
                   imageVector = Icons.Filled.Star,
-                  contentDescription = "$i Stars",
+                  contentDescription = appText("$i Stars", "$i ستارے"),
                   tint = if (i <= reviewRating) JTAmber else Color(0xFFD1D5DB),
                   modifier = Modifier.size(24.dp)
                 )
@@ -123,16 +125,16 @@ fun ProductDetailScreen(
           OutlinedTextField(
             value = reviewTitle,
             onValueChange = { reviewTitle = it },
-            label = { Text("Headline / Title") },
-            placeholder = { Text("e.g. Excellent handcraft quality!") },
+            label = { Text(appText("Headline / Title", "عنوان")) },
+            placeholder = { Text(appText("e.g. Excellent handcraft quality!", "مثلاً بہترین معیار!")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
           )
           OutlinedTextField(
             value = reviewComment,
             onValueChange = { reviewComment = it },
-            label = { Text("Your Review Details") },
-            placeholder = { Text("Describe what you liked about this item...") },
+            label = { Text(appText("Your Review Details", "آپ کے جائزے کی تفصیل")) },
+            placeholder = { Text(appText("Describe what you liked about this item...", "بتائیں کہ آپ کو اس چیز میں کیا پسند آیا...")) },
             minLines = 3,
             maxLines = 5,
             modifier = Modifier.fillMaxWidth()
@@ -146,25 +148,36 @@ fun ProductDetailScreen(
               MarketplaceRepository.submitProductReview(
                 productId = product.id,
                 rating = reviewRating,
-                title = reviewTitle.ifBlank { "Verified Review" },
+                title = reviewTitle.ifBlank { AppLanguageManager.tr("Verified Review", "تصدیق شدہ جائزہ") },
                 comment = reviewComment
               )
               showWriteReviewDialog = false
               reviewTitle = ""
               reviewComment = ""
-              Toast.makeText(context, "Review request checked against your delivered orders.", Toast.LENGTH_SHORT).show()
+              Toast.makeText(
+                context,
+                AppLanguageManager.tr(
+                  "Review request checked against your delivered orders.",
+                  "آپ کے پہنچائے گئے آرڈرز کے مطابق جائزے کی درخواست چیک کر لی گئی۔"
+                ),
+                Toast.LENGTH_SHORT
+              ).show()
             } else {
-              Toast.makeText(context, "Please enter your review details", Toast.LENGTH_SHORT).show()
+              Toast.makeText(
+                context,
+                AppLanguageManager.tr("Please enter your review details", "براہ کرم اپنے جائزے کی تفصیل درج کریں"),
+                Toast.LENGTH_SHORT
+              ).show()
             }
           },
           colors = ButtonDefaults.buttonColors(containerColor = JTOrange)
         ) {
-          Text("Submit Review")
+          Text(appText("Submit Review", "جائزہ جمع کرائیں"))
         }
       },
       dismissButton = {
         TextButton(onClick = { showWriteReviewDialog = false }) {
-          Text("Cancel", color = JTTextSecondary)
+          Text(appText("Cancel", "منسوخ کریں"), color = JTTextSecondary)
         }
       }
     )
@@ -192,7 +205,7 @@ fun ProductDetailScreen(
     containerColor = Color.White,
     topBar = {
       JTBazarTopBar(
-        title = "Product Details",
+        title = appText("Product Details", "پروڈکٹ کی تفصیلات"),
         showBack = true,
         onBackClick = onBackClick,
         onCartClick = onCartClick,
@@ -219,7 +232,7 @@ fun ProductDetailScreen(
         ) {
           Column {
             Text(
-              text = "Total Price",
+              text = appText("Total Price", "کل قیمت"),
               fontSize = 11.sp,
               color = JTTextSecondary
             )
@@ -233,10 +246,11 @@ fun ProductDetailScreen(
 
           if (!canPurchase) {
             val purchaseBlockedReason = when {
-              !liveProduct.availabilityKnown -> "Availability not verified"
-              !liveProduct.isAvailable -> "Out of Stock"
-              liveProduct.variantIds.isNotEmpty() && selectedSize.isNullOrBlank() && selectedPaletteName.isNullOrBlank() -> "Select an option"
-              else -> "Selected option unavailable"
+              !liveProduct.availabilityKnown -> appText("Availability not verified", "دستیابی کی تصدیق نہیں ہو سکی")
+              !liveProduct.isAvailable -> appText("Out of Stock", "اسٹاک ختم")
+              liveProduct.variantIds.isNotEmpty() && selectedSize.isNullOrBlank() && selectedPaletteName.isNullOrBlank() ->
+                appText("Select an option", "ایک آپشن منتخب کریں")
+              else -> appText("Selected option unavailable", "منتخب کردہ آپشن دستیاب نہیں")
             }
             Surface(color = Color(0xFFFFE4E6), shape = RoundedCornerShape(10.dp)) {
               Text(purchaseBlockedReason, color = Color(0xFFBE123C), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
@@ -247,7 +261,7 @@ fun ProductDetailScreen(
                 onClick = {
                   MarketplaceRepository.addToCart(liveProduct, quantity, selectedPaletteName, selectedSize)
                   if (MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)) {
-                    Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, AppLanguageManager.tr("Added to cart!", "کارٹ میں شامل کر دیا گیا!"), Toast.LENGTH_SHORT).show()
                   }
                 },
                 shape = RoundedCornerShape(12.dp),
@@ -257,7 +271,7 @@ fun ProductDetailScreen(
               ) {
                 Icon(Icons.Outlined.ShoppingBag, contentDescription = null, modifier = Modifier.size(17.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Add to Cart", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text(appText("Add to Cart", "کارٹ میں شامل کریں"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
               }
               Button(
                 onClick = {
@@ -271,7 +285,7 @@ fun ProductDetailScreen(
               ) {
                 Icon(Icons.Filled.ElectricBolt, contentDescription = null, tint = JTAmber, modifier = Modifier.size(17.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Buy Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text(appText("Buy Now", "ابھی خریدیں"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
               }
             }
           }
@@ -300,13 +314,17 @@ fun ProductDetailScreen(
           Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             IconButton(
               onClick = {
-                Toast.makeText(context, "Sharing link to ${product.title}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                  context,
+                  AppLanguageManager.tr("Sharing link to ${product.title}", "${product.title} کا لنک شیئر کیا جا رہا ہے"),
+                  Toast.LENGTH_SHORT
+                ).show()
               },
               modifier = Modifier.size(36.dp)
             ) {
               Icon(
                 imageVector = Icons.Outlined.Share,
-                contentDescription = "Share",
+                contentDescription = appText("Share", "شیئر کریں"),
                 tint = JTTextPrimary,
                 modifier = Modifier.size(20.dp)
               )
@@ -320,7 +338,7 @@ fun ProductDetailScreen(
             ) {
               Icon(
                 imageVector = if (liveProduct.isWishlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                contentDescription = "Favorite",
+                contentDescription = appText("Favorite", "پسندیدہ"),
                 tint = if (liveProduct.isWishlisted) JTRed else JTTextPrimary,
                 modifier = Modifier.size(20.dp)
               )
@@ -380,26 +398,22 @@ fun ProductDetailScreen(
               color = JTRed
             ) {
               Text(
-                text = "${liveProduct.discountPercent}% OFF",
+                text = appText("${liveProduct.discountPercent}% OFF", "${liveProduct.discountPercent}% رعایت"),
                 color = Color.White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
               )
             }
-
-
           }
-
-
         }
       }
-
 
       if (campaignEndMillis != null) {
         item(key = "deal_timer") {
           ProductDetailDealTimer(
-            title = productCampaign?.displayTitle?.ifBlank { "Flash Deal ends in" } ?: "Flash Deal ends in",
+            title = productCampaign?.displayTitle?.ifBlank { appText("Flash Deal ends in", "فلیش ڈیل ختم ہونے میں") }
+              ?: appText("Flash Deal ends in", "فلیش ڈیل ختم ہونے میں"),
             campaignEndMillis = campaignEndMillis
           )
         }
@@ -431,7 +445,12 @@ fun ProductDetailScreen(
               )
               Spacer(modifier = Modifier.width(4.dp))
               Text(
-                text = if (liveProduct.reviewCount > 0) String.format(java.util.Locale.US, "%.1f", liveProduct.rating) + " (" + liveProduct.reviewCount + " reviews)" else "No reviews yet",
+                text = if (liveProduct.reviewCount > 0) {
+                  val score = String.format(java.util.Locale.US, "%.1f", liveProduct.rating)
+                  appText("$score (${liveProduct.reviewCount} reviews)", "$score (${liveProduct.reviewCount} جائزے)")
+                } else {
+                  appText("No reviews yet", "ابھی تک کوئی جائزہ نہیں")
+                },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTAmberDark
@@ -554,14 +573,14 @@ fun ProductDetailScreen(
                     Text(sellerShop.name, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1)
                     if (sellerShop.isVerified) {
                       Spacer(Modifier.width(4.dp))
-                      Icon(Icons.Filled.Verified, contentDescription = "Verified shop", tint = JTOrange, modifier = Modifier.size(16.dp))
+                      Icon(Icons.Filled.Verified, contentDescription = appText("Verified shop", "تصدیق شدہ دکان"), tint = JTOrange, modifier = Modifier.size(16.dp))
                     }
                   }
                   if (sellerShop.city.isNotBlank()) {
                     Text(sellerShop.city, style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
                   }
                 }
-                TextButton(onClick = { onVisitShop(sellerShop.id) }) { Text("Visit Shop", color = JTOrange) }
+                TextButton(onClick = { onVisitShop(sellerShop.id) }) { Text(appText("Visit Shop", "دکان دیکھیں"), color = JTOrange) }
               }
               if (sellerShop.address.isNotBlank()) {
                 HorizontalDivider(color = JTBorder)
@@ -590,7 +609,7 @@ fun ProductDetailScreen(
               verticalAlignment = Alignment.CenterVertically
             ) {
               Text(
-                text = "SELECT PALETTE PATTERN",
+                text = appText("SELECT PALETTE PATTERN", "رنگ / پیٹرن منتخب کریں"),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = JTTextPrimary,
@@ -653,7 +672,7 @@ fun ProductDetailScreen(
               verticalAlignment = Alignment.CenterVertically
             ) {
               Text(
-                text = "PLATE DIAMETER",
+                text = appText("PLATE DIAMETER", "سائز / آپشن منتخب کریں"),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = JTTextPrimary,
@@ -723,7 +742,7 @@ fun ProductDetailScreen(
           ) {
             Column {
               Text(
-                text = "Quantity",
+                text = appText("Quantity", "تعداد"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 color = JTTextPrimary
@@ -769,7 +788,7 @@ fun ProductDetailScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Product Highlights & Craft Story",
+                  text = appText("Product Highlights & Craft Story", "پروڈکٹ کی خصوصیات اور تفصیل"),
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp,
                   color = JTTextPrimary
@@ -819,7 +838,6 @@ fun ProductDetailScreen(
             }
           }
         }
-
       }
 
       // Customer reviews from Supabase - independent card
@@ -850,7 +868,7 @@ fun ProductDetailScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Customer Reviews (" + productReviews.size + ")",
+                  text = appText("Customer Reviews (${productReviews.size})", "صارفین کے جائزے (${productReviews.size})"),
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp,
                   color = JTTextPrimary
@@ -874,7 +892,7 @@ fun ProductDetailScreen(
                   verticalAlignment = Alignment.CenterVertically
                 ) {
                   Text(
-                    text = "${productReviews.size} Verified Customer Reviews",
+                    text = appText("${productReviews.size} Verified Customer Reviews", "${productReviews.size} تصدیق شدہ صارفین کے جائزے"),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = JTTextSecondary
@@ -885,14 +903,17 @@ fun ProductDetailScreen(
                   ) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = JTPurplePrimary)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Write a Review", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary)
+                    Text(appText("Write a Review", "جائزہ لکھیں"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary)
                   }
                 }
 
                 // Render real reviews from backend
                 if (productReviews.isEmpty()) {
                   Text(
-                    text = "No reviews yet. Verified customers can leave a review after receiving their order.",
+                    text = appText(
+                      "No reviews yet. Verified customers can leave a review after receiving their order.",
+                      "ابھی تک کوئی جائزہ نہیں۔ تصدیق شدہ صارفین آرڈر موصول ہونے کے بعد جائزہ لکھ سکتے ہیں۔"
+                    ),
                     fontSize = 12.sp,
                     color = JTTextSecondary,
                     modifier = Modifier.padding(vertical = 8.dp)
@@ -900,7 +921,7 @@ fun ProductDetailScreen(
                 } else {
                   productReviews.forEach { rev ->
                     ReviewSnippet(
-                      name = rev.userName.ifBlank { "Customer" },
+                      name = rev.userName.ifBlank { appText("Customer", "صارف") },
                       comment = rev.comment,
                       rating = rev.rating
                     )
@@ -976,7 +997,20 @@ private fun ProductDetailDealTimer(
       Text(title, fontWeight = FontWeight.Bold, color = Color(0xFFB42318), fontSize = 14.sp)
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         val timerParts = if (days > 0) listOf(days, hours, minutes, seconds) else listOf(hours, minutes, seconds)
-        val labels = if (days > 0) listOf("DAYS", "HRS", "MIN", "SEC") else listOf("HRS", "MIN", "SEC")
+        val labels = if (days > 0) {
+          listOf(
+            appText("DAYS", "دن"),
+            appText("HRS", "گھنٹے"),
+            appText("MIN", "منٹ"),
+            appText("SEC", "سیکنڈ")
+          )
+        } else {
+          listOf(
+            appText("HRS", "گھنٹے"),
+            appText("MIN", "منٹ"),
+            appText("SEC", "سیکنڈ")
+          )
+        }
         timerParts.forEachIndexed { index, value ->
           Surface(color = Color(0xFFB42318), shape = RoundedCornerShape(8.dp)) {
             Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {

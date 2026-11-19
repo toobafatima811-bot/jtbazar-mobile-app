@@ -60,6 +60,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.data.supabase.VendorOrderStatus
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.EmptyState
 import com.example.ui.components.ErrorState
@@ -129,26 +131,29 @@ fun VendorOverviewContent(
           ) {
             Icon(
               imageVector = Icons.Rounded.NotificationsActive,
-              contentDescription = "Unread notifications",
+              contentDescription = appText("Unread notifications", "غیر پڑھے ہوئے نوٹیفیکیشنز"),
               tint = VendorColors.WarningAmber,
               modifier = Modifier.size(22.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
               Text(
-                text = "${uiState.unreadNotificationsCount} unread notification(s)",
+                text = appText(
+                  "${uiState.unreadNotificationsCount} unread notification(s)",
+                  "${uiState.unreadNotificationsCount} غیر پڑھے ہوئے نوٹیفیکیشن"
+                ),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = VendorColors.WarningAmber
               )
               Text(
-                text = "Tap to view live order & store updates",
+                text = appText("Tap to view live order & store updates", "لائیو آرڈر اور اسٹور اپڈیٹس دیکھنے کے لیے ٹیپ کریں"),
                 style = MaterialTheme.typography.bodySmall,
                 color = VendorColors.TextPrimary
               )
             }
             Icon(
               imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-              contentDescription = "Open notifications",
+              contentDescription = appText("Open notifications", "نوٹیفیکیشنز کھولیں"),
               tint = VendorColors.WarningAmber
             )
           }
@@ -168,8 +173,8 @@ fun VendorOverviewContent(
           StatCard(
             icon = Icons.Rounded.ShoppingBag,
             value = numberFormatter.format(uiState.totalListings),
-            label = "Total listings",
-            supportingText = "Products in catalog",
+            label = appText("Total listings", "کل مصنوعات"),
+            supportingText = appText("Products in catalog", "کیٹلاگ میں مصنوعات"),
             modifier = Modifier
               .weight(1f)
               .fillMaxHeight()
@@ -179,8 +184,11 @@ fun VendorOverviewContent(
           StatCard(
             icon = Icons.Rounded.ReceiptLong,
             value = numberFormatter.format(uiState.totalOrdersCount),
-            label = "Total orders",
-            supportingText = "${numberFormatter.format(uiState.orderItemsCount)} order item(s)",
+            label = appText("Total orders", "کل آرڈرز"),
+            supportingText = appText(
+              "${numberFormatter.format(uiState.orderItemsCount)} order item(s)",
+              "${numberFormatter.format(uiState.orderItemsCount)} آرڈر آئٹمز"
+            ),
             iconTint = VendorColors.NavyHeader,
             iconBackground = VendorColors.NavyHeader.copy(alpha = 0.10f),
             modifier = Modifier
@@ -199,8 +207,8 @@ fun VendorOverviewContent(
           StatCard(
             icon = Icons.Rounded.LocalShipping,
             value = numberFormatter.format(uiState.itemsToPrepareCount),
-            label = "Needs prep",
-            supportingText = "Pending, confirmed & active",
+            label = appText("Needs prep", "تیاری درکار"),
+            supportingText = appText("Pending, confirmed & active", "زیر التواء، تصدیق شدہ اور فعال"),
             modifier = Modifier
               .weight(1f)
               .fillMaxHeight()
@@ -209,9 +217,9 @@ fun VendorOverviewContent(
           )
           StatCard(
             icon = Icons.Rounded.Storefront,
-            value = uiState.shopStatusLabel,
-            label = "Shop status",
-            supportingText = if (uiState.isSellerActive) "Live on JTBazar" else "Under review",
+            value = if (uiState.shopStatusLabel.equals("Active", ignoreCase = true)) appText("Active", "فعال") else uiState.shopStatusLabel,
+            label = appText("Shop status", "دکان کی حیثیت"),
+            supportingText = if (uiState.isSellerActive) appText("Live on JTBazar", "جے ٹی بازار پر لائیو") else appText("Under review", "جائزہ جاری"),
             iconTint = VendorColors.SuccessGreen,
             iconBackground = VendorColors.SuccessGreenBg,
             valueColor = VendorColors.SuccessGreen,
@@ -234,13 +242,13 @@ fun VendorOverviewContent(
           ) {
             Column(modifier = Modifier.weight(1f)) {
               Text(
-                text = "Order status overview",
+                text = appText("Order status overview", "آرڈرز کی صورتحال کا جائزہ"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = VendorColors.TextPrimary
               )
               Text(
-                text = "Live Supabase counts across all order stages",
+                text = appText("Live Supabase counts across all order stages", "تمام مراحل کے لائیو آرڈر شمار"),
                 style = MaterialTheme.typography.bodySmall,
                 color = VendorColors.TextSecondary
               )
@@ -336,8 +344,8 @@ fun VendorOverviewContent(
     if (uiState.recentOrders.isNotEmpty()) {
       item {
         SectionHeader(
-          title = "Recent orders",
-          actionLabel = "View all",
+          title = appText("Recent orders", "حالیہ آرڈرز"),
+          actionLabel = appText("View all", "سب دیکھیں"),
           onActionClick = onOpenOrders
         )
       }
@@ -374,7 +382,7 @@ fun VendorOverviewContent(
               verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
               Text(
-                text = "Order ${group.orderNumber}",
+                text = appText("Order ${group.orderNumber}", "آرڈر ${group.orderNumber}"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = VendorColors.TextPrimary,
@@ -382,7 +390,8 @@ fun VendorOverviewContent(
                 overflow = TextOverflow.Ellipsis
               )
               Text(
-                text = "${group.items.size} item(s)" + if (group.createdAt.isNotBlank()) " • ${group.createdAt.take(10)}" else "",
+                text = appText("${group.items.size} item(s)", "${group.items.size} آئٹمز") +
+                  if (group.createdAt.isNotBlank()) " • ${group.createdAt.take(10)}" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = VendorColors.TextSecondary
               )
@@ -428,20 +437,20 @@ fun VendorOverviewContent(
             verticalArrangement = Arrangement.spacedBy(2.dp)
           ) {
             Text(
-              text = "Add a new product",
+              text = appText("Add a new product", "نئی پروڈکٹ شامل کریں"),
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
               color = VendorColors.TextPrimary
             )
             Text(
-              text = "Publish a new listing for JTBazar customers",
+              text = appText("Publish a new listing for JTBazar customers", "جے ٹی بازار کے صارفین کے لیے نئی پروڈکٹ شائع کریں"),
               style = MaterialTheme.typography.bodySmall,
               color = VendorColors.TextSecondary
             )
           }
           Icon(
             imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            contentDescription = "Add a new product",
+            contentDescription = appText("Add a new product", "نئی پروڈکٹ شامل کریں"),
             tint = VendorColors.PrimaryOrange,
             modifier = Modifier.size(24.dp)
           )
@@ -452,8 +461,8 @@ fun VendorOverviewContent(
     // 6. Recent listings header
     item {
       SectionHeader(
-        title = "Recent listings",
-        actionLabel = "View all",
+        title = appText("Recent listings", "حالیہ مصنوعات"),
+        actionLabel = appText("View all", "سب دیکھیں"),
         onActionClick = onViewAllProducts
       )
     }
@@ -468,7 +477,7 @@ fun VendorOverviewContent(
       is VendorSectionState.Error -> {
         item {
           ErrorState(
-            title = "Could not load listings",
+            title = appText("Could not load listings", "مصنوعات لوڈ نہیں ہو سکیں"),
             message = state.message,
             onRetry = onRefresh
           )
@@ -479,9 +488,9 @@ fun VendorOverviewContent(
         item {
           EmptyState(
             icon = Icons.Rounded.Inventory2,
-            title = "No products listed yet",
-            description = "Your product listings will appear here once you add them.",
-            actionLabel = "Add your first product",
+            title = appText("No products listed yet", "ابھی تک کوئی پروڈکٹ شامل نہیں"),
+            description = appText("Your product listings will appear here once you add them.", "پروڈکٹس شامل کرنے کے بعد وہ یہاں نظر آئیں گی۔"),
+            actionLabel = appText("Add your first product", "پہلی پروڈکٹ شامل کریں"),
             actionIcon = Icons.Rounded.Add,
             onAction = onAddProduct
           )
@@ -507,7 +516,7 @@ private fun VendorHeroCard(
   isRefreshing: Boolean,
   onRefresh: () -> Unit
 ) {
-  val displayName = shopName.ifBlank { "Your Shop" }
+  val displayName = shopName.ifBlank { appText("Your Shop", "آپ کی دکان") }
   val avatarChar = displayName.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "J"
 
   Card(
@@ -548,7 +557,7 @@ private fun VendorHeroCard(
           verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
           Text(
-            text = "Welcome back",
+            text = appText("Welcome back", "خوش آمدید"),
             style = MaterialTheme.typography.bodySmall,
             color = VendorColors.NavyHeaderSubtitle
           )
@@ -576,7 +585,7 @@ private fun VendorHeroCard(
           } else {
             Icon(
               imageVector = Icons.Rounded.Refresh,
-              contentDescription = "Refresh overview",
+              contentDescription = appText("Refresh overview", "جائزہ ریفریش کریں"),
               tint = Color.White,
               modifier = Modifier.size(22.dp)
             )
@@ -600,7 +609,8 @@ private fun VendorHeroCard(
             modifier = Modifier.size(16.dp)
           )
           Text(
-            text = if (isSellerActive) "Seller account active" else "Seller review pending",
+            text = if (isSellerActive) appText("Seller account active", "فروش اکاؤنٹ فعال ہے")
+            else appText("Seller review pending", "فروش کا جائزہ زیر التواء ہے"),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = if (isSellerActive) VendorColors.SuccessGreen else VendorColors.WarningAmber
@@ -617,14 +627,18 @@ private fun VendorRecentListingCard(
   onClick: () -> Unit
 ) {
   val (statusText, statusTone, statusIcon) = when {
-    product.moderationStatus == "rejected" -> Triple("Rejected", StatusTone.DANGER, Icons.Rounded.ErrorOutline)
-    product.isHidden -> Triple("Hidden", StatusTone.NEUTRAL, Icons.Rounded.VisibilityOff)
+    product.moderationStatus == "rejected" -> Triple(appText("Rejected", "مسترد"), StatusTone.DANGER, Icons.Rounded.ErrorOutline)
+    product.isHidden -> Triple(appText("Hidden", "مخفی"), StatusTone.NEUTRAL, Icons.Rounded.VisibilityOff)
     product.moderationStatus == "approved" -> Triple(
-      product.publicationStatus.replace('_', ' ').replaceFirstChar { it.uppercase() },
+      when (product.publicationStatus.lowercase()) {
+        "published" -> appText("Published", "شائع شدہ")
+        "draft" -> appText("Draft", "مسودہ")
+        else -> product.publicationStatus.replace('_', ' ').replaceFirstChar { it.uppercase() }
+      },
       StatusTone.SUCCESS,
       Icons.Rounded.CheckCircle
     )
-    else -> Triple("Pending", StatusTone.WARNING, Icons.Rounded.Schedule)
+    else -> Triple(appText("Pending", "زیر التواء"), StatusTone.WARNING, Icons.Rounded.Schedule)
   }
 
   AppCard(onClick = onClick) {

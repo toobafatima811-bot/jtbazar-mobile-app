@@ -59,14 +59,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorService
+import com.example.data.supabase.WeeklyShopHours
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecondaryButton
@@ -110,6 +115,8 @@ fun VendorShopSettingsScreen(
   var showOnMap by remember(application.id) { mutableStateOf(application.showShopOnMap) }
   var shopImageUri by remember(application.id) { mutableStateOf<Uri?>(null) }
   var shopImageUrl by remember(application.id) { mutableStateOf(application.shopImageUrl) }
+  var shopIsOpen by remember(application.id, application.shopIsOpen) { mutableStateOf(application.shopIsOpen) }
+  var weeklyHours by remember(application.id, application.shopHours) { mutableStateOf(application.shopHours) }
   var documentPath by remember(application.id) { mutableStateOf(application.documentPath) }
   var frontPath by remember(application.id) { mutableStateOf(application.cnicFrontPath) }
   var backPath by remember(application.id) { mutableStateOf(application.cnicBackPath) }
@@ -130,18 +137,20 @@ fun VendorShopSettingsScreen(
       try {
         val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
         require(mime in listOf("application/pdf", "image/jpeg", "image/png", "image/webp")) {
-          "Use PDF, JPG, PNG or WebP files."
+          AppLanguageManager.tr("Use PDF, JPG, PNG or WebP files.", "PDF، JPG، PNG یا WebP فائلیں استعمال کریں۔")
         }
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-          ?: error("Selected file could not be read.")
-        require(bytes.size <= 10 * 1024 * 1024) { "Verification files must be 10 MB or smaller." }
+          ?: error(AppLanguageManager.tr("Selected file could not be read.", "منتخب کردہ فائل پڑھی نہیں جا سکی۔"))
+        require(bytes.size <= 10 * 1024 * 1024) {
+          AppLanguageManager.tr("Verification files must be 10 MB or smaller.", "تصدیقی فائلیں 10 MB یا اس سے کم ہونی چاہئیں۔")
+        }
         val ext = when (mime) {
           "application/pdf" -> "pdf"
           "image/jpeg" -> "jpg"
           "image/png" -> "png"
           else -> "webp"
         }
-        val ownerId = currentUser?.id ?: error("Please sign in again.")
+        val ownerId = currentUser?.id ?: error(AppLanguageManager.tr("Please sign in again.", "براہ کرم دوبارہ سائن ان کریں۔"))
         val path = "$ownerId/$documentKind-${System.currentTimeMillis()}.$ext"
         val uploaded = VendorService.uploadPrivateDocument(path, bytes, mime)
         when (documentKind) {
@@ -149,9 +158,15 @@ fun VendorShopSettingsScreen(
           "cnic-back" -> backPath = uploaded
           else -> documentPath = uploaded
         }
-        info = "Private verification file uploaded securely."
+        info = AppLanguageManager.tr(
+          "Private verification file uploaded securely.",
+          "نجی تصدیقی فائل محفوظ طریقے سے اپلوڈ ہو گئی۔"
+        )
       } catch (e: Exception) {
-        errorMessage = e.message ?: "Verification file upload failed."
+        errorMessage = e.message ?: AppLanguageManager.tr(
+          "Verification file upload failed.",
+          "تصدیقی فائل اپلوڈ نہیں ہو سکی۔"
+        )
       } finally {
         saving = false
       }
@@ -176,6 +191,8 @@ fun VendorShopSettingsScreen(
     longitude = longitude,
     shopImageUrl = shopImageUrl,
     hasLocalShopImage = shopImageUri != null,
+    shopIsOpen = shopIsOpen,
+    weeklyHours = weeklyHours,
     frontPath = frontPath,
     backPath = backPath,
     documentPath = documentPath,
@@ -203,6 +220,8 @@ fun VendorShopSettingsScreen(
     onOpenMapPicker = { mapOpen = true },
     onLocationTextChange = { locationText = it },
     onPickShopImage = { shopPicker.launch("image/*") },
+    onShopIsOpenChange = { shopIsOpen = it },
+    onWeeklyHoursChange = { weeklyHours = it },
     onUploadCnicFront = {
       documentKind = "cnic-front"
       documentPicker.launch("image/*")
@@ -222,16 +241,19 @@ fun VendorShopSettingsScreen(
         info = ""
         try {
           require(shopName.trim().length >= 2 && slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) {
-            "Enter a valid shop name and URL slug."
+            AppLanguageManager.tr("Enter a valid shop name and URL slug.", "درست دکان کا نام اور URL سلگ درج کریں۔")
           }
           require(resolvedEmail.isNotBlank() && resolvedEmail.trim().equals(currentUser?.email?.trim(), true)) {
-            "Use the same verified email as your signed-in JTBazar account."
+            AppLanguageManager.tr(
+              "Use the same verified email as your signed-in JTBazar account.",
+              "اپنے سائن ان شدہ جے ٹی بازار اکاؤنٹ والا تصدیق شدہ ای میل استعمال کریں۔"
+            )
           }
           require(ownerName.trim().length >= 3 && cnic.matches(Regex("[0-9]{13}"))) {
-            "Enter the owner's legal name and 13-digit CNIC."
+            AppLanguageManager.tr("Enter the owner's legal name and 13-digit CNIC.", "مالک کا قانونی نام اور 13 ہندسوں کا شناختی کارڈ نمبر درج کریں۔")
           }
           require(phone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) {
-            "Enter a valid Pakistani mobile number."
+            AppLanguageManager.tr("Enter a valid Pakistani mobile number.", "درست پاکستانی موبائل نمبر درج کریں۔")
           }
           require(
             description.trim().length >= 10 &&
@@ -239,21 +261,31 @@ fun VendorShopSettingsScreen(
               completeAddress.trim().length >= 10 &&
               locationText.trim().length >= 10
           ) {
-            "Complete all required shop details."
+            AppLanguageManager.tr("Complete all required shop details.", "دکان کی تمام ضروری تفصیلات مکمل کریں۔")
           }
-          val lat = latitude.toDoubleOrNull() ?: error("Choose the required shop map pin.")
-          val lng = longitude.toDoubleOrNull() ?: error("Choose the required shop map pin.")
+          val lat = latitude.toDoubleOrNull()
+            ?: error(AppLanguageManager.tr("Choose the required shop map pin.", "دکان کا ضروری میپ پن منتخب کریں۔"))
+          val lng = longitude.toDoubleOrNull()
+            ?: error(AppLanguageManager.tr("Choose the required shop map pin.", "دکان کا ضروری میپ پن منتخب کریں۔"))
           require(lat in -90.0..90.0 && lng in -180.0..180.0 && !(lat == 0.0 && lng == 0.0)) {
-            "Shop map pin is invalid."
+            AppLanguageManager.tr("Shop map pin is invalid.", "دکان کا میپ پن درست نہیں ہے۔")
           }
           require(frontPath.isNotBlank() && backPath.isNotBlank() && documentPath.isNotBlank()) {
-            "Upload all three verification documents."
+            AppLanguageManager.tr("Upload all three verification documents.", "تینوں تصدیقی دستاویزات اپلوڈ کریں۔")
+          }
+          val invalidDays = weeklyHours.invalidDays()
+          require(invalidDays.isEmpty()) {
+            val dayNames = invalidDays.joinToString(", ") { it.localizedName() }
+            AppLanguageManager.tr(
+              "Closing time must be after opening time for: $dayNames.",
+              "بند ہونے کا وقت کھلنے کے وقت کے بعد ہونا چاہیے: $dayNames۔"
+            )
           }
           if (shopImageUri != null) {
             val uri = shopImageUri!!
             val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-              ?: error("Shop picture could not be read.")
+              ?: error(AppLanguageManager.tr("Shop picture could not be read.", "دکان کی تصویر پڑھی نہیں جا سکی۔"))
             shopImageUrl = VendorService.uploadShopImage(bytes, mime)
             shopImageUri = null
           }
@@ -274,15 +306,21 @@ fun VendorShopSettingsScreen(
               .put("shop_lat", lat)
               .put("shop_lng", lng)
               .put("show_shop_on_map", showOnMap)
+              .put("shop_is_open", shopIsOpen)
+              .put("shop_hours", weeklyHours.toJson())
               .put("shop_image_url", shopImageUrl.ifBlank { JSONObject.NULL })
               .put("document_path", documentPath)
               .put("cnic_front_path", frontPath)
               .put("cnic_back_path", backPath)
           )
-          info = "Shop settings saved successfully."
+          MarketplaceRepository.refreshShops(force = true)
+          info = AppLanguageManager.tr("Shop settings saved successfully.", "دکان کی ترتیبات کامیابی سے محفوظ ہو گئیں۔")
           onSaved()
         } catch (e: Exception) {
-          errorMessage = e.message ?: "Shop settings could not be saved."
+          errorMessage = e.message ?: AppLanguageManager.tr(
+            "Shop settings could not be saved.",
+            "دکان کی ترتیبات محفوظ نہیں ہو سکیں۔"
+          )
         } finally {
           saving = false
         }
@@ -326,6 +364,8 @@ fun VendorShopSettingsContent(
   onOpenMapPicker: () -> Unit,
   onLocationTextChange: (String) -> Unit,
   onPickShopImage: () -> Unit,
+  onShopIsOpenChange: (Boolean) -> Unit = {},
+  onWeeklyHoursChange: (WeeklyShopHours) -> Unit = {},
   onUploadCnicFront: () -> Unit,
   onUploadCnicBack: () -> Unit,
   onUploadVerificationDoc: () -> Unit,
@@ -341,14 +381,18 @@ fun VendorShopSettingsContent(
     LazyColumn(
       modifier = Modifier
         .weight(1f)
-        .fillMaxWidth(),
+        .fillMaxWidth()
+        .testTag("vendor_shop_settings_list"),
       contentPadding = PaddingValues(VendorSpacing.md),
       verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
     ) {
       item {
         SectionHeader(
-          title = "Shop settings",
-          subtitle = "Update public storefront details and private verification records."
+          title = appText("Shop settings", "دکان کی ترتیبات"),
+          subtitle = appText(
+            "Update public storefront details and private verification records.",
+            "عوامی دکان کی تفصیلات اور نجی تصدیقی ریکارڈز اپڈیٹ کریں۔"
+          )
         )
       }
 
@@ -377,25 +421,25 @@ fun VendorShopSettingsContent(
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
             SectionHeader(
-              title = "Shop profile",
-              subtitle = "Visible to JTBazar shoppers"
+              title = appText("Shop profile", "دکان کا پروفائل"),
+              subtitle = appText("Visible to JTBazar shoppers", "جے ٹی بازار کے خریداروں کو نظر آئے گا")
             )
             VendorOutlinedTextField(
               value = uiState.shopName,
               onValueChange = onShopNameChange,
-              label = "Shop name *",
+              label = appText("Shop name *", "دکان کا نام *"),
               leadingIcon = Icons.Rounded.Storefront
             )
             VendorOutlinedTextField(
               value = uiState.slug,
               onValueChange = onSlugChange,
-              label = "Shop URL slug *",
+              label = appText("Shop URL slug *", "دکان کا یو آر ایل سلگ *"),
               leadingIcon = Icons.Rounded.Link
             )
             VendorOutlinedTextField(
               value = uiState.accountEmail,
               onValueChange = {},
-              label = "Account email *",
+              label = appText("Account email *", "اکاؤنٹ ای میل *"),
               leadingIcon = Icons.Rounded.Email,
               readOnly = true,
               enabled = false
@@ -407,14 +451,14 @@ fun VendorShopSettingsContent(
             VendorOutlinedTextField(
               value = uiState.phone,
               onValueChange = onPhoneChange,
-              label = "Business phone *",
+              label = appText("Business phone *", "کاروباری فون نمبر *"),
               leadingIcon = Icons.Rounded.Phone,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
             )
             VendorOutlinedTextField(
               value = uiState.description,
               onValueChange = onDescriptionChange,
-              label = "Shop description *",
+              label = appText("Shop description *", "دکان کی تفصیل *"),
               leadingIcon = Icons.Rounded.Description,
               minLines = 3
             )
@@ -422,37 +466,51 @@ fun VendorShopSettingsContent(
         }
       }
 
+      // Section 1B: Shop Availability & Weekly Opening Hours
+      item(key = "shop_availability_and_hours") {
+        VendorShopAvailabilityAndHoursSection(
+          shopIsOpen = uiState.shopIsOpen,
+          weeklyHours = uiState.weeklyHours,
+          enabled = !uiState.isSaving,
+          onShopIsOpenChange = onShopIsOpenChange,
+          onWeeklyHoursChange = onWeeklyHoursChange
+        )
+      }
+
       // Section 2: Owner & Address Details
       item {
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
             SectionHeader(
-              title = "Owner & addresses",
-              subtitle = "Registered business owner and pickup addresses"
+              title = appText("Owner & addresses", "مالک اور پتے"),
+              subtitle = appText(
+                "Registered business owner and pickup addresses",
+                "رجسٹرڈ کاروباری مالک اور پک اپ کے پتے"
+              )
             )
             VendorOutlinedTextField(
               value = uiState.ownerFullName,
               onValueChange = onOwnerNameChange,
-              label = "Owner's full legal name *",
+              label = appText("Owner's full legal name *", "مالک کا مکمل قانونی نام *"),
               leadingIcon = Icons.Rounded.Person
             )
             VendorOutlinedTextField(
               value = uiState.cnicNumber,
               onValueChange = onCnicChange,
-              label = "CNIC number (13 digits) *",
+              label = appText("CNIC number (13 digits) *", "شناختی کارڈ نمبر (13 ہندسے) *"),
               leadingIcon = Icons.Rounded.CreditCard,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
             VendorOutlinedTextField(
               value = uiState.currentAddress,
               onValueChange = onCurrentAddressChange,
-              label = "Current address *",
+              label = appText("Current address *", "موجودہ پتہ *"),
               leadingIcon = Icons.Rounded.LocationOn
             )
             VendorOutlinedTextField(
               value = uiState.completeAddress,
               onValueChange = onCompleteAddressChange,
-              label = "Complete address *",
+              label = appText("Complete address *", "مکمل پتہ *"),
               leadingIcon = Icons.Rounded.Home,
               minLines = 2
             )
@@ -465,13 +523,13 @@ fun VendorShopSettingsContent(
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
             SectionHeader(
-              title = "Public shop picture",
-              subtitle = "JPG, PNG, WebP or AVIF up to 5 MB"
+              title = appText("Public shop picture", "دکان کی عوامی تصویر"),
+              subtitle = appText("JPG, PNG, WebP or AVIF up to 5 MB", "JPG، PNG، WebP یا AVIF زیادہ سے زیادہ 5 MB")
             )
             if (previewImageModel != null) {
               AsyncImage(
                 model = previewImageModel,
-                contentDescription = "Shop picture preview",
+                contentDescription = appText("Shop picture preview", "دکان کی تصویر کا پیش نظارہ"),
                 modifier = Modifier
                   .fillMaxWidth()
                   .height(180.dp)
@@ -498,7 +556,7 @@ fun VendorShopSettingsContent(
                     modifier = Modifier.size(28.dp)
                   )
                   Text(
-                    text = "No shop picture selected",
+                    text = appText("No shop picture selected", "دکان کی کوئی تصویر منتخب نہیں"),
                     style = MaterialTheme.typography.bodySmall,
                     color = VendorColors.TextSecondary
                   )
@@ -507,9 +565,9 @@ fun VendorShopSettingsContent(
             }
             SecondaryButton(
               text = if (!uiState.hasLocalShopImage && uiState.shopImageUrl.isBlank()) {
-                "Choose shop picture"
+                appText("Choose shop picture", "دکان کی تصویر منتخب کریں")
               } else {
-                "Change shop picture"
+                appText("Change shop picture", "دکان کی تصویر تبدیل کریں")
               },
               icon = Icons.Rounded.Image,
               onClick = onPickShopImage,
@@ -524,13 +582,16 @@ fun VendorShopSettingsContent(
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
             SectionHeader(
-              title = "Explore map location",
-              subtitle = "Pin location for verification & Explore discovery"
+              title = appText("Explore map location", "ایکسپلور نقشے کا مقام"),
+              subtitle = appText(
+                "Pin location for verification & Explore discovery",
+                "تصدیق اور ایکسپلور میں دریافت کے لیے مقام پن کریں"
+              )
             )
             VendorOutlinedTextField(
               value = uiState.locationLabel,
               onValueChange = onLocationLabelChange,
-              label = "Public area label",
+              label = appText("Public area label", "علاقے کا عوامی نام"),
               leadingIcon = Icons.Rounded.PinDrop
             )
             Surface(
@@ -552,7 +613,10 @@ fun VendorShopSettingsContent(
                   colors = CheckboxDefaults.colors(checkedColor = VendorColors.PrimaryOrange)
                 )
                 Text(
-                  text = "Show my approximate shop location on Explore",
+                  text = appText(
+                    "Show my approximate shop location on Explore",
+                    "ایکسپلور پر میری دکان کا قریبی مقام دکھائیں"
+                  ),
                   style = MaterialTheme.typography.bodyMedium,
                   color = VendorColors.TextPrimary,
                   modifier = Modifier.weight(1f)
@@ -566,16 +630,23 @@ fun VendorShopSettingsContent(
             ) {
               Text(
                 text = if (uiState.latitude.isNotBlank() && uiState.longitude.isNotBlank()) {
-                  "Pinned: ${uiState.latitude}, ${uiState.longitude}"
+                  appText(
+                    "Pinned: ${uiState.latitude}, ${uiState.longitude}",
+                    "پن شدہ: ${uiState.latitude}, ${uiState.longitude}"
+                  )
                 } else {
-                  "No map pin saved yet"
+                  appText("No map pin saved yet", "ابھی کوئی میپ پن محفوظ نہیں")
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = VendorColors.TextSecondary,
                 modifier = Modifier.weight(1f)
               )
               StatusBadge(
-                text = if (uiState.latitude.isNotBlank() && uiState.longitude.isNotBlank()) "Pin saved" else "Required",
+                text = if (uiState.latitude.isNotBlank() && uiState.longitude.isNotBlank()) {
+                  appText("Pin saved", "پن محفوظ")
+                } else {
+                  appText("Required", "ضروری")
+                },
                 tone = if (uiState.latitude.isNotBlank() && uiState.longitude.isNotBlank()) {
                   StatusTone.SUCCESS
                 } else {
@@ -584,7 +655,7 @@ fun VendorShopSettingsContent(
               )
             }
             SecondaryButton(
-              text = "Choose / update shop map pin",
+              text = appText("Choose / update shop map pin", "دکان کا میپ پن منتخب یا اپڈیٹ کریں"),
               icon = Icons.Rounded.Map,
               onClick = onOpenMapPicker,
               modifier = Modifier.fillMaxWidth()
@@ -592,7 +663,7 @@ fun VendorShopSettingsContent(
             VendorOutlinedTextField(
               value = uiState.locationText,
               onValueChange = onLocationTextChange,
-              label = "Shop location / landmark for verification *",
+              label = appText("Shop location / landmark for verification *", "تصدیق کے لیے دکان کا مقام یا نشانی *"),
               leadingIcon = Icons.Rounded.LocationCity,
               minLines = 2
             )
@@ -619,13 +690,16 @@ fun VendorShopSettingsContent(
               )
               Column(modifier = Modifier.weight(1f)) {
                 Text(
-                  text = "Private verification documents",
+                  text = appText("Private verification documents", "نجی تصدیقی دستاویزات"),
                   style = MaterialTheme.typography.titleMedium,
                   fontWeight = FontWeight.Bold,
                   color = VendorColors.TextPrimary
                 )
                 Text(
-                  text = "Only authorized JTBazar administrators can open these files.",
+                  text = appText(
+                    "Only authorized JTBazar administrators can open these files.",
+                    "صرف مجاز جے ٹی بازار منتظمین ہی یہ فائلیں دیکھ سکتے ہیں۔"
+                  ),
                   style = MaterialTheme.typography.bodySmall,
                   color = VendorColors.TextSecondary
                 )
@@ -635,23 +709,35 @@ fun VendorShopSettingsContent(
             HorizontalDivider(color = VendorColors.Divider)
 
             VerificationDocRow(
-              title = "CNIC front *",
+              title = appText("CNIC front *", "شناختی کارڈ کا اگلا رخ *"),
               uploaded = uiState.frontPath.isNotBlank(),
-              buttonLabel = if (uiState.frontPath.isBlank()) "Upload CNIC front" else "Replace CNIC front",
+              buttonLabel = if (uiState.frontPath.isBlank()) {
+                appText("Upload CNIC front", "شناختی کارڈ کا اگلا رخ اپلوڈ کریں")
+              } else {
+                appText("Replace CNIC front", "شناختی کارڈ کا اگلا رخ تبدیل کریں")
+              },
               enabled = !uiState.isSaving,
               onClick = onUploadCnicFront
             )
             VerificationDocRow(
-              title = "CNIC back *",
+              title = appText("CNIC back *", "شناختی کارڈ کا پچھلا رخ *"),
               uploaded = uiState.backPath.isNotBlank(),
-              buttonLabel = if (uiState.backPath.isBlank()) "Upload CNIC back" else "Replace CNIC back",
+              buttonLabel = if (uiState.backPath.isBlank()) {
+                appText("Upload CNIC back", "شناختی کارڈ کا پچھلا رخ اپلوڈ کریں")
+              } else {
+                appText("Replace CNIC back", "شناختی کارڈ کا پچھلا رخ تبدیل کریں")
+              },
               enabled = !uiState.isSaving,
               onClick = onUploadCnicBack
             )
             VerificationDocRow(
-              title = "Identity / business document *",
+              title = appText("Identity / business document *", "شناخت / کاروباری دستاویز *"),
               uploaded = uiState.documentPath.isNotBlank(),
-              buttonLabel = if (uiState.documentPath.isBlank()) "Upload verification doc" else "Replace verification doc",
+              buttonLabel = if (uiState.documentPath.isBlank()) {
+                appText("Upload verification doc", "تصدیقی دستاویز اپلوڈ کریں")
+              } else {
+                appText("Replace verification doc", "تصدیقی دستاویز تبدیل کریں")
+              },
               enabled = !uiState.isSaving,
               onClick = onUploadVerificationDoc
             )
@@ -677,12 +763,14 @@ fun VendorShopSettingsContent(
           .padding(horizontal = VendorSpacing.md, vertical = VendorSpacing.sm)
       ) {
         PrimaryButton(
-          text = if (uiState.isSaving) "Saving..." else "Save shop settings",
+          text = if (uiState.isSaving) appText("Saving...", "محفوظ ہو رہا ہے...") else appText("Save shop settings", "دکان کی ترتیبات محفوظ کریں"),
           icon = Icons.Rounded.Save,
           loading = uiState.isSaving,
           enabled = !uiState.isSaving,
           onClick = onSaveClick,
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("vendor_shop_settings_save_button")
         )
       }
     }
@@ -711,7 +799,7 @@ private fun VerificationDocRow(
         modifier = Modifier.weight(1f)
       )
       StatusBadge(
-        text = if (uploaded) "Saved" else "Not uploaded",
+        text = if (uploaded) appText("Saved", "محفوظ") else appText("Not uploaded", "اپلوڈ نہیں ہوئی"),
         tone = if (uploaded) StatusTone.SUCCESS else StatusTone.WARNING,
         icon = if (uploaded) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber
       )

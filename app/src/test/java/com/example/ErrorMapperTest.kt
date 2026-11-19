@@ -3,6 +3,8 @@ package com.example
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.NetworkConnectivity
+import com.example.localization.AppLanguage
+import com.example.localization.AppLanguageManager
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,6 +36,7 @@ class ErrorMapperTest {
   @After
   fun tearDown() {
     NetworkConnectivity.setOnlineOverrideForTest(null)
+    AppLanguageManager.setLanguageForTest(AppLanguage.ENGLISH)
   }
 
   private fun assertCustomerSafe(message: String) {
@@ -50,7 +53,7 @@ class ErrorMapperTest {
     val mapped = AppErrorMapper.toCustomerMessage(sqlError, ErrorContext.PRODUCT_LOAD, isOnline = true)
 
     assertCustomerSafe(mapped)
-    assertEquals("Products load nahi ho sake. Please try again.", mapped)
+    assertEquals("Could not load products. Please try again.", mapped)
 
     val fkError = IOException("violates foreign key constraint cart_items_product_id_fkey on table cart_items")
     val cartMapped = AppErrorMapper.toCustomerMessage(fkError, ErrorContext.CART_ADD, isOnline = true)
@@ -67,11 +70,11 @@ class ErrorMapperTest {
     val dnsError = UnknownHostException("Unable to resolve host \"xrrhbnnzjqkqnqdvayjw.supabase.co\": No address associated with hostname")
     val msgOnlineCheck = AppErrorMapper.toCustomerMessage(dnsError, ErrorContext.PRODUCT_LOAD, isOnline = true)
     assertCustomerSafe(msgOnlineCheck)
-    assertEquals("Internet connection nahi mil raha. Please check your connection and try again.", msgOnlineCheck)
+    assertEquals("No internet connection. Please check your connection and try again.", msgOnlineCheck)
 
     val offlineMsg = AppErrorMapper.toCustomerMessage(IOException("Something failed"), ErrorContext.ORDER_PLACE, isOnline = false)
     assertCustomerSafe(offlineMsg)
-    assertEquals("Internet connection nahi mil raha. Please check your connection and try again.", offlineMsg)
+    assertEquals("No internet connection. Please check your connection and try again.", offlineMsg)
   }
 
   @Test
@@ -102,7 +105,7 @@ class ErrorMapperTest {
 
     val sanitizedSupport = AppErrorMapper.sanitizeMessage("Failed to connect to https://xrrhbnnzjqkqnqdvayjw.supabase.co/rest/v1", ErrorContext.SUPPORT)
     assertCustomerSafe(sanitizedSupport)
-    assertEquals("Internet connection nahi mil raha. Please check your connection and try again.", sanitizedSupport)
+    assertEquals("No internet connection. Please check your connection and try again.", sanitizedSupport)
 
     val sanitizedReview = AppErrorMapper.sanitizeMessage("java.lang.IllegalStateException: unexpected token", ErrorContext.REVIEWS)
     assertCustomerSafe(sanitizedReview)

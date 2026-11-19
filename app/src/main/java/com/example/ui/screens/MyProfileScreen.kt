@@ -34,6 +34,8 @@ import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.SupabaseProfile
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.UserAvatarView
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -70,13 +72,13 @@ fun MyProfileScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-          text = "My Profile",
+          text = appText("My Profile", "میرا پروفائل"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
@@ -98,7 +100,7 @@ fun MyProfileScreen(
         if (selectedPhoto != null) {
           AsyncImage(
             model = selectedPhoto,
-            contentDescription = "Selected profile photo",
+            contentDescription = appText("Selected profile photo", "منتخب پروفائل تصویر"),
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(96.dp).clip(CircleShape).testTag("profile_avatar_large")
           )
@@ -115,16 +117,20 @@ fun MyProfileScreen(
           modifier = Modifier.size(34.dp),
           colors = IconButtonDefaults.filledIconButtonColors(containerColor = JTOrange, contentColor = Color.White)
         ) {
-          Icon(Icons.Filled.CameraAlt, contentDescription = "Change profile photo", modifier = Modifier.size(18.dp))
+          Icon(Icons.Filled.CameraAlt, contentDescription = appText("Change profile photo", "پروفائل تصویر تبدیل کریں"), modifier = Modifier.size(18.dp))
         }
       }
       Spacer(modifier = Modifier.height(6.dp))
-      Text("Tap the camera to change your photo (JPG, PNG or WebP, max 5 MB)", fontSize = 11.sp, color = JTTextSecondary)
+      Text(
+        appText("Tap the camera to change your photo (JPG, PNG or WebP, max 5 MB)", "اپنی تصویر تبدیل کرنے کے لیے کیمرہ آئیکن دبائیں (JPG، PNG یا WebP، زیادہ سے زیادہ 5 MB)"),
+        fontSize = 11.sp,
+        color = JTTextSecondary
+      )
 
       Spacer(modifier = Modifier.height(12.dp))
 
       Text(
-        text = fullName.ifBlank { "JTBazar Customer" },
+        text = fullName.ifBlank { appText("JTBazar Customer", "جے ٹی بازار کسٹمر") },
         fontSize = 18.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
@@ -142,7 +148,7 @@ fun MyProfileScreen(
       OutlinedTextField(
         value = fullName,
         onValueChange = { fullName = it },
-        label = { Text("Full Name") },
+        label = { Text(appText("Full Name", "پورا نام")) },
         leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null, tint = JTPurplePrimary) },
         singleLine = true,
         modifier = Modifier
@@ -157,7 +163,7 @@ fun MyProfileScreen(
         onValueChange = {},
         readOnly = true,
         enabled = false,
-        label = { Text("Email (Account Identifier)") },
+        label = { Text(appText("Email (Account Identifier)", "ای میل (اکاؤنٹ شناخت)")) },
         leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = JTTextSecondary) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
@@ -168,7 +174,7 @@ fun MyProfileScreen(
       OutlinedTextField(
         value = phone,
         onValueChange = { phone = it },
-        label = { Text("Mobile Number") },
+        label = { Text(appText("Mobile Number", "موبائل نمبر")) },
         placeholder = { Text("0300 1234567") },
         leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null, tint = JTPurplePrimary) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -184,7 +190,11 @@ fun MyProfileScreen(
         onClick = {
           val uid = currentUser?.id ?: userProfile?.id
           if (uid.isNullOrBlank()) {
-            Toast.makeText(context, "Please sign in again before updating your profile.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+              context,
+              AppLanguageManager.tr("Please sign in again before updating your profile.", "پروفائل اپڈیٹ کرنے سے پہلے براہ کرم دوبارہ سائن ان کریں۔"),
+              Toast.LENGTH_LONG
+            ).show()
             return@Button
           }
           isSaving = true
@@ -192,10 +202,16 @@ fun MyProfileScreen(
             try {
               var avatarUrl = userProfile?.avatarUrl
               selectedPhoto?.let { uri ->
-                val mime = context.contentResolver.getType(uri) ?: throw IllegalArgumentException("Choose a JPG, PNG or WebP image.")
-                if (mime !in setOf("image/jpeg", "image/png", "image/webp")) throw IllegalArgumentException("Choose a JPG, PNG or WebP image.")
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("Could not read the selected photo.")
-                if (bytes.size > 5 * 1024 * 1024) throw IllegalArgumentException("Profile photo must be 5 MB or smaller.")
+                val mime = context.contentResolver.getType(uri)
+                  ?: throw IllegalArgumentException(AppLanguageManager.tr("Choose a JPG, PNG or WebP image.", "JPG، PNG یا WebP تصویر منتخب کریں۔"))
+                if (mime !in setOf("image/jpeg", "image/png", "image/webp")) {
+                  throw IllegalArgumentException(AppLanguageManager.tr("Choose a JPG, PNG or WebP image.", "JPG، PNG یا WebP تصویر منتخب کریں۔"))
+                }
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                  ?: throw IllegalArgumentException(AppLanguageManager.tr("Could not read the selected photo.", "منتخب تصویر پڑھی نہیں جا سکی۔"))
+                if (bytes.size > 5 * 1024 * 1024) {
+                  throw IllegalArgumentException(AppLanguageManager.tr("Profile photo must be 5 MB or smaller.", "پروفائل تصویر 5 MB یا اس سے کم ہونی چاہیے۔"))
+                }
                 val extension = when (mime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; else -> "webp" }
                 val path = "$uid/${java.util.UUID.randomUUID()}.$extension"
                 avatarUrl = SupabaseClient.uploadPublicFile("customer-avatars", path, bytes, mime).getOrThrow()
@@ -211,7 +227,11 @@ fun MyProfileScreen(
               val res = SupabaseAuthService.upsertProfile(updated)
               if (res.isSuccess) {
                 selectedPhoto = null
-                Toast.makeText(context, "Profile saved successfully", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                  context,
+                  AppLanguageManager.tr("Profile saved successfully", "پروفائل کامیابی سے محفوظ ہو گیا"),
+                  Toast.LENGTH_SHORT
+                ).show()
               } else {
                 Toast.makeText(
                   context,
@@ -239,9 +259,9 @@ fun MyProfileScreen(
         if (isSaving) {
           CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Saving...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Saving...", "محفوظ ہو رہا ہے..."), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         } else {
-          Text("Save Profile Changes", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text(appText("Save Profile Changes", "پروفائل کی تبدیلیاں محفوظ کریں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
       }
     }

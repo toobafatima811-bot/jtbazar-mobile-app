@@ -42,6 +42,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.Product
 import com.example.data.model.ShopRecord
 import com.example.data.supabase.SupabaseHomepageHeroDto
+import com.example.localization.appText
 import com.example.ui.theme.JTOrange
 import kotlinx.coroutines.delay
 
@@ -77,15 +78,22 @@ fun MarketplaceHero(
   }
 
   val activeHero = heroes.getOrNull(activeHeroIndex)
-  val title = activeHero?.title ?: "Everything You Need,\nAll in One Place"
-  val subtitle = activeHero?.subtitle ?: "Buy and sell products, discover services, find properties, and connect with trusted vendors across multiple categories."
-  val primaryLabel = activeHero?.ctaText?.trim()?.takeIf { it.isNotBlank() } ?: "Start Shopping"
+  val title = activeHero?.title ?: appText(
+    "Everything You Need,\nAll in One Place",
+    "آپ کی ہر ضرورت،\nسب ایک ہی جگہ"
+  )
+  val subtitle = activeHero?.subtitle ?: appText(
+    "Buy and sell products, discover services, find properties, and connect with trusted vendors across multiple categories.",
+    "مصنوعات خریدیں اور فروخت کریں، خدمات دریافت کریں، اور مختلف اقسام میں قابلِ اعتماد فروخت کنندگان سے جڑیں۔"
+  )
+  val primaryLabel = activeHero?.ctaText?.trim()?.takeIf { it.isNotBlank() }
+    ?: appText("Start Shopping", "خریداری شروع کریں")
   val primaryDestination = activeHero?.ctaDestination
 
   val sellerLabel = when (sellerStatus) {
-    "approved" -> "Open Seller Dashboard"
-    "pending", "rejected" -> "View Application Status"
-    else -> "Become a Seller"
+    "approved" -> appText("Open Seller Dashboard", "فروخت کنندہ ڈیش بورڈ کھولیں")
+    "pending", "rejected" -> appText("View Application Status", "درخواست کی صورتحال دیکھیں")
+    else -> appText("Become a Seller", "فروخت کنندہ بنیں")
   }
   val sellerDestination = if (sellerStatus == "approved") "/vendor" else "/vendor/apply"
 
@@ -143,7 +151,7 @@ fun MarketplaceHero(
                 .background(JTOrange, RoundedCornerShape(1.5.dp))
             )
             Text(
-              text = "ONE MARKETPLACE, MORE POSSIBILITIES",
+              text = appText("ONE MARKETPLACE, MORE POSSIBILITIES", "ایک مارکیٹ پلیس، مزید امکانات"),
               fontSize = 10.sp,
               fontWeight = FontWeight.Bold,
               letterSpacing = 1.sp,
@@ -233,7 +241,7 @@ fun MarketplaceHero(
             )
           }
           Text(
-            text = "Trusted by buyers and sellers",
+            text = appText("Trusted by buyers and sellers", "خریداروں اور فروخت کنندگان کا اعتماد"),
             fontSize = 11.5.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFF5A6652)
@@ -316,7 +324,7 @@ fun MarketplaceHero(
                 }
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                   Text(
-                    text = "FEATURED PRODUCT",
+                    text = appText("FEATURED PRODUCT", "نمایاں مصنوعات"),
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF7A8374),
@@ -390,7 +398,7 @@ fun MarketplaceHero(
                 }
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                   Text(
-                    text = "MARKETPLACE SHOP",
+                    text = appText("MARKETPLACE SHOP", "مارکیٹ پلیس دکان"),
                     fontSize = 7.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF7A8374),

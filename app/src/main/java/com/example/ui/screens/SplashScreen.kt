@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -74,7 +75,7 @@ fun SplashScreen(
             border = androidx.compose.foundation.BorderStroke(1.dp, JTOrangeBorder)
           ) {
             Text(
-              text = "— ONE MARKETPLACE, MORE POSSIBILITIES —",
+              text = appText("— ONE MARKETPLACE, MORE POSSIBILITIES —", "— ایک مارکیٹ پلیس، بے شمار امکانات —"),
               fontSize = 10.sp,
               fontWeight = FontWeight.ExtraBold,
               color = JTOrangeDark,
@@ -86,7 +87,7 @@ fun SplashScreen(
           Spacer(modifier = Modifier.height(14.dp))
 
           Text(
-            text = "Good things,\nmade for everyday.",
+            text = appText("Good things,\nmade for everyday.", "معیاری چیزیں،\nہر دن کے لیے۔"),
             fontWeight = FontWeight.ExtraBold,
             fontSize = 28.sp,
             color = JTNavyPrimary,
@@ -113,7 +114,7 @@ fun SplashScreen(
 
           Image(
             painter = painterResource(id = R.drawable.splash_mascot),
-            contentDescription = "JTBazar Mascot",
+            contentDescription = appText("JTBazar Mascot", "JTBazar علامت"),
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize()
           )
@@ -129,7 +130,7 @@ fun SplashScreen(
           // Official JTBAZAR Logo
           Image(
             painter = painterResource(id = R.drawable.logo_jtbazar_header),
-            contentDescription = "JTBazar Logo",
+            contentDescription = appText("JTBazar Logo", "JTBazar لوگو"),
             contentScale = ContentScale.Fit,
             modifier = Modifier.height(34.dp)
           )
@@ -137,7 +138,7 @@ fun SplashScreen(
           Spacer(modifier = Modifier.height(8.dp))
 
           Text(
-            text = "Pakistan's Trusted Marketplace • Authentic & Fresh",
+            text = appText("Pakistan's Trusted Marketplace • Authentic & Fresh", "پاکستان کا قابلِ اعتماد بازار • مستند اور تازہ"),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = JTTextSecondary
@@ -159,7 +160,7 @@ fun SplashScreen(
               .testTag("splash_enter_button")
           ) {
             Text(
-              text = "Explore the collection",
+              text = appText("Explore the collection", "مجموعہ دیکھیں"),
               fontSize = 14.sp,
               fontWeight = FontWeight.Bold
             )

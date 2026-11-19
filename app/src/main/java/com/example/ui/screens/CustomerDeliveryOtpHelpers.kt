@@ -73,13 +73,25 @@ fun evaluateDeliveryOtpEligibility(
 fun deliveryOtpEligibilityHint(eligibility: CustomerDeliveryOtpEligibility): String? = when (eligibility) {
   CustomerDeliveryOtpEligibility.ELIGIBLE -> null
   CustomerDeliveryOtpEligibility.NOT_SIGNED_IN ->
-    "Sign in with the customer account that placed this order to request a delivery OTP."
+    com.example.localization.AppLanguageManager.tr(
+      "Sign in with the customer account that placed this order to request a delivery OTP.",
+      "ڈیلیوری او ٹی پی کی درخواست کے لیے اس کسٹمر اکاؤنٹ سے سائن ان کریں جس سے یہ آرڈر دیا گیا تھا۔"
+    )
   CustomerDeliveryOtpEligibility.ORDER_TERMINAL ->
-    "Delivery OTP is no longer needed because this order is closed."
+    com.example.localization.AppLanguageManager.tr(
+      "Delivery OTP is no longer needed because this order is closed.",
+      "یہ آرڈر مکمل یا بند ہو چکا ہے اس لیے اب ڈیلیوری او ٹی پی کی ضرورت نہیں۔"
+    )
   CustomerDeliveryOtpEligibility.MISSING_DRIVER_ASSIGNMENT ->
-    "No driver has been assigned to this order yet. You can request the OTP once a driver picks up your parcel."
+    com.example.localization.AppLanguageManager.tr(
+      "No driver has been assigned to this order yet. You can request the OTP once a driver picks up your parcel.",
+      "ابھی اس آرڈر پر کوئی ڈرائیور تفویض نہیں ہوا۔ ڈرائیور کے پارسل اٹھانے کے بعد آپ او ٹی پی کی درخواست کر سکتے ہیں۔"
+    )
   CustomerDeliveryOtpEligibility.PARCEL_NOT_PICKED_UP ->
-    "Your delivery OTP unlocks once the assigned driver picks up your parcel. It will be sent to your registered email."
+    com.example.localization.AppLanguageManager.tr(
+      "Your delivery OTP unlocks once the assigned driver picks up your parcel. It will be sent to your registered email.",
+      "جب تفویض کردہ ڈرائیور آپ کا پارسل اٹھا لے گا تو ڈیلیوری او ٹی پی کھل جائے گا اور آپ کے رجسٹرڈ ای میل پر بھیج دیا جائے گا۔"
+    )
 }
 
 /**
@@ -92,13 +104,25 @@ fun parseCustomerOtpDispatchResponse(
 ): CustomerOtpDispatchResult {
   val trimmed = rawBody.trim()
   if (trimmed.equals("false", ignoreCase = true)) {
-    throw IllegalStateException("Delivery OTP email could not be dispatched right now.")
+    throw IllegalStateException(
+      com.example.localization.AppLanguageManager.tr(
+        "Delivery OTP email could not be dispatched right now.",
+        "ڈیلیوری او ٹی پی ای میل اس وقت نہیں بھیجی جا سکی۔"
+      )
+    )
   }
   if (trimmed.startsWith("{")) {
     val obj = JSONObject(trimmed)
     if (obj.has("sent") && !obj.optBoolean("sent", true)) {
       val serverMsg = obj.optCleanString("error").ifBlank { obj.optCleanString("message") }
-      throw IllegalStateException(serverMsg.ifBlank { "Delivery OTP email could not be sent." })
+      throw IllegalStateException(
+        serverMsg.ifBlank {
+          com.example.localization.AppLanguageManager.tr(
+            "Delivery OTP email could not be sent.",
+            "ڈیلیوری او ٹی پی ای میل نہیں بھیجی جا سکی۔"
+          )
+        }
+      )
     }
     val payloadEmail = obj.optCleanString("email")
       .ifBlank { obj.optCleanString("recipient_email") }
@@ -137,8 +161,10 @@ fun mapCustomerDeliveryOtpError(
       combined.contains("not authenticated") ||
       combined.contains("error 401") ||
       combined.contains("please sign in") -> {
-      CustomerOtpErrorReason.UNAUTHENTICATED to
-        "Please sign in with the customer account that placed this order."
+      CustomerOtpErrorReason.UNAUTHENTICATED to com.example.localization.AppLanguageManager.tr(
+        "Please sign in with the customer account that placed this order.",
+        "براہ کرم اس کسٹمر اکاؤنٹ سے سائن ان کریں جس سے یہ آرڈر دیا گیا تھا۔"
+      )
     }
 
     combined.contains("wrong customer") ||
@@ -146,16 +172,20 @@ fun mapCustomerDeliveryOtpError(
       combined.contains("belongs to another") ||
       combined.contains("not the owner") ||
       combined.contains("unauthorized order") -> {
-      CustomerOtpErrorReason.WRONG_CUSTOMER to
-        "This order belongs to a different account. Sign in with the customer account that placed the order."
+      CustomerOtpErrorReason.WRONG_CUSTOMER to com.example.localization.AppLanguageManager.tr(
+        "This order belongs to a different account. Sign in with the customer account that placed the order.",
+        "یہ آرڈر کسی دوسرے اکاؤنٹ کا ہے۔ براہ کرم اسی اکاؤنٹ سے سائن ان کریں جس سے آرڈر دیا گیا تھا۔"
+      )
     }
 
     combined.contains("no driver") ||
       combined.contains("assignment not found") ||
       combined.contains("not assigned") ||
       combined.contains("missing driver") -> {
-      CustomerOtpErrorReason.MISSING_ASSIGNMENT to
-        "No driver is assigned to this order yet. Please wait until a driver picks up your parcel."
+      CustomerOtpErrorReason.MISSING_ASSIGNMENT to com.example.localization.AppLanguageManager.tr(
+        "No driver is assigned to this order yet. Please wait until a driver picks up your parcel.",
+        "ابھی اس آرڈر پر کوئی ڈرائیور تفویض نہیں ہوا۔ ڈرائیور کے پارسل اٹھانے تک انتظار کریں۔"
+      )
     }
 
     combined.contains("not picked up") ||
@@ -163,8 +193,10 @@ fun mapCustomerDeliveryOtpError(
       combined.contains("picked_up") ||
       combined.contains("in transit") ||
       combined.contains("must pick up") -> {
-      CustomerOtpErrorReason.NOT_PICKED_UP to
-        "The driver has not picked up your parcel yet. You can request the OTP once pickup is confirmed."
+      CustomerOtpErrorReason.NOT_PICKED_UP to com.example.localization.AppLanguageManager.tr(
+        "The driver has not picked up your parcel yet. You can request the OTP once pickup is confirmed.",
+        "ڈرائیور نے ابھی آپ کا پارسل نہیں اٹھایا۔ پک اپ کی تصدیق کے بعد آپ او ٹی پی کی درخواست کر سکتے ہیں۔"
+      )
     }
 
     combined.contains("delivery not found for this customer") ||
@@ -172,20 +204,28 @@ fun mapCustomerDeliveryOtpError(
       combined.contains("error 403") -> {
       when {
         normalizedAssign == "none" -> {
-          CustomerOtpErrorReason.MISSING_ASSIGNMENT to
-            "No driver is assigned to this order yet. You can send the delivery OTP once a driver picks up your parcel."
+          CustomerOtpErrorReason.MISSING_ASSIGNMENT to com.example.localization.AppLanguageManager.tr(
+            "No driver is assigned to this order yet. You can send the delivery OTP once a driver picks up your parcel.",
+            "ابھی اس آرڈر پر کوئی ڈرائیور تفویض نہیں ہوا۔ ڈرائیور کے پارسل اٹھانے کے بعد آپ ڈیلیوری او ٹی پی بھیج سکتے ہیں۔"
+          )
         }
         normalizedAssign != null && normalizedAssign !in setOf("picked_up", "in_transit") -> {
-          CustomerOtpErrorReason.NOT_PICKED_UP to
-            "Your parcel has not been picked up by the driver yet. OTP becomes available after pickup."
+          CustomerOtpErrorReason.NOT_PICKED_UP to com.example.localization.AppLanguageManager.tr(
+            "Your parcel has not been picked up by the driver yet. OTP becomes available after pickup.",
+            "ڈرائیور نے ابھی آپ کا پارسل نہیں اٹھایا۔ پک اپ کے بعد او ٹی پی دستیاب ہوگا۔"
+          )
         }
         normalizedOrder in setOf("PENDING", "CONFIRMED", "PROCESSING", "READY_FOR_PICKUP") -> {
-          CustomerOtpErrorReason.NOT_PICKED_UP to
-            "No picked-up driver delivery is active yet. Please wait until your driver picks up the parcel."
+          CustomerOtpErrorReason.NOT_PICKED_UP to com.example.localization.AppLanguageManager.tr(
+            "No picked-up driver delivery is active yet. Please wait until your driver picks up the parcel.",
+            "ابھی کوئی فعال پک اپ ترسیل شروع نہیں ہوئی۔ ڈرائیور کے پارسل اٹھانے تک انتظار کریں۔"
+          )
         }
         else -> {
-          CustomerOtpErrorReason.WRONG_CUSTOMER to
-            "We could not verify an active picked-up delivery for your account on this order. Please make sure you are signed in with the account that placed it."
+          CustomerOtpErrorReason.WRONG_CUSTOMER to com.example.localization.AppLanguageManager.tr(
+            "We could not verify an active picked-up delivery for your account on this order. Please make sure you are signed in with the account that placed it.",
+            "ہم اس آرڈر پر آپ کے اکاؤنٹ کی فعال ترسیل کی تصدیق نہیں کر سکے۔ یقینی بنائیں کہ آپ اسی اکاؤنٹ سے سائن ان ہیں جس سے آرڈر دیا گیا تھا۔"
+          )
         }
       }
     }
@@ -194,21 +234,27 @@ fun mapCustomerDeliveryOtpError(
       combined.contains("smtp") ||
       combined.contains("mail") ||
       combined.contains("recipient") -> {
-      CustomerOtpErrorReason.EMAIL_DELIVERY_FAILED to
-        "We could not send the OTP to your registered email. Verify your account email address and try again."
+      CustomerOtpErrorReason.EMAIL_DELIVERY_FAILED to com.example.localization.AppLanguageManager.tr(
+        "We could not send the OTP to your registered email. Verify your account email address and try again.",
+        "ہم آپ کے رجسٹرڈ ای میل پر او ٹی پی نہیں بھیج سکے۔ اپنا ای میل چیک کریں اور دوبارہ کوشش کریں۔"
+      )
     }
 
     combined.contains("rate limit") ||
       combined.contains("too many") ||
       combined.contains("wait") ||
       combined.contains("error 429") -> {
-      CustomerOtpErrorReason.RATE_LIMITED to
-        "Please wait a moment before requesting another delivery OTP."
+      CustomerOtpErrorReason.RATE_LIMITED to com.example.localization.AppLanguageManager.tr(
+        "Please wait a moment before requesting another delivery OTP.",
+        "نیا ڈیلیوری او ٹی پی طلب کرنے سے پہلے براہ کرم تھوڑا انتظار کریں۔"
+      )
     }
 
     else -> {
-      CustomerOtpErrorReason.GENERIC to
-        "Could not generate delivery OTP right now. Please refresh your order status and try again."
+      CustomerOtpErrorReason.GENERIC to com.example.localization.AppLanguageManager.tr(
+        "Could not generate delivery OTP right now. Please refresh your order status and try again.",
+        "اس وقت ڈیلیوری او ٹی پی تیار نہیں ہو سکا۔ براہ کرم آرڈر کی صورتحال تازہ کر کے دوبارہ کوشش کریں۔"
+      )
     }
   }
 }
@@ -246,13 +292,21 @@ suspend fun requestCustomerDeliveryOtp(
   val eligibility = evaluateDeliveryOtpEligibility(true, orderStatus, assignmentStatus)
   if (eligibility != CustomerDeliveryOtpEligibility.ELIGIBLE) {
     val hint = deliveryOtpEligibilityHint(eligibility)
-      ?: "Delivery OTP is available after your parcel is picked up by the driver."
+      ?: com.example.localization.AppLanguageManager.tr(
+        "Delivery OTP is available after your parcel is picked up by the driver.",
+        "ڈرائیور کے پارسل اٹھانے کے بعد ڈیلیوری او ٹی پی دستیاب ہوتا ہے۔"
+      )
     return Result.failure(IllegalStateException(hint))
   }
 
   val registeredEmail = session.user.email?.trim()?.takeIf { it.isNotBlank() }
     ?: return Result.failure(
-      IllegalStateException("Your account does not have a registered email address to receive the OTP.")
+      IllegalStateException(
+        com.example.localization.AppLanguageManager.tr(
+          "Your account does not have a registered email address to receive the OTP.",
+          "او ٹی پی موصول کرنے کے لیے آپ کے اکاؤنٹ میں رجسٹرڈ ای میل ایڈریس موجود نہیں ہے۔"
+        )
+      )
     )
 
   return try {

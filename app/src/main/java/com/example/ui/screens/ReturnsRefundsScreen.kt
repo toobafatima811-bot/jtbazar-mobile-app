@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.repository.MarketplaceRepository
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 
 @Composable
@@ -40,11 +42,11 @@ fun ReturnsRefundsScreen(
   var isSubmitting by remember { mutableStateOf(false) }
 
   val returnReasons = listOf(
-    "Damaged on delivery",
-    "Defective or broken item",
-    "Item not as described",
-    "Missing parts or accessories",
-    "Wrong item received"
+    "Damaged on delivery" to appText("Damaged on delivery", "ڈیلیوری کے دوران نقصان پہنچا"),
+    "Defective or broken item" to appText("Defective or broken item", "خراب یا ٹوٹی ہوئی چیز"),
+    "Item not as described" to appText("Item not as described", "چیز تفصیل کے مطابق نہیں"),
+    "Missing parts or accessories" to appText("Missing parts or accessories", "پرزے یا لوازمات غائب ہیں"),
+    "Wrong item received" to appText("Wrong item received", "غلط چیز موصول ہوئی")
   )
 
   Scaffold(
@@ -63,13 +65,13 @@ fun ReturnsRefundsScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-          text = "Returns & Refunds",
+          text = appText("Returns & Refunds", "واپسی اور رقم کی واپسی"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
@@ -100,13 +102,16 @@ fun ReturnsRefundsScreen(
           Spacer(modifier = Modifier.width(12.dp))
           Column {
             Text(
-              text = "$returnWindowDays-Day Return Guarantee",
+              text = appText("$returnWindowDays-Day Return Guarantee", "$returnWindowDays دن کی واپسی کی گارنٹی"),
               fontWeight = FontWeight.Bold,
               fontSize = 14.sp,
               color = JTPurplePrimary
             )
             Text(
-              text = "Eligible items can be returned or exchanged within $returnWindowDays days of delivery with intact packaging.",
+              text = appText(
+                "Eligible items can be returned or exchanged within $returnWindowDays days of delivery with intact packaging.",
+                "اہل اشیاء کو ڈیلیوری کے $returnWindowDays دنوں کے اندر اصل پیکنگ کے ساتھ واپس یا تبدیل کیا جا سکتا ہے۔"
+              ),
               fontSize = 12.sp,
               color = JTTextSecondary,
               lineHeight = 16.sp
@@ -116,7 +121,7 @@ fun ReturnsRefundsScreen(
       }
 
       Text(
-        text = "File a Return Request",
+        text = appText("File a Return Request", "واپسی کی درخواست جمع کریں"),
         fontSize = 16.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
@@ -135,14 +140,17 @@ fun ReturnsRefundsScreen(
             Icon(Icons.Filled.Info, contentDescription = null, tint = JTTextSecondary, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-              text = "No Delivered Orders Eligible",
+              text = appText("No Delivered Orders Eligible", "کوئی اہل ڈیلیور شدہ آرڈر موجود نہیں"),
               fontWeight = FontWeight.Bold,
               fontSize = 14.sp,
               color = JTTextPrimary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-              text = "You do not have any recently delivered orders that qualify for return requests.",
+              text = appText(
+                "You do not have any recently delivered orders that qualify for return requests.",
+                "آپ کے پاس حالیہ ڈیلیور شدہ کوئی ایسا آرڈر نہیں جو واپسی کی درخواست کے لیے اہل ہو۔"
+              ),
               fontSize = 12.sp,
               color = JTTextSecondary,
               textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -151,7 +159,7 @@ fun ReturnsRefundsScreen(
         }
       } else {
         // Delivered order selector
-        Text("Select Delivered Order *", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
+        Text(appText("Select Delivered Order *", "ڈیلیور شدہ آرڈر منتخب کریں *"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
         deliveredOrders.forEach { ord ->
           Surface(
             shape = RoundedCornerShape(10.dp),
@@ -174,7 +182,14 @@ fun ReturnsRefundsScreen(
               Spacer(modifier = Modifier.width(8.dp))
               Column {
                 Text(ord.orderNumber, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
-                Text("Delivered on: ${ord.date.take(10)} • Rs. ${String.format("%,d", ord.grandTotal)}", fontSize = 11.sp, color = JTTextSecondary)
+                Text(
+                  appText(
+                    "Delivered on: ${ord.date.take(10)} • Rs. ${String.format("%,d", ord.grandTotal)}",
+                    "ڈیلیوری کی تاریخ: ${ord.date.take(10)} • روپے ${String.format("%,d", ord.grandTotal)}"
+                  ),
+                  fontSize = 11.sp,
+                  color = JTTextSecondary
+                )
               }
             }
           }
@@ -183,22 +198,22 @@ fun ReturnsRefundsScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         // Return Reason
-        Text("Reason for Return *", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
-        returnReasons.forEach { reason ->
+        Text(appText("Reason for Return *", "واپسی کی وجہ *"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
+        returnReasons.forEach { (reasonKey, reasonLabel) ->
           Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
               .fillMaxWidth()
-              .clickable { returnReason = reason }
+              .clickable { returnReason = reasonKey }
               .padding(vertical = 4.dp)
           ) {
             RadioButton(
-              selected = returnReason == reason,
-              onClick = { returnReason = reason },
+              selected = returnReason == reasonKey,
+              onClick = { returnReason = reasonKey },
               colors = RadioButtonDefaults.colors(selectedColor = JTOrange)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(reason, fontSize = 13.sp, color = JTTextPrimary)
+            Text(reasonLabel, fontSize = 13.sp, color = JTTextPrimary)
           }
         }
 
@@ -208,8 +223,8 @@ fun ReturnsRefundsScreen(
         OutlinedTextField(
           value = description,
           onValueChange = { description = it },
-          label = { Text("Describe the issue *") },
-          placeholder = { Text("Please explain the defect or discrepancy...") },
+          label = { Text(appText("Describe the issue *", "مسئلے کی تفصیل لکھیں *")) },
+          placeholder = { Text(appText("Please explain the defect or discrepancy...", "براہ کرم خرابی یا فرق کی وضاحت کریں...")) },
           minLines = 3,
           maxLines = 5,
           modifier = Modifier.fillMaxWidth().testTag("return_description_input")
@@ -220,13 +235,20 @@ fun ReturnsRefundsScreen(
         Button(
           onClick = {
             if (description.isBlank()) {
-              Toast.makeText(context, "Please provide description details", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, AppLanguageManager.tr("Please provide description details", "براہ کرم تفصیل فراہم کریں"), Toast.LENGTH_SHORT).show()
               return@Button
             }
             isSubmitting = true
             MarketplaceRepository.submitReturnRequest(selectedOrderId, returnReason, description.trim())
             isSubmitting = false
-            Toast.makeText(context, "Return request logged. Support team will inspect and respond.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+              context,
+              AppLanguageManager.tr(
+                "Return request logged. Support team will inspect and respond.",
+                "واپسی کی درخواست درج ہو گئی ہے۔ سپورٹ ٹیم جائزہ لے کر جواب دے گی۔"
+              ),
+              Toast.LENGTH_LONG
+            ).show()
             description = ""
           },
           enabled = !isSubmitting && description.isNotBlank(),
@@ -234,7 +256,7 @@ fun ReturnsRefundsScreen(
           colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
           modifier = Modifier.fillMaxWidth().height(48.dp).testTag("return_submit_button")
         ) {
-          Text("Submit Return Request", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Submit Return Request", "واپسی کی درخواست جمع کریں"), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
       }
     }

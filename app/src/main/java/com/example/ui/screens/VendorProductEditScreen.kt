@@ -72,6 +72,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.data.supabase.VendorService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecondaryButton
@@ -155,7 +157,12 @@ fun VendorProductEditScreen(
       imageLoadError = ""
       runCatching { VendorService.listProductImageUrls(id) }
         .onSuccess { existingImageUrls = it }
-        .onFailure { imageLoadError = it.message ?: "Product images could not be loaded." }
+        .onFailure {
+          imageLoadError = it.message ?: AppLanguageManager.tr(
+            "Product images could not be loaded.",
+            "پروڈکٹ تصاویر لوڈ نہیں ہو سکیں۔"
+          )
+        }
       imagesLoading = false
     } else {
       imagesLoading = false
@@ -167,7 +174,12 @@ fun VendorProductEditScreen(
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
     val remaining = (8 - existingImageUrls.size - newImages.size).coerceAtLeast(0)
     newImages = (newImages + selected.take(remaining)).distinct().take((8 - existingImageUrls.size).coerceAtLeast(0))
-    if (selected.size > remaining) errorMessage = "A product can have up to 8 images total."
+    if (selected.size > remaining) {
+      errorMessage = AppLanguageManager.tr(
+        "A product can have up to 8 images total.",
+        "ایک پروڈکٹ کی زیادہ سے زیادہ 8 تصاویر ہو سکتی ہیں۔"
+      )
+    }
   }
 
   Column(
@@ -184,9 +196,12 @@ fun VendorProductEditScreen(
     ) {
       item {
         SectionHeader(
-          title = "Edit product",
-          subtitle = "Changes are sent through JTBazar moderation. Stock is managed in Inventory.",
-          actionLabel = "Back",
+          title = appText("Edit product", "پروڈکٹ میں ترمیم کریں"),
+          subtitle = appText(
+            "Changes are sent through JTBazar moderation. Stock is managed in Inventory.",
+            "تبدیلیاں جے ٹی بازار کی جانچ کے لیے بھیجی جاتی ہیں۔ اسٹاک کا انتظام انوینٹری میں ہوتا ہے۔"
+          ),
+          actionLabel = appText("Back", "واپس"),
           actionIcon = Icons.AutoMirrored.Rounded.ArrowBack,
           onActionClick = { if (!saving) onBack() }
         )
@@ -215,30 +230,30 @@ fun VendorProductEditScreen(
       item {
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
-            SectionHeader(title = "Product details")
+            SectionHeader(title = appText("Product details", "پروڈکٹ کی تفصیلات"))
             VendorOutlinedTextField(
               value = name,
               onValueChange = { name = it },
-              label = "Product name *",
+              label = appText("Product name *", "پروڈکٹ کا نام *"),
               leadingIcon = Icons.Rounded.Inventory2
             )
             VendorOutlinedTextField(
               value = slug,
               onValueChange = { slug = it.lowercase().replace(Regex("[^a-z0-9-]+"), "-").trim('-') },
-              label = "URL slug *",
+              label = appText("URL slug *", "یو آر ایل سلگ *"),
               leadingIcon = Icons.Rounded.Link
             )
             VendorOutlinedTextField(
               value = sku,
               onValueChange = { sku = it },
-              label = "SKU",
+              label = appText("SKU", "ایس کے یو (SKU)"),
               leadingIcon = Icons.Rounded.QrCode2
             )
 
             var categoryExpanded by remember(id) { mutableStateOf(false) }
             val selectedCategoryName = (0 until categories.length()).mapNotNull { categories.optJSONObject(it) }
               .firstOrNull { it.optSafeString("id") == category }?.optSafeString("name")
-              ?: if (category.isBlank()) "Select category" else category
+              ?: if (category.isBlank()) appText("Select category", "کیٹیگری منتخب کریں") else category
             ExposedDropdownMenuBox(
               expanded = categoryExpanded,
               onExpandedChange = { categoryExpanded = !categoryExpanded }
@@ -247,7 +262,7 @@ fun VendorProductEditScreen(
                 value = selectedCategoryName,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Category", style = MaterialTheme.typography.bodySmall) },
+                label = { Text(appText("Category", "کیٹیگری"), style = MaterialTheme.typography.bodySmall) },
                 leadingIcon = {
                   Icon(
                     imageVector = Icons.Rounded.Category,
@@ -299,9 +314,9 @@ fun VendorProductEditScreen(
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
             SectionHeader(
-              title = "Product images ($totalImages/8)",
-              subtitle = "Up to 8 images, max 10 MB each",
-              actionLabel = if (totalImages < 8) "Add images" else null,
+              title = appText("Product images ($totalImages/8)", "پروڈکٹ تصاویر ($totalImages/8)"),
+              subtitle = appText("Up to 8 images, max 10 MB each", "زیادہ سے زیادہ 8 تصاویر، ہر ایک زیادہ سے زیادہ 10 MB"),
+              actionLabel = if (totalImages < 8) appText("Add images", "تصاویر شامل کریں") else null,
               actionIcon = Icons.Rounded.AddPhotoAlternate,
               onActionClick = { if (totalImages < 8 && !saving) imagePicker.launch("image/*") }
             )
@@ -317,7 +332,10 @@ fun VendorProductEditScreen(
                   strokeWidth = 2.dp
                 )
                 Spacer(modifier = Modifier.width(VendorSpacing.xs))
-                Text("Loading saved images...", style = MaterialTheme.typography.bodySmall)
+                Text(
+                  appText("Loading saved images...", "محفوظ تصاویر لوڈ ہو رہی ہیں..."),
+                  style = MaterialTheme.typography.bodySmall
+                )
               }
             }
             if (imageLoadError.isNotBlank()) {
@@ -337,17 +355,20 @@ fun VendorProductEditScreen(
                   ) {
                     AsyncImage(
                       model = url,
-                      contentDescription = "Saved product image ${index + 1}",
+                      contentDescription = appText("Saved product image ${index + 1}", "محفوظ پروڈکٹ تصویر ${index + 1}"),
                       modifier = Modifier
                         .size(104.dp)
                         .clip(VendorShapes.input),
                       contentScale = ContentScale.Crop,
                       onError = {
-                        imageLoadError = "A saved product image could not be displayed."
+                        imageLoadError = AppLanguageManager.tr(
+                          "A saved product image could not be displayed.",
+                          "محفوظ پروڈکٹ تصویر دکھائی نہیں جا سکی۔"
+                        )
                       }
                     )
                     Text(
-                      text = if (index == 0) "Main image" else "Saved ${index + 1}",
+                      text = if (index == 0) appText("Main image", "مرکزی تصویر") else appText("Saved ${index + 1}", "محفوظ ${index + 1}"),
                       style = MaterialTheme.typography.labelSmall,
                       color = VendorColors.TextSecondary,
                       maxLines = 1
@@ -367,7 +388,7 @@ fun VendorProductEditScreen(
                     ) {
                       AsyncImage(
                         model = uri,
-                        contentDescription = "New product image ${index + 1}",
+                        contentDescription = appText("New product image ${index + 1}", "نئی پروڈکٹ تصویر ${index + 1}"),
                         modifier = Modifier
                           .size(94.dp)
                           .clip(VendorShapes.badge),
@@ -378,7 +399,7 @@ fun VendorProductEditScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                       ) {
-                        Text("New ${index + 1}", style = MaterialTheme.typography.labelSmall)
+                        Text(appText("New ${index + 1}", "نئی ${index + 1}"), style = MaterialTheme.typography.labelSmall)
                         TextButton(
                           enabled = !saving,
                           onClick = { newImages = newImages.filterIndexed { i, _ -> i != index } },
@@ -386,7 +407,7 @@ fun VendorProductEditScreen(
                         ) {
                           Icon(
                             imageVector = Icons.Rounded.Delete,
-                            contentDescription = "Remove image",
+                            contentDescription = appText("Remove image", "تصویر ہٹائیں"),
                             tint = VendorColors.DangerRed,
                             modifier = Modifier.size(16.dp)
                           )
@@ -398,7 +419,7 @@ fun VendorProductEditScreen(
               }
             } else if (!imagesLoading && imageLoadError.isBlank()) {
               Text(
-                text = "No saved product images yet. Tap Add images above.",
+                text = appText("No saved product images yet. Tap Add images above.", "ابھی کوئی پروڈکٹ تصویر محفوظ نہیں۔ اوپر تصاویر شامل کریں پر ٹیپ کریں۔"),
                 style = MaterialTheme.typography.bodySmall,
                 color = VendorColors.TextSecondary
               )
@@ -411,18 +432,18 @@ fun VendorProductEditScreen(
       item {
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
-            SectionHeader(title = "Description")
+            SectionHeader(title = appText("Description", "تفصیل"))
             VendorOutlinedTextField(
               value = shortDescription,
               onValueChange = { shortDescription = it },
-              label = "Short description",
+              label = appText("Short description", "مختصر تفصیل"),
               leadingIcon = Icons.Rounded.Description,
               minLines = 2
             )
             VendorOutlinedTextField(
               value = description,
               onValueChange = { description = it },
-              label = "Full description",
+              label = appText("Full description", "مکمل تفصیل"),
               leadingIcon = Icons.Rounded.Description,
               minLines = 4
             )
@@ -434,46 +455,46 @@ fun VendorProductEditScreen(
       item {
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
-            SectionHeader(title = "Pricing & margin")
+            SectionHeader(title = appText("Pricing & margin", "قیمت اور منافع"))
             VendorOutlinedTextField(
               value = price,
               onValueChange = { price = it.filter { ch -> ch.isDigit() || ch == '.' } },
-              label = "Vendor base price (PKR) *",
+              label = appText("Vendor base price (PKR) *", "فروشندہ کی بنیادی قیمت (روپے) *"),
               leadingIcon = Icons.Rounded.AttachMoney,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
             VendorOutlinedTextField(
               value = discount,
               onValueChange = { discount = it.filter { ch -> ch.isDigit() || ch == '.' } },
-              label = "Discount (%)",
+              label = appText("Discount (%)", "رعایت (%)"),
               leadingIcon = Icons.Rounded.Percent,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
             VendorOutlinedTextField(
               value = supplierCost,
               onValueChange = { supplierCost = it.filter { ch -> ch.isDigit() || ch == '.' } },
-              label = "Supplier cost (private PKR)",
+              label = appText("Supplier cost (private PKR)", "سپلائر لاگت (نجی روپے)"),
               leadingIcon = Icons.Rounded.AttachMoney,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
             VendorOutlinedTextField(
               value = fulfilment,
               onValueChange = { fulfilment = it.filter { ch -> ch.isDigit() || ch == '.' } },
-              label = "Fulfilment expense (PKR)",
+              label = appText("Fulfilment expense (PKR)", "پیکنگ و ترسیل خرچ (روپے)"),
               leadingIcon = Icons.Rounded.AttachMoney,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
             VendorOutlinedTextField(
               value = minimumProfit,
               onValueChange = { minimumProfit = it.filter { ch -> ch.isDigit() || ch == '.' } },
-              label = "Minimum profit (PKR)",
+              label = appText("Minimum profit (PKR)", "کم از کم منافع (روپے)"),
               leadingIcon = Icons.Rounded.AttachMoney,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
             VendorOutlinedTextField(
               value = weight,
               onValueChange = { weight = it.filter(Char::isDigit) },
-              label = "Shipping weight (grams)",
+              label = appText("Shipping weight (grams)", "شپنگ وزن (گرام)"),
               leadingIcon = Icons.Rounded.Scale,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
@@ -486,26 +507,26 @@ fun VendorProductEditScreen(
         item {
           AppCard {
             Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
-              SectionHeader(title = "Food & groceries")
+              SectionHeader(title = appText("Food & groceries", "کھانا اور گروسری"))
               var unitExpanded by remember(id) { mutableStateOf(false) }
               val units = listOf(
-                "kg" to "Kilogram (kg)",
-                "g" to "Gram (g)",
-                "l" to "Litre (L)",
-                "ml" to "Millilitre (ml)",
-                "piece" to "Piece",
-                "dozen" to "Dozen",
-                "pack" to "Pack"
+                "kg" to appText("Kilogram (kg)", "کلوگرام (kg)"),
+                "g" to appText("Gram (g)", "گرام (g)"),
+                "l" to appText("Litre (L)", "لیٹر (L)"),
+                "ml" to appText("Millilitre (ml)", "ملی لیٹر (ml)"),
+                "piece" to appText("Piece", "عدد"),
+                "dozen" to appText("Dozen", "درجن"),
+                "pack" to appText("Pack", "پیک")
               )
               ExposedDropdownMenuBox(
                 expanded = unitExpanded,
                 onExpandedChange = { unitExpanded = !unitExpanded }
               ) {
                 OutlinedTextField(
-                  value = units.firstOrNull { it.first == foodUnit }?.second ?: "Kilogram (kg)",
+                  value = units.firstOrNull { it.first == foodUnit }?.second ?: appText("Kilogram (kg)", "کلوگرام (kg)"),
                   onValueChange = {},
                   readOnly = true,
-                  label = { Text("Selling unit") },
+                  label = { Text(appText("Selling unit", "فروخت کی اکائی")) },
                   leadingIcon = {
                     Icon(
                       imageVector = Icons.Rounded.Restaurant,
@@ -537,22 +558,28 @@ fun VendorProductEditScreen(
               VendorOutlinedTextField(
                 value = foodUnitPrice,
                 onValueChange = { foodUnitPrice = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                label = "Price per $foodUnit (PKR)",
+                label = appText("Price per $foodUnit (PKR)", "فی $foodUnit قیمت (روپے)"),
                 leadingIcon = Icons.Rounded.AttachMoney,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
               )
               VendorOutlinedTextField(
                 value = foodStep,
                 onValueChange = { foodStep = it.filter(Char::isDigit) },
-                label = "Customer quantity step (${if (foodUnit == "kg") "grams" else if (foodUnit == "l") "ml" else "units"})",
+                label = appText(
+                  "Customer quantity step (${if (foodUnit == "kg") "grams" else if (foodUnit == "l") "ml" else "units"})",
+                  "خریدار کی مقدار کا مرحلہ (${if (foodUnit == "kg") "گرام" else if (foodUnit == "l") "ملی لیٹر" else "اکائیاں"})"
+                ),
                 leadingIcon = Icons.Rounded.Scale,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                supportingText = "For kg/litre the step is grams/ml; for dozen, piece and pack it is units."
+                supportingText = appText(
+                  "For kg/litre the step is grams/ml; for dozen, piece and pack it is units.",
+                  "کلو/لیٹر کے لیے مرحلہ گرام/ملی لیٹر میں اور درجن، عدد اور پیک کے لیے اکائیوں میں ہوتا ہے۔"
+                )
               )
               VendorOutlinedTextField(
                 value = foodMinimum,
                 onValueChange = { foodMinimum = it.filter(Char::isDigit) },
-                label = "Minimum purchase steps",
+                label = appText("Minimum purchase steps", "کم از کم خریداری کے مراحل"),
                 leadingIcon = Icons.Rounded.Scale,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
               )
@@ -573,7 +600,7 @@ fun VendorProductEditScreen(
                     colors = CheckboxDefaults.colors(checkedColor = VendorColors.PrimaryOrange)
                   )
                   Text(
-                    text = "Manage as a daily dish / daily food item",
+                    text = appText("Manage as a daily dish / daily food item", "روزانہ کی ڈش / خوراک کے طور پر منظم کریں"),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium
                   )
@@ -581,19 +608,19 @@ fun VendorProductEditScreen(
               }
               var statusExpanded by remember(id) { mutableStateOf(false) }
               val statuses = listOf(
-                "available" to "Available today",
-                "not_today" to "Not for today",
-                "coming_soon" to "Coming soon"
+                "available" to appText("Available today", "آج دستیاب"),
+                "not_today" to appText("Not for today", "آج کے لیے نہیں"),
+                "coming_soon" to appText("Coming soon", "جلد آ رہا ہے")
               )
               ExposedDropdownMenuBox(
                 expanded = statusExpanded,
                 onExpandedChange = { statusExpanded = !statusExpanded }
               ) {
                 OutlinedTextField(
-                  value = statuses.firstOrNull { it.first == dailyStatus }?.second ?: "Available today",
+                  value = statuses.firstOrNull { it.first == dailyStatus }?.second ?: appText("Available today", "آج دستیاب"),
                   onValueChange = {},
                   readOnly = true,
-                  label = { Text("Daily availability status") },
+                  label = { Text(appText("Daily availability status", "روزانہ دستیابی کی حیثیت")) },
                   trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) },
                   modifier = Modifier.fillMaxWidth().menuAnchor(),
                   shape = VendorShapes.input
@@ -613,7 +640,7 @@ fun VendorProductEditScreen(
               VendorOutlinedTextField(
                 value = dailyQuantity,
                 onValueChange = { dailyQuantity = it.filter(Char::isDigit) },
-                label = "Today's available quantity",
+                label = appText("Today's available quantity", "آج دستیاب مقدار"),
                 leadingIcon = Icons.Rounded.Inventory2,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
               )
@@ -626,18 +653,18 @@ fun VendorProductEditScreen(
       item {
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
-            SectionHeader(title = "Attributes & search appearance")
+            SectionHeader(title = appText("Attributes & search appearance", "خصوصیات اور تلاش میں ظاہری شکل"))
             VendorOutlinedTextField(
               value = specs,
               onValueChange = { specs = it },
-              label = "Specifications (JSON array)",
+              label = appText("Specifications (JSON array)", "خصوصیات (JSON array)"),
               leadingIcon = Icons.Rounded.Settings,
               minLines = 3
             )
             VendorOutlinedTextField(
               value = dimensions,
               onValueChange = { dimensions = it },
-              label = "Dimensions (JSON object)",
+              label = appText("Dimensions (JSON object)", "پیمائش (JSON object)"),
               leadingIcon = Icons.Rounded.Straighten,
               minLines = 3
             )
@@ -645,13 +672,13 @@ fun VendorProductEditScreen(
             VendorOutlinedTextField(
               value = seoTitle,
               onValueChange = { seoTitle = it },
-              label = "SEO title",
+              label = appText("SEO title", "ایس ای او عنوان"),
               leadingIcon = Icons.Rounded.Search
             )
             VendorOutlinedTextField(
               value = seoDescription,
               onValueChange = { seoDescription = it },
-              label = "SEO description",
+              label = appText("SEO description", "ایس ای او تفصیل"),
               leadingIcon = Icons.Rounded.Description,
               minLines = 2
             )
@@ -674,14 +701,14 @@ fun VendorProductEditScreen(
         horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
       ) {
         SecondaryButton(
-          text = "Cancel",
+          text = appText("Cancel", "منسوخ کریں"),
           icon = Icons.Rounded.Close,
           enabled = !saving,
           onClick = onBack,
           modifier = Modifier.weight(1f)
         )
         PrimaryButton(
-          text = if (saving) "Saving..." else "Save product",
+          text = if (saving) appText("Saving...", "محفوظ ہو رہا ہے...") else appText("Save product", "پروڈکٹ محفوظ کریں"),
           icon = Icons.Rounded.Save,
           loading = saving,
           enabled = !saving,
@@ -692,9 +719,15 @@ fun VendorProductEditScreen(
               message = ""
               try {
                 val basePrice = (if (showFoodFields) foodUnitPrice else price).toDoubleOrNull()
-                  ?: error(if (showFoodFields) "Enter a valid food unit price." else "Enter a valid price.")
-                val discountValue = discount.toDoubleOrNull() ?: error("Enter a valid discount.")
-                require(discountValue in 0.0..100.0) { "Discount must be between 0 and 100%." }
+                  ?: error(
+                    if (showFoodFields) AppLanguageManager.tr("Enter a valid food unit price.", "درست فی اکائی خوراک قیمت درج کریں۔")
+                    else AppLanguageManager.tr("Enter a valid price.", "درست قیمت درج کریں۔")
+                  )
+                val discountValue = discount.toDoubleOrNull()
+                  ?: error(AppLanguageManager.tr("Enter a valid discount.", "درست رعایت درج کریں۔"))
+                require(discountValue in 0.0..100.0) {
+                  AppLanguageManager.tr("Discount must be between 0 and 100%.", "رعایت 0 سے 100% کے درمیان ہونی چاہیے۔")
+                }
                 val payload = JSONObject()
                   .put("p_category_id", category.ifBlank { JSONObject.NULL })
                   .put("p_name", name.trim())
@@ -704,8 +737,14 @@ fun VendorProductEditScreen(
                   .put("p_description", description.trim())
                   .put("p_price", basePrice)
                   .put("p_supplier_cost", supplierCost.toDoubleOrNull() ?: JSONObject.NULL)
-                  .put("p_fulfillment_expense", fulfilment.toDoubleOrNull() ?: error("Enter valid fulfilment expense."))
-                  .put("p_minimum_profit", minimumProfit.toDoubleOrNull() ?: error("Enter valid minimum profit."))
+                  .put(
+                    "p_fulfillment_expense",
+                    fulfilment.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter valid fulfilment expense.", "درست پیکنگ و ترسیل خرچ درج کریں۔"))
+                  )
+                  .put(
+                    "p_minimum_profit",
+                    minimumProfit.toDoubleOrNull() ?: error(AppLanguageManager.tr("Enter valid minimum profit.", "درست کم از کم منافع درج کریں۔"))
+                  )
                   .put("p_discount_percent", discountValue)
                   .put("p_weight_grams", weight.toIntOrNull() ?: JSONObject.NULL)
                   .put("p_specifications", JSONArray(specs))
@@ -714,10 +753,15 @@ fun VendorProductEditScreen(
                   .put("p_seo_description", seoDescription.trim().ifBlank { JSONObject.NULL })
                 VendorService.updateProductFull(id, payload)
                 if (showFoodFields) {
-                  val step = foodStep.toIntOrNull() ?: error("Enter a valid customer quantity step.")
-                  val minimum = foodMinimum.toIntOrNull() ?: error("Enter valid minimum purchase steps.")
-                  val quantity = dailyQuantity.toIntOrNull() ?: error("Enter a valid daily available quantity.")
-                  require(step > 0 && minimum > 0 && quantity >= 0) { "Check food quantity settings." }
+                  val step = foodStep.toIntOrNull()
+                    ?: error(AppLanguageManager.tr("Enter a valid customer quantity step.", "درست مقدار کا مرحلہ درج کریں۔"))
+                  val minimum = foodMinimum.toIntOrNull()
+                    ?: error(AppLanguageManager.tr("Enter valid minimum purchase steps.", "درست کم از کم خریداری مراحل درج کریں۔"))
+                  val quantity = dailyQuantity.toIntOrNull()
+                    ?: error(AppLanguageManager.tr("Enter a valid daily available quantity.", "آج دستیاب درست مقدار درج کریں۔"))
+                  require(step > 0 && minimum > 0 && quantity >= 0) {
+                    AppLanguageManager.tr("Check food quantity settings.", "خوراک کی مقدار کی ترتیبات چیک کریں۔")
+                  }
                   VendorService.updateFoodProductDetails(
                     id, foodUnit, basePrice, step, minimum, dailyItem, dailyStatus, quantity
                   )
@@ -725,16 +769,18 @@ fun VendorProductEditScreen(
                 newImages.forEach { uri ->
                   val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
                   val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("Image could not be read.")
-                  require(bytes.size <= 10 * 1024 * 1024) { "Each image must be 10 MB or smaller." }
+                    ?: error(AppLanguageManager.tr("Image could not be read.", "تصویر پڑھی نہیں جا سکی۔"))
+                  require(bytes.size <= 10 * 1024 * 1024) {
+                    AppLanguageManager.tr("Each image must be 10 MB or smaller.", "ہر تصویر 10 MB یا اس سے کم ہونی چاہیے۔")
+                  }
                   VendorService.uploadProductImage(id, bytes, mime, name.trim())
                 }
                 existingImageUrls = VendorService.listProductImageUrls(id)
                 newImages = emptyList()
-                message = "Product details and images saved."
+                message = AppLanguageManager.tr("Product details and images saved.", "پروڈکٹ کی تفصیلات اور تصاویر محفوظ ہو گئیں۔")
                 onSaved()
               } catch (e: Exception) {
-                errorMessage = e.message ?: "Product could not be updated."
+                errorMessage = e.message ?: AppLanguageManager.tr("Product could not be updated.", "پروڈکٹ اپڈیٹ نہیں ہو سکی۔")
               } finally {
                 saving = false
               }

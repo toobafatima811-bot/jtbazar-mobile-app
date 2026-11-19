@@ -50,6 +50,7 @@ import com.example.ui.components.StatusTone
 import com.example.ui.components.VendorAlertBanner
 import com.example.ui.components.VendorSkeletonCard
 import com.example.ui.components.formatPkrPrice
+import com.example.localization.appText
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
@@ -84,7 +85,7 @@ fun VendorProductsContent(
       ) {
         Column(modifier = Modifier.weight(1f)) {
           Text(
-            text = "Your products",
+            text = appText("Your products", "آپ کی مصنوعات"),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = VendorColors.TextPrimary
@@ -92,14 +93,14 @@ fun VendorProductsContent(
           val count = (uiState.productsState as? VendorSectionState.Content)?.data?.size
           if (count != null) {
             Text(
-              text = "$count listing(s) in your catalog",
+              text = appText("$count listing(s) in your catalog", "آپ کے کیٹلاگ میں $count آئٹمز"),
               style = MaterialTheme.typography.bodySmall,
               color = VendorColors.TextSecondary
             )
           }
         }
         PrimaryButton(
-          text = "Add product",
+          text = appText("Add product", "پروڈکٹ شامل کریں"),
           icon = Icons.Rounded.Add,
           onClick = onAddProduct
         )
@@ -136,7 +137,7 @@ fun VendorProductsContent(
       is VendorSectionState.Error -> {
         item {
           ErrorState(
-            title = "Products could not load",
+            title = appText("Products could not load", "مصنوعات لوڈ نہیں ہو سکیں"),
             message = state.message,
             onRetry = onRefresh
           )
@@ -147,9 +148,12 @@ fun VendorProductsContent(
         item {
           EmptyState(
             icon = Icons.Rounded.Inventory2,
-            title = "No products yet",
-            description = "Add your first product listing so customers on JTBazar can discover and order from your shop.",
-            actionLabel = "Add product",
+            title = appText("No products yet", "ابھی کوئی پروڈکٹ نہیں"),
+            description = appText(
+              "Add your first product listing so customers on JTBazar can discover and order from your shop.",
+              "اپنی پہلی پروڈکٹ شامل کریں تاکہ جے ٹی بازار کے صارفین آپ کی دکان سے آرڈر کر سکیں۔"
+            ),
+            actionLabel = appText("Add product", "پروڈکٹ شامل کریں"),
             actionIcon = Icons.Rounded.Add,
             onAction = onAddProduct
           )
@@ -189,8 +193,10 @@ private fun VendorProductCard(
   val isDeletionPending = product.deletionStatus == "pending"
 
   val pubLabel = when {
-    product.isHidden -> "Hidden"
-    product.publicationStatus.equals("published", true) -> "Published"
+    product.isHidden -> appText("Hidden", "پوشیدہ")
+    product.publicationStatus.equals("published", true) -> appText("Published", "شائع شدہ")
+    product.publicationStatus.equals("draft", true) -> appText("Draft", "مسودہ")
+    product.publicationStatus.equals("archived", true) -> appText("Archived", "آرکائیو شدہ")
     else -> product.publicationStatus.replace('_', ' ').replaceFirstChar { it.uppercase() }
   }
   val pubTone = when {
@@ -205,9 +211,9 @@ private fun VendorProductCard(
   }
 
   val modLabel = when {
-    isRejected -> "Rejected"
-    isApproved -> "Approved"
-    else -> "Pending approval"
+    isRejected -> appText("Rejected", "مسترد شدہ")
+    isApproved -> appText("Approved", "منظور شدہ")
+    else -> appText("Pending approval", "منظوری کے انتظار میں")
   }
   val modTone = when {
     isRejected -> StatusTone.DANGER
@@ -279,7 +285,7 @@ private fun VendorProductCard(
             StatusBadge(text = modLabel, tone = modTone, icon = modIcon)
             if (isDeletionPending) {
               StatusBadge(
-                text = "Deletion pending",
+                text = appText("Deletion pending", "حذف ہونے کے انتظار میں"),
                 tone = StatusTone.WARNING,
                 icon = Icons.Rounded.Schedule
               )
@@ -290,7 +296,10 @@ private fun VendorProductCard(
 
       if (isRejected && product.rejectionReason.isNotBlank()) {
         VendorAlertBanner(
-          message = "Admin rejection reason: ${product.rejectionReason}",
+          message = appText(
+            "Admin rejection reason: ${product.rejectionReason}",
+            "ایڈمن کے مسترد کرنے کی وجہ: ${product.rejectionReason}"
+          ),
           isError = true
         )
       }
@@ -303,28 +312,28 @@ private fun VendorProductCard(
         horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
       ) {
         ProductActionButton(
-          text = "Edit",
+          text = appText("Edit", "ترمیم"),
           icon = Icons.Rounded.Edit,
           enabled = !isMutating,
           onClick = onEdit,
           modifier = Modifier.weight(1f)
         )
         ProductActionButton(
-          text = if (product.isHidden) "Show" else "Hide",
+          text = if (product.isHidden) appText("Show", "دکھائیں") else appText("Hide", "چھپائیں"),
           icon = if (product.isHidden) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
           enabled = !isMutating && isApproved,
           onClick = onToggleVisibility,
           modifier = Modifier.weight(1f)
         )
         ProductActionButton(
-          text = "Archive",
+          text = appText("Archive", "آرکائیو"),
           icon = Icons.Rounded.Archive,
           enabled = !isMutating,
           onClick = onArchive,
           modifier = Modifier.weight(1f)
         )
         ProductActionButton(
-          text = "Delete",
+          text = appText("Delete", "حذف کریں"),
           icon = Icons.Rounded.DeleteOutline,
           enabled = !isMutating && !isDeletionPending,
           tint = VendorColors.DangerRed,

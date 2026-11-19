@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.DeliveryAddress
 import com.example.data.repository.MarketplaceRepository
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 
 @Composable
@@ -63,13 +65,13 @@ fun MyAddressesScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-          text = "My Addresses",
+          text = appText("My Addresses", "میرے پتے"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
@@ -83,7 +85,7 @@ fun MyAddressesScreen(
         contentColor = Color.White,
         modifier = Modifier.testTag("fab_add_address")
       ) {
-        Icon(Icons.Filled.Add, contentDescription = "Add Address")
+        Icon(Icons.Filled.Add, contentDescription = appText("Add Address", "پتہ شامل کریں"))
       }
     },
     modifier = modifier.fillMaxSize()
@@ -108,14 +110,14 @@ fun MyAddressesScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-          text = "No Saved Addresses",
+          text = appText("No Saved Addresses", "کوئی محفوظ شدہ پتہ نہیں"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-          text = "Add your home, office, or family delivery address for swift checkout.",
+          text = appText("Add your home, office, or family delivery address for swift checkout.", "تیز چیک آؤٹ کے لیے اپنے گھر، دفتر یا خاندان کا ترسیلی پتہ شامل کریں۔"),
           fontSize = 13.sp,
           color = JTTextSecondary,
           textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -129,7 +131,7 @@ fun MyAddressesScreen(
         ) {
           Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
           Spacer(modifier = Modifier.width(6.dp))
-          Text("Add New Address", fontWeight = FontWeight.Bold)
+          Text(appText("Add New Address", "نیا پتہ شامل کریں"), fontWeight = FontWeight.Bold)
         }
       }
     } else {
@@ -178,8 +180,14 @@ fun MyAddressesScreen(
                     shape = RoundedCornerShape(4.dp),
                     color = JTSurfaceVariant
                   ) {
+                    val tagDisplay = when (address.tag.uppercase()) {
+                      "HOME" -> appText("HOME", "گھر")
+                      "WORK" -> appText("WORK", "دفتر")
+                      "OTHER" -> appText("OTHER", "دیگر")
+                      else -> address.tag
+                    }
                     Text(
-                      text = address.tag,
+                      text = tagDisplay,
                       fontSize = 10.sp,
                       fontWeight = FontWeight.Bold,
                       color = JTPurplePrimary,
@@ -193,7 +201,7 @@ fun MyAddressesScreen(
                       color = Color(0xFFDEF7EC)
                     ) {
                       Text(
-                        text = "DEFAULT",
+                        text = appText("DEFAULT", "بنیادی"),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF03543F),
@@ -219,13 +227,13 @@ fun MyAddressesScreen(
               IconButton(
                 onClick = {
                   MarketplaceRepository.deleteAddress(address.id)
-                  Toast.makeText(context, "Address deleted", Toast.LENGTH_SHORT).show()
+                  Toast.makeText(context, AppLanguageManager.tr("Address deleted", "پتہ حذف کر دیا گیا"), Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.size(32.dp)
               ) {
                 Icon(
                   imageVector = Icons.Filled.DeleteOutline,
-                  contentDescription = "Delete",
+                  contentDescription = appText("Delete", "حذف کریں"),
                   tint = Color(0xFFDC2626),
                   modifier = Modifier.size(18.dp)
                 )
@@ -242,7 +250,7 @@ fun MyAddressesScreen(
       onDismiss = { showAddAddressSheet = false },
       onSaved = {
         showAddAddressSheet = false
-        Toast.makeText(context, "Address saved", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, AppLanguageManager.tr("Address saved", "پتہ محفوظ ہو گیا"), Toast.LENGTH_SHORT).show()
       }
     )
   }
@@ -277,7 +285,7 @@ private fun AddAddressDialog(
       startLocationFetch()
     } else {
       locating = false
-      locationMessage = "Turn on device location / GPS to detect your address."
+      locationMessage = AppLanguageManager.tr("Turn on device location / GPS to detect your address.", "اپنا پتہ معلوم کرنے کے لیے ڈیوائس لوکیشن / GPS آن کریں۔")
     }
   }
 
@@ -296,9 +304,13 @@ private fun AddAddressDialog(
               if (resolved.street.isNotBlank()) street = resolved.street
               if (resolved.area.isNotBlank()) area = resolved.area
               if (resolved.city.isNotBlank()) city = resolved.city
-              locationMessage = if (resolved.street.isBlank()) "Location found. Please enter your street and house number." else "Address detected. Please verify your house number."
+              locationMessage = if (resolved.street.isBlank()) {
+                AppLanguageManager.tr("Location found. Please enter your street and house number.", "مقام مل گیا۔ براہ کرم اپنی گلی اور مکان نمبر درج کریں۔")
+              } else {
+                AppLanguageManager.tr("Address detected. Please verify your house number.", "پتہ مل گیا۔ براہ کرم اپنے مکان نمبر کی تصدیق کریں۔")
+              }
             } else {
-              locationMessage = "GPS captured. Please enter street and area manually."
+              locationMessage = AppLanguageManager.tr("GPS captured. Please enter street and area manually.", "GPS نقاط حاصل ہو گئے۔ براہ کرم گلی اور علاقہ دستی طور پر درج کریں۔")
             }
             locating = false
           }
@@ -308,7 +320,7 @@ private fun AddAddressDialog(
               locationSettingsLauncher.launch(request)
             }.onFailure {
               locating = false
-              locationMessage = "Turn on device location / GPS and try again."
+              locationMessage = AppLanguageManager.tr("Turn on device location / GPS and try again.", "ڈیوائس لوکیشن / GPS آن کریں اور دوبارہ کوشش کریں۔")
             }
           }
           is LocationFetchResult.Failure -> {
@@ -318,7 +330,7 @@ private fun AddAddressDialog(
         }
       } catch (_: Exception) {
         locating = false
-        locationMessage = "Unable to detect location. Please try again."
+        locationMessage = AppLanguageManager.tr("Unable to detect location. Please try again.", "مقام معلوم نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔")
       }
     }
   }
@@ -330,7 +342,7 @@ private fun AddAddressDialog(
       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     if (!granted) {
       locating = false
-      locationMessage = "Location permission is needed to detect your address."
+      locationMessage = AppLanguageManager.tr("Location permission is needed to detect your address.", "آپ کا پتہ معلوم کرنے کے لیے مقام کی اجازت درکار ہے۔")
     } else {
       startLocationFetch()
     }
@@ -338,7 +350,7 @@ private fun AddAddressDialog(
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Add Delivery Address", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+    title = { Text(appText("Add Delivery Address", "ترسیل کا پتہ شامل کریں"), fontWeight = FontWeight.Bold, fontSize = 16.sp) },
     text = {
       Column(
         modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -354,51 +366,56 @@ private fun AddAddressDialog(
         ) {
           Icon(Icons.Filled.MyLocation, contentDescription = null)
           Spacer(modifier = Modifier.width(6.dp))
-          Text(if (locating) "Detecting address..." else "Use Current Location")
+          Text(if (locating) appText("Detecting address...", "پتہ تلاش کیا جا رہا ہے...") else appText("Use Current Location", "موجودہ مقام استعمال کریں"))
         }
         locationMessage?.let { Text(it, color = JTTextSecondary, fontSize = 11.sp) }
         OutlinedTextField(
           value = name,
           onValueChange = { name = it },
-          label = { Text("Recipient Name *") },
+          label = { Text(appText("Recipient Name *", "وصول کنندہ کا نام *")) },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
           value = phone,
           onValueChange = { phone = it },
-          label = { Text("Phone Number *") },
+          label = { Text(appText("Phone Number *", "فون نمبر *")) },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
           value = street,
           onValueChange = { street = it },
-          label = { Text("Street Address *") },
+          label = { Text(appText("Street Address *", "گلی کا پتہ *")) },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
           value = area,
           onValueChange = { area = it },
-          label = { Text("Area / Locality") },
+          label = { Text(appText("Area / Locality", "علاقہ / محلہ")) },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
           value = city,
           onValueChange = { city = it },
-          label = { Text("City *") },
+          label = { Text(appText("City *", "شہر *")) },
           singleLine = true,
           modifier = Modifier.fillMaxWidth()
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           listOf("HOME", "WORK", "OTHER").forEach { t ->
+            val chipLabel = when (t) {
+              "HOME" -> appText("HOME", "گھر")
+              "WORK" -> appText("WORK", "دفتر")
+              else -> appText("OTHER", "دیگر")
+            }
             FilterChip(
               selected = tag == t,
               onClick = { tag = t },
-              label = { Text(t, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+              label = { Text(chipLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
             )
           }
         }
@@ -406,7 +423,7 @@ private fun AddAddressDialog(
         Row(verticalAlignment = Alignment.CenterVertically) {
           Checkbox(checked = isDefault, onCheckedChange = { isDefault = it })
           Spacer(modifier = Modifier.width(4.dp))
-          Text("Set as default delivery address", fontSize = 12.sp)
+          Text(appText("Set as default delivery address", "بنیادی ترسیلی پتے کے طور پر مقرر کریں"), fontSize = 12.sp)
         }
 
         validationError?.let { err ->
@@ -430,11 +447,14 @@ private fun AddAddressDialog(
           val cleanCity = city.trim()
 
           val err = when {
-            cleanName.isEmpty() -> "Please enter recipient name."
+            cleanName.isEmpty() -> AppLanguageManager.tr("Please enter recipient name.", "براہ کرم وصول کنندہ کا نام درج کریں۔")
             !com.example.data.supabase.SupabaseApiService.isValidPakistaniMobile(cleanPhone) ->
-              "Enter a valid Pakistani mobile number like 03001234567 or +923001234567."
-            cleanStreet.length < 3 -> "Please enter a complete street address (at least 3 characters)."
-            cleanCity.isEmpty() -> "Please enter your city."
+              AppLanguageManager.tr(
+                "Enter a valid Pakistani mobile number like 03001234567 or +923001234567.",
+                "درست پاکستانی موبائل نمبر درج کریں جیسے 03001234567 یا +923001234567۔"
+              )
+            cleanStreet.length < 3 -> AppLanguageManager.tr("Please enter a complete street address (at least 3 characters).", "براہ کرم مکمل گلی کا پتہ درج کریں (کم از کم 3 حروف)۔")
+            cleanCity.isEmpty() -> AppLanguageManager.tr("Please enter your city.", "براہ کرم اپنا شہر درج کریں۔")
             else -> null
           }
           if (err != null) {
@@ -460,7 +480,7 @@ private fun AddAddressDialog(
             saving = false
             result.onSuccess { onSaved() }
               .onFailure { failure ->
-                validationError = failure.message ?: "Your delivery address could not be saved. Please try again."
+                validationError = failure.message ?: AppLanguageManager.tr("Your delivery address could not be saved. Please try again.", "آپ کا ترسیلی پتہ محفوظ نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔")
               }
           }
         },
@@ -469,14 +489,14 @@ private fun AddAddressDialog(
         if (saving) {
           CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Saving...")
+          Text(appText("Saving...", "محفوظ ہو رہا ہے..."))
         } else {
-          Text("Save Address")
+          Text(appText("Save Address", "پتہ محفوظ کریں"))
         }
       }
     },
     dismissButton = {
-      TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel") }
+      TextButton(enabled = !saving, onClick = onDismiss) { Text(appText("Cancel", "منسوخ کریں")) }
     }
   )
 }

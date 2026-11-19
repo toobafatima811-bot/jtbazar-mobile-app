@@ -215,7 +215,14 @@ object MarketplaceRepository {
       val fetchedMap = if (missingIds.isNotEmpty()) {
         val res = SupabaseApiService.fetchProductsByIds(missingIds)
         if (res.isFailure) {
-          return@CatalogPaginator Result.failure(res.exceptionOrNull() ?: IllegalStateException("Deals load nahi ho sake."))
+          return@CatalogPaginator Result.failure(
+            res.exceptionOrNull() ?: IllegalStateException(
+              com.example.localization.AppLanguageManager.tr(
+                "Could not load deals.",
+                "ڈیلز لوڈ نہیں ہو سکیں۔"
+              )
+            )
+          )
         }
         res.getOrNull().orEmpty()
           .map { applyCampaignPricing(mapDtoToProduct(it, wishlistSet), campaign) }
@@ -899,22 +906,28 @@ object MarketplaceRepository {
           ),
           deliveryNote = dto.deliveryNote ?: "",
           statusHeader = when (canonical) {
-            VendorOrderStatus.PENDING -> "Order Placed • Cash on Delivery"
-            VendorOrderStatus.CONFIRMED -> "Confirmed • Preparing Items"
-            VendorOrderStatus.PROCESSING -> "Vendor Coordination & QC"
-            VendorOrderStatus.READY_FOR_PICKUP -> "Ready for Pickup"
-            VendorOrderStatus.SHIPPED -> "Out for Delivery"
-            VendorOrderStatus.DELIVERED -> "Delivered"
-            VendorOrderStatus.NOT_DELIVERED -> "Not Delivered"
-            VendorOrderStatus.CANCELLED -> "Cancelled"
+            VendorOrderStatus.PENDING -> com.example.localization.AppLanguageManager.tr("Order Placed • Cash on Delivery", "آرڈر موصول • کیش آن ڈیلیوری")
+            VendorOrderStatus.CONFIRMED -> com.example.localization.AppLanguageManager.tr("Confirmed • Preparing Items", "تصدیق شدہ • اشیاء کی تیاری جاری")
+            VendorOrderStatus.PROCESSING -> com.example.localization.AppLanguageManager.tr("Vendor Coordination & QC", "فروخت کنندہ کی تیاری اور جانچ")
+            VendorOrderStatus.READY_FOR_PICKUP -> com.example.localization.AppLanguageManager.tr("Ready for Pickup", "پک اپ کے لیے تیار")
+            VendorOrderStatus.SHIPPED -> com.example.localization.AppLanguageManager.tr("Out for Delivery", "ترسیل کے لیے روانہ")
+            VendorOrderStatus.DELIVERED -> com.example.localization.AppLanguageManager.tr("Delivered", "ترسیل مکمل")
+            VendorOrderStatus.NOT_DELIVERED -> com.example.localization.AppLanguageManager.tr("Not Delivered", "ترسیل نہیں ہو سکی")
+            VendorOrderStatus.CANCELLED -> com.example.localization.AppLanguageManager.tr("Cancelled", "منسوخ")
             null -> VendorOrderStatus.formatLabel(dto.orderStatus)
           },
           orderStatus = canonical?.name ?: dto.orderStatus,
           timeline = listOf(
             OrderTimelineStep(
-              title = "Order status: ${canonical?.label ?: VendorOrderStatus.formatLabel(dto.orderStatus)}",
+              title = com.example.localization.AppLanguageManager.tr(
+                "Order status: ${canonical?.label ?: VendorOrderStatus.formatLabel(dto.orderStatus)}",
+                "آرڈر کی صورتحال: ${canonical?.localizedLabel() ?: VendorOrderStatus.formatLabel(dto.orderStatus)}"
+              ),
               timestamp = dto.createdAt,
-              description = "Latest order status saved by JTBazar.",
+              description = com.example.localization.AppLanguageManager.tr(
+                "Latest order status saved by JTBazar.",
+                "جے ٹی بازار میں محفوظ شدہ تازہ ترین آرڈر کی صورتحال۔"
+              ),
               state = StepState.COMPLETED
             )
           )
@@ -1513,22 +1526,28 @@ object MarketplaceRepository {
               ),
               deliveryNote = dto.deliveryNote ?: "",
               statusHeader = when (VendorOrderStatus.parse(dto.orderStatus)) {
-                VendorOrderStatus.PENDING -> "Order Placed • Cash on Delivery"
-                VendorOrderStatus.CONFIRMED -> "Confirmed • Preparing Items"
-                VendorOrderStatus.PROCESSING -> "Vendor Coordination & QC"
-                VendorOrderStatus.READY_FOR_PICKUP -> "Ready for Pickup"
-                VendorOrderStatus.SHIPPED -> "Out for Delivery"
-                VendorOrderStatus.DELIVERED -> "Delivered"
-                VendorOrderStatus.NOT_DELIVERED -> "Not Delivered"
-                VendorOrderStatus.CANCELLED -> "Cancelled"
+                VendorOrderStatus.PENDING -> com.example.localization.AppLanguageManager.tr("Order Placed • Cash on Delivery", "آرڈر موصول • کیش آن ڈیلیوری")
+                VendorOrderStatus.CONFIRMED -> com.example.localization.AppLanguageManager.tr("Confirmed • Preparing Items", "تصدیق شدہ • اشیاء کی تیاری جاری")
+                VendorOrderStatus.PROCESSING -> com.example.localization.AppLanguageManager.tr("Vendor Coordination & QC", "فروخت کنندہ کی تیاری اور جانچ")
+                VendorOrderStatus.READY_FOR_PICKUP -> com.example.localization.AppLanguageManager.tr("Ready for Pickup", "پک اپ کے لیے تیار")
+                VendorOrderStatus.SHIPPED -> com.example.localization.AppLanguageManager.tr("Out for Delivery", "ترسیل کے لیے روانہ")
+                VendorOrderStatus.DELIVERED -> com.example.localization.AppLanguageManager.tr("Delivered", "ترسیل مکمل")
+                VendorOrderStatus.NOT_DELIVERED -> com.example.localization.AppLanguageManager.tr("Not Delivered", "ترسیل نہیں ہو سکی")
+                VendorOrderStatus.CANCELLED -> com.example.localization.AppLanguageManager.tr("Cancelled", "منسوخ")
                 null -> VendorOrderStatus.formatLabel(dto.orderStatus)
               },
               orderStatus = VendorOrderStatus.parse(dto.orderStatus)?.name ?: dto.orderStatus,
               timeline = listOf(
                 OrderTimelineStep(
-                  title = "Order status: ${VendorOrderStatus.formatLabel(dto.orderStatus)}",
+                  title = com.example.localization.AppLanguageManager.tr(
+                    "Order status: ${VendorOrderStatus.formatLabel(dto.orderStatus)}",
+                    "آرڈر کی صورتحال: ${VendorOrderStatus.formatLabel(dto.orderStatus)}"
+                  ),
                   timestamp = dto.createdAt,
-                  description = "Latest order status saved by JTBazar.",
+                  description = com.example.localization.AppLanguageManager.tr(
+                    "Latest order status saved by JTBazar.",
+                    "جے ٹی بازار میں محفوظ شدہ تازہ ترین آرڈر کی صورتحال۔"
+                  ),
                   state = StepState.COMPLETED
                 )
               )

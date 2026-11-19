@@ -59,6 +59,8 @@ import com.example.ui.components.StatusBadge
 import com.example.ui.components.VendorAlertBanner
 import com.example.ui.components.VendorOutlinedTextField
 import com.example.ui.components.VendorSkeletonCard
+import com.example.localization.LocalAppLanguage
+import com.example.localization.appText
 import com.example.ui.components.vendorOrderStatusBadgeSpec
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
@@ -81,14 +83,15 @@ fun VendorOrdersContent(
   onOpenOrderDetails: (VendorOrderGroupUiModel) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
+  val appLanguage = LocalAppLanguage.current
   val hasPrev = uiState.page > 0
   val hasNext = (uiState.page + 1) * uiState.pageSize < uiState.totalOrders
-  val filterOptions = remember(uiState.totalAllOrders, uiState.statusCounts) {
+  val filterOptions = remember(uiState.totalAllOrders, uiState.statusCounts, appLanguage) {
     buildList {
-      add("all" to "All (${uiState.totalAllOrders})")
+      add("all" to "${com.example.localization.AppLanguageManager.tr("All", "سب")} (${uiState.totalAllOrders})")
       VendorOrderStatus.entries.forEach { status ->
         val count = uiState.statusCounts[status] ?: 0
-        add(status.key to "${status.label} ($count)")
+        add(status.key to "${status.localizedLabel()} ($count)")
       }
     }
   }
@@ -103,9 +106,9 @@ fun VendorOrdersContent(
   ) {
     item {
       SectionHeader(
-        title = "Vendor orders",
-        subtitle = "Track live order statuses and prepare items for courier pickup.",
-        actionLabel = "Refresh",
+        title = appText("Vendor orders", "فروخت کنندہ کے آرڈرز"),
+        subtitle = appText("Track live order statuses and prepare items for courier pickup.", "لائیو آرڈر اسٹیٹس دیکھیں اور کوریئر پک اپ کے لیے اشیاء تیار کریں۔"),
+        actionLabel = appText("Refresh", "تازہ کریں"),
         actionIcon = Icons.Rounded.Refresh,
         onActionClick = onRefresh
       )
@@ -121,7 +124,7 @@ fun VendorOrdersContent(
           VendorOutlinedTextField(
             value = uiState.searchQuery,
             onValueChange = onSearchChange,
-            label = "Search order # or product",
+            label = appText("Search order # or product", "آرڈر نمبر یا مصنوعہ تلاش کریں"),
             leadingIcon = Icons.Rounded.Search,
             trailingIcon = if (uiState.searchQuery.isNotBlank()) {
               {
@@ -134,7 +137,7 @@ fun VendorOrdersContent(
                 ) {
                   Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = "Clear search",
+                    contentDescription = appText("Clear search", "تلاش صاف کریں"),
                     tint = VendorColors.TextSecondary
                   )
                 }
@@ -147,7 +150,7 @@ fun VendorOrdersContent(
               .testTag("vendor_orders_search_input")
           )
           PrimaryButton(
-            text = "Search",
+            text = appText("Search", "تلاش"),
             icon = Icons.Rounded.Search,
             enabled = !uiState.isBusy,
             onClick = onSearchSubmit,
@@ -225,7 +228,7 @@ fun VendorOrdersContent(
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
             Text(
-              text = "Page ${uiState.page + 1} • ${uiState.totalOrders} order(s)",
+              text = appText("Page ${uiState.page + 1} • ${uiState.totalOrders} order(s)", "صفحہ ${uiState.page + 1} • ${uiState.totalOrders} آرڈرز"),
               style = MaterialTheme.typography.bodySmall,
               fontWeight = FontWeight.SemiBold,
               color = VendorColors.TextSecondary
@@ -237,7 +240,7 @@ fun VendorOrdersContent(
                 modifier = Modifier.heightIn(min = VendorSpacing.touchMin)
               ) {
                 Text(
-                  text = "Previous",
+                  text = appText("Previous", "پچھلا"),
                   color = if (!uiState.isBusy && hasPrev) VendorColors.PrimaryOrange else VendorColors.TextMuted,
                   fontWeight = FontWeight.SemiBold
                 )
@@ -248,7 +251,7 @@ fun VendorOrdersContent(
                 modifier = Modifier.heightIn(min = VendorSpacing.touchMin)
               ) {
                 Text(
-                  text = "Next",
+                  text = appText("Next", "اگلا"),
                   color = if (!uiState.isBusy && hasNext) VendorColors.PrimaryOrange else VendorColors.TextMuted,
                   fontWeight = FontWeight.SemiBold
                 )
@@ -269,7 +272,7 @@ fun VendorOrdersContent(
       is VendorSectionState.Error -> {
         item {
           ErrorState(
-            title = "Orders could not load",
+            title = appText("Orders could not load", "آرڈرز لوڈ نہیں ہو سکے"),
             message = state.message,
             onRetry = onRefresh
           )
@@ -282,16 +285,19 @@ fun VendorOrdersContent(
           EmptyState(
             icon = Icons.Rounded.LocalShipping,
             title = if (selectedCanonical != null) {
-              "No ${selectedCanonical.label} orders"
+              appText("No ${selectedCanonical.label} orders", "کوئی ${selectedCanonical.localizedLabel()} آرڈر نہیں")
             } else {
-              "No orders yet"
+              appText("No orders yet", "ابھی کوئی آرڈر نہیں")
             },
             description = if (selectedCanonical != null) {
-              "There are currently no orders in ${selectedCanonical.label} status."
+              appText("There are currently no orders in ${selectedCanonical.label} status.", "فی الحال ${selectedCanonical.localizedLabel()} اسٹیٹس میں کوئی آرڈر نہیں ہے۔")
             } else {
-              "Customer contact, payment aur delivery JTBazar sambhalta hai. Aap sirf apne items pickup ke liye taiyar karte hain."
+              appText(
+                "JTBazar handles customer contact, payment, and delivery. You only prepare your items for courier pickup.",
+                "جے ٹی بازار گاہک سے رابطہ، ادائیگی اور ڈلیوری سنبھالتا ہے۔ آپ صرف اپنی اشیاء پک اپ کے لیے تیار کرتے ہیں۔"
+              )
             },
-            actionLabel = if (selectedCanonical != null || uiState.searchQuery.isNotBlank()) "Show all orders" else null,
+            actionLabel = if (selectedCanonical != null || uiState.searchQuery.isNotBlank()) appText("Show all orders", "تمام آرڈرز دکھائیں") else null,
             onAction = if (selectedCanonical != null || uiState.searchQuery.isNotBlank()) {
               {
                 if (uiState.searchQuery.isNotBlank()) onSearchChange("")
@@ -325,6 +331,7 @@ private fun VendorOrderGroupCard(
   onPrintPackingSlip: () -> Unit,
   onMarkReady: () -> Unit
 ) {
+  LocalAppLanguage.current
   val badgeSpec = vendorOrderStatusBadgeSpec(group.canonicalStatus)
 
   AppCard(
@@ -353,7 +360,7 @@ private fun VendorOrderGroupCard(
         }
         Column(modifier = Modifier.weight(1f)) {
           Text(
-            text = "Order ${group.orderNumber}",
+            text = appText("Order ${group.orderNumber}", "آرڈر ${group.orderNumber}"),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = VendorColors.TextPrimary,
@@ -361,7 +368,7 @@ private fun VendorOrderGroupCard(
             overflow = TextOverflow.Ellipsis
           )
           val meta = buildString {
-            append("${group.items.size} item(s)")
+            append(appText("${group.items.size} item(s)", "${group.items.size} اشیاء"))
             if (group.createdAt.isNotBlank()) {
               append(" • ${group.createdAt.take(10)}")
             }
@@ -410,7 +417,7 @@ private fun VendorOrderGroupCard(
                   overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                  text = "SKU: ${item.sku} • Variant: ${item.variantSummary}",
+                  text = appText("SKU: ${item.sku} • Variant: ${item.variantSummary}", "ایس کے یو: ${item.sku} • ویرینٹ: ${item.variantSummary}"),
                   style = MaterialTheme.typography.bodySmall,
                   color = VendorColors.TextSecondary,
                   maxLines = 1,
@@ -441,7 +448,7 @@ private fun VendorOrderGroupCard(
           horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
         ) {
           SecondaryButton(
-            text = "Order details",
+            text = appText("Order details", "آرڈر کی تفصیلات"),
             icon = Icons.Rounded.Visibility,
             enabled = group.orderId.isNotBlank(),
             onClick = onOpenDetails,
@@ -450,7 +457,7 @@ private fun VendorOrderGroupCard(
               .testTag("vendor_order_details_${group.orderId}")
           )
           SecondaryButton(
-            text = "Packing slip",
+            text = appText("Packing slip", "پیکنگ سلپ"),
             icon = Icons.Rounded.ReceiptLong,
             enabled = group.orderId.isNotBlank(),
             onClick = onPrintPackingSlip,
@@ -459,7 +466,7 @@ private fun VendorOrderGroupCard(
         }
         if (group.canonicalStatus.canMarkReadyForPickup) {
           PrimaryButton(
-            text = "Mark ready for pickup",
+            text = appText("Mark ready for pickup", "پک اپ کے لیے تیار نشان زد کریں"),
             icon = Icons.Rounded.CheckCircle,
             enabled = !isBusy && group.orderId.isNotBlank(),
             loading = isBusy,

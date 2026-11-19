@@ -31,6 +31,8 @@ import com.example.R
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -79,14 +81,14 @@ fun EmailOtpVerificationScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Image(
           painter = painterResource(id = R.drawable.logo_jtbazar_header),
-          contentDescription = "JTBazar Logo",
+          contentDescription = appText("JTBazar Logo", "JTBazar لوگو"),
           contentScale = ContentScale.Fit,
           modifier = Modifier.height(26.dp)
         )
@@ -120,7 +122,7 @@ fun EmailOtpVerificationScreen(
       Spacer(modifier = Modifier.height(20.dp))
 
       Text(
-        text = "Verify Your Email",
+        text = appText("Verify Your Email", "اپنی ای میل کی تصدیق کریں"),
         fontSize = 22.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
@@ -129,7 +131,7 @@ fun EmailOtpVerificationScreen(
       Spacer(modifier = Modifier.height(6.dp))
 
       Text(
-        text = "We have sent a 6-digit confirmation code to:",
+        text = appText("We have sent a 6-digit confirmation code to:", "ہم نے 6 ہندسوں کا تصدیقی کوڈ اس ای میل پر بھیجا ہے:"),
         fontSize = 13.sp,
         color = JTTextSecondary,
         textAlign = TextAlign.Center
@@ -203,7 +205,7 @@ fun EmailOtpVerificationScreen(
             errorMessage = null
           }
         },
-        label = { Text("6-Digit Code") },
+        label = { Text(appText("6-Digit Code", "6 ہندسوں کا کوڈ")) },
         placeholder = { Text("123456") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
         singleLine = true,
@@ -224,7 +226,7 @@ fun EmailOtpVerificationScreen(
       Button(
         onClick = {
           if (otpCode.length != 6) {
-            errorMessage = "Please enter the complete 6-digit code."
+            errorMessage = AppLanguageManager.tr("Please enter the complete 6-digit code.", "براہ کرم مکمل 6 ہندسوں کا کوڈ درج کریں۔")
             return@Button
           }
 
@@ -238,7 +240,7 @@ fun EmailOtpVerificationScreen(
             )
             isLoading = false
             if (result.isSuccess) {
-              Toast.makeText(context, "Account verified successfully! Welcome to JTBazar.", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, AppLanguageManager.tr("Account verified successfully! Welcome to JTBazar.", "اکاؤنٹ کی کامیابی سے تصدیق ہو گئی! JTBazar میں خوش آمدید۔"), Toast.LENGTH_SHORT).show()
               onVerified()
             } else {
               errorMessage = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.AUTH)
@@ -256,9 +258,9 @@ fun EmailOtpVerificationScreen(
         if (isLoading) {
           CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Verifying...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Verifying...", "تصدیق ہو رہی ہے..."), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         } else {
-          Text("Verify Email & Continue", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text(appText("Verify Email & Continue", "ای میل کی تصدیق کریں اور جاری رکھیں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
       }
 
@@ -271,13 +273,13 @@ fun EmailOtpVerificationScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         Text(
-          text = "Didn't receive the code? ",
+          text = appText("Didn't receive the code? ", "کوڈ موصول نہیں ہوا؟ "),
           fontSize = 12.sp,
           color = JTTextSecondary
         )
         if (canResend) {
           Text(
-            text = "Resend Code",
+            text = appText("Resend Code", "کوڈ دوبارہ بھیجیں"),
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = JTOrange,
@@ -288,7 +290,7 @@ fun EmailOtpVerificationScreen(
                   resendCountdown = 60
                   val res = SupabaseAuthService.resendSignupOtp(email.trim())
                   if (res.isSuccess) {
-                    successMessage = "A new verification code has been sent to your email."
+                    successMessage = AppLanguageManager.tr("A new verification code has been sent to your email.", "آپ کی ای میل پر نیا تصدیقی کوڈ بھیج دیا گیا ہے۔")
                   } else {
                     errorMessage = AppErrorMapper.toCustomerMessage(res.exceptionOrNull(), ErrorContext.AUTH)
                   }
@@ -303,7 +305,7 @@ fun EmailOtpVerificationScreen(
           )
         } else {
           Text(
-            text = "Resend in ${resendCountdown}s",
+            text = appText("Resend in ${resendCountdown}s", "${resendCountdown} سیکنڈ میں دوبارہ بھیجیں"),
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = JTTextSecondary

@@ -1034,7 +1034,9 @@ object SupabaseApiService {
                   rating = computedAvgRating,
                   isVerified = obj.optBoolean("is_verified", false),
                   phone = "",
-                  deliveryRadiusKm = obj.optDouble("delivery_radius_km", 0.0)
+                  deliveryRadiusKm = obj.optDouble("delivery_radius_km", 0.0),
+                  shopIsOpen = if (obj.has("shop_is_open") && !obj.isNull("shop_is_open")) obj.optBoolean("shop_is_open") else null,
+                  weeklyHoursRaw = if (obj.has("shop_hours") && !obj.isNull("shop_hours")) obj.opt("shop_hours")?.toString() else null
                 )
               )
             }
@@ -1051,6 +1053,77 @@ object SupabaseApiService {
         runCatching { Log.e(TAG, "fetchShops error", e) }
         Result.success(cachedShops ?: emptyList())
       }
+    }
+  }
+
+  /**
+   * Fetches public weekly opening hours & emergency close status via RPC `get_public_shop_schedule`.
+   * Evaluates using Pakistan timezone (`Asia/Karachi`).
+   */
+  suspend fun fetchPublicShopSchedule(sellerId: String): Result<ShopScheduleInfo> = withContext(Dispatchers.IO) {
+    try {
+      val cleanId = sellerId.trim()
+      if (cleanId.isBlank()) {
+        return@withContext Result.failure(IllegalArgumentException("Shop ID is missing."))
+      }
+
+      val paramKeys = listOf("p_seller_id", "p_shop_id", "seller_id")
+      var lastError: Throwable? = null
+      for (key in paramKeys) {
+        val params = JSONObject().put(key, cleanId).toString()
+        val res = SupabaseClient.rpc("get_public_shop_schedule", params, requireAuth = false)
+        if (res.isSuccess) {
+          val raw = res.getOrThrow()
+          return@withContext Result.success(ShopScheduleInfo.fromRpcResponse(cleanId, raw))
+        }
+        val err = res.exceptionOrNull()
+        lastError = err
+        val msg = err?.message.orEmpty()
+        val isSignatureMismatch = msg.contains("PGRST202", ignoreCase = true) ||
+          msg.contains("error 404", ignoreCase = true) ||
+          msg.contains("Could not find the function", ignoreCase = true)
+        if (!isSignatureMismatch) {
+          break
+        }
+      }
+      Result.failure(lastError ?: IOException("Could not load shop opening hours."))
+    } catch (e: Exception) {
+      runCatching { Log.e(TAG, "fetchPublicShopSchedule error", e) }
+      Result.failure(e)
+    }
+  }
+
+  /**
+   * Fetches a vendor's active, published, approved, non-paused products directly from Supabase.
+   */
+  suspend fun fetchVendorPublicProducts(
+    sellerId: String,
+    maxLimit: Int = 200
+  ): Result<List<SupabaseProductDto>> = withContext(Dispatchers.IO) {
+    try {
+      val cleanId = sellerId.trim()
+      if (cleanId.isBlank()) {
+        return@withContext Result.success(emptyList())
+      }
+      val encodedSellerId = URLEncoder.encode(cleanId, "UTF-8")
+      val safeLimit = maxLimit.coerceIn(1, 500)
+      val url = "products?select=$PRODUCT_SELECT_COLUMNS" +
+        "&seller_id=eq.$encodedSellerId" +
+        "&publication_status=eq.published" +
+        "&moderation_status=eq.approved" +
+        "&vendor_hidden=eq.false" +
+        "&stock_verification_status=neq.paused" +
+        "&order=created_at.desc" +
+        "&limit=$safeLimit"
+      val body = SupabaseClient.get(url).getOrThrow()
+      val rows = JSONArray(body)
+      if (rows.length() == 0) {
+        return@withContext Result.success(emptyList())
+      }
+      Result.success(enrichProductRows(rows))
+    } catch (e: Exception) {
+      runCatching { Log.e(TAG, "fetchVendorPublicProducts error", e) }
+      Result.failure(e)
     }
   }
 }

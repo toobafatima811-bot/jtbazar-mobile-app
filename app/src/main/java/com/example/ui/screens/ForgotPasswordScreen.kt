@@ -31,6 +31,8 @@ import com.example.R
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -66,14 +68,14 @@ fun ForgotPasswordScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Image(
           painter = painterResource(id = R.drawable.logo_jtbazar_header),
-          contentDescription = "JTBazar Logo",
+          contentDescription = appText("JTBazar Logo", "JTBazar لوگو"),
           contentScale = ContentScale.Fit,
           modifier = Modifier.height(26.dp)
         )
@@ -107,7 +109,7 @@ fun ForgotPasswordScreen(
       Spacer(modifier = Modifier.height(20.dp))
 
       Text(
-        text = "Forgot Password",
+        text = appText("Forgot Password", "پاس ورڈ بھول گئے"),
         fontSize = 22.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
@@ -116,7 +118,10 @@ fun ForgotPasswordScreen(
       Spacer(modifier = Modifier.height(6.dp))
 
       Text(
-        text = "Enter your registered email to receive password reset instructions.",
+        text = appText(
+          "Enter your registered email to receive password reset instructions.",
+          "پاس ورڈ ری سیٹ کی ہدایات حاصل کرنے کے لیے اپنا رجسٹرڈ ای میل درج کریں۔"
+        ),
         fontSize = 13.sp,
         color = JTTextSecondary,
         textAlign = TextAlign.Center
@@ -175,7 +180,7 @@ fun ForgotPasswordScreen(
       OutlinedTextField(
         value = email,
         onValueChange = { email = it; errorMessage = null },
-        label = { Text("Registered Email") },
+        label = { Text(appText("Registered Email", "رجسٹرڈ ای میل")) },
         placeholder = { Text("customer@example.com") },
         leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = JTPurplePrimary) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -190,7 +195,7 @@ fun ForgotPasswordScreen(
       Button(
         onClick = {
           if (!isEmailValid) {
-            errorMessage = "Please enter a valid email address."
+            errorMessage = AppLanguageManager.tr("Please enter a valid email address.", "براہ کرم درست ای میل پتہ درج کریں۔")
             return@Button
           }
 
@@ -200,7 +205,7 @@ fun ForgotPasswordScreen(
             val result = SupabaseAuthService.resetPassword(email.trim())
             isLoading = false
             if (result.isSuccess) {
-              successMessage = "Password reset link sent! Check your inbox."
+              successMessage = AppLanguageManager.tr("Password reset link sent! Check your inbox.", "پاس ورڈ ری سیٹ لنک بھیج دیا گیا ہے! اپنا ان باکس چیک کریں۔")
             } else {
               errorMessage = AppErrorMapper.toCustomerMessage(result.exceptionOrNull(), ErrorContext.AUTH)
             }
@@ -217,9 +222,9 @@ fun ForgotPasswordScreen(
         if (isLoading) {
           CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Sending...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Sending...", "بھیجا جا رہا ہے..."), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         } else {
-          Text("Send Instructions", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text(appText("Send Instructions", "ہدایات بھیجیں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
       }
 
@@ -231,7 +236,7 @@ fun ForgotPasswordScreen(
           shape = RoundedCornerShape(12.dp),
           modifier = Modifier.fillMaxWidth().height(48.dp)
         ) {
-          Text("Enter Reset Code / New Password", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+          Text(appText("Enter Reset Code / New Password", "ری سیٹ کوڈ / نیا پاس ورڈ درج کریں"), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         }
         Spacer(modifier = Modifier.height(16.dp))
       }
@@ -242,12 +247,12 @@ fun ForgotPasswordScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = "Remembered your password? ",
+          text = appText("Remembered your password? ", "پاس ورڈ یاد آ گیا؟ "),
           fontSize = 13.sp,
           color = JTTextSecondary
         )
         Text(
-          text = "Sign In",
+          text = appText("Sign In", "سائن ان کریں"),
           fontSize = 13.sp,
           fontWeight = FontWeight.Bold,
           color = JTOrange,

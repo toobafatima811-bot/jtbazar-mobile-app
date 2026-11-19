@@ -27,6 +27,8 @@ import com.example.data.repository.CatalogPaginator
 import com.example.data.repository.CatalogQuery
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ProductSortOption
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.FriendlyEmptyState
 import com.example.ui.components.FriendlyErrorState
 import com.example.ui.components.PaginationFooter
@@ -131,13 +133,13 @@ fun BudgetShoppingScreen(
           ) {
             Icon(
               imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Back",
+              contentDescription = appText("Back", "واپس"),
               tint = JTTextPrimary
             )
           }
           Spacer(modifier = Modifier.width(4.dp))
           Text(
-            text = "Budget Shopping",
+            text = appText("Budget Shopping", "بجٹ شاپنگ"),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = JTTextPrimary
@@ -159,7 +161,7 @@ fun BudgetShoppingScreen(
           ) {
             Icon(
               imageVector = Icons.Filled.ShoppingBag,
-              contentDescription = "Cart",
+              contentDescription = appText("Cart", "ٹوکری"),
               tint = JTTextPrimary
             )
           }
@@ -179,7 +181,7 @@ fun BudgetShoppingScreen(
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
           Text(
-            text = "Find products within your budget",
+            text = appText("Find products within your budget", "اپنے بجٹ کے اندر مصنوعات تلاش کریں"),
             fontSize = 13.sp,
             color = JTTextSecondary
           )
@@ -198,7 +200,7 @@ fun BudgetShoppingScreen(
                 },
                 label = {
                   Text(
-                    text = "Under Rs. $amount",
+                    text = appText("Under Rs. $amount", "$amount روپے سے کم"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp
                   )
@@ -225,8 +227,8 @@ fun BudgetShoppingScreen(
                   if (it.isNotBlank()) isCustomBudget = true
                 }
               },
-              placeholder = { Text("Custom PKR budget", fontSize = 12.sp) },
-              prefix = { Text("Rs. ", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+              placeholder = { Text(appText("Custom PKR budget", "اپنا بجٹ (روپے) درج کریں"), fontSize = 12.sp) },
+              prefix = { Text(appText("Rs. ", "روپے "), fontWeight = FontWeight.Bold, fontSize = 12.sp) },
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
               singleLine = true,
               modifier = Modifier
@@ -248,14 +250,17 @@ fun BudgetShoppingScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
                 modifier = Modifier.height(50.dp)
               ) {
-                Text("Apply", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(appText("Apply", "لاگو کریں"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
               }
             }
           }
 
           Spacer(modifier = Modifier.height(6.dp))
           Text(
-            text = "Showing items up to Rs. ${String.format("%,d", debouncedBudget)} (Delivery calculated at checkout)",
+            text = appText(
+              "Showing items up to Rs. ${String.format("%,d", debouncedBudget)} (Delivery calculated at checkout)",
+              "${String.format("%,d", debouncedBudget)} روپے تک کی اشیاء دکھائی جا رہی ہیں (ڈلیوری چیک آؤٹ پر شامل ہوگی)"
+            ),
             fontSize = 11.sp,
             color = JTTextSecondary
           )
@@ -274,8 +279,8 @@ fun BudgetShoppingScreen(
         feedState.initialError != null && feedState.items.isEmpty() -> {
           Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             FriendlyErrorState(
-              title = "Products load nahi ho sake",
-              message = feedState.initialError ?: "Please check your connection and try again.",
+              title = appText("Could not load products", "مصنوعات لوڈ نہیں ہو سکیں"),
+              message = feedState.initialError ?: appText("Please check your connection and try again.", "براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔"),
               onRetry = { activePaginator.retry() }
             )
           }
@@ -283,9 +288,9 @@ fun BudgetShoppingScreen(
         feedState.items.isEmpty() -> {
           Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             FriendlyEmptyState(
-              title = "No products found under Rs. ${String.format("%,d", debouncedBudget)}",
-              message = "Try increasing your budget or exploring full marketplace categories.",
-              actionLabel = if (debouncedBudget < 2000) "Try Under Rs. 2,000" else null,
+              title = appText("No products found under Rs. ${String.format("%,d", debouncedBudget)}", "${String.format("%,d", debouncedBudget)} روپے سے کم میں کوئی مصنوعات نہیں ملیں"),
+              message = appText("Try increasing your budget or exploring full marketplace categories.", "اپنا بجٹ بڑھا کر دیکھیں یا تمام اقسام دریافت کریں۔"),
+              actionLabel = if (debouncedBudget < 2000) appText("Try Under Rs. 2,000", "2,000 روپے سے کم دیکھیں") else null,
               onAction = if (debouncedBudget < 2000) {
                 {
                   selectedBudget = 2000
@@ -317,7 +322,7 @@ fun BudgetShoppingScreen(
                 onAddToCart = { product ->
                   MarketplaceRepository.addToCart(product, 1)
                   if (MarketplaceRepository.canAddProductToCart(product)) {
-                    Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, AppLanguageManager.tr("Added to cart!", "ٹوکری میں شامل ہو گیا!"), Toast.LENGTH_SHORT).show()
                   }
                 },
                 onToggleWishlist = { product ->

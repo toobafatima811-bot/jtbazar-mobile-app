@@ -29,12 +29,23 @@ class JTBazarFirebaseMessagingService : FirebaseMessagingService() {
   override fun onMessageReceived(message: RemoteMessage) {
     super.onMessageReceived(message)
     val title = message.notification?.title ?: message.data["title"] ?: "JTBazar"
-    val body = message.notification?.body ?: message.data["body"] ?: "You have a new update."
+    val body = message.notification?.body ?: message.data["body"] ?: com.example.localization.AppLanguageManager.tr(
+      "You have a new update.",
+      "آپ کے لیے ایک نئی اپ ڈیٹ ہے۔"
+    )
     val channelId = FirebasePushManager.NOTIFICATION_CHANNEL_ID
     val manager = getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      manager.createNotificationChannel(NotificationChannel(channelId, "JTBazar notifications", NotificationManager.IMPORTANCE_DEFAULT).apply {
-        description = "Order updates, delivery alerts and important JTBazar notifications"
+      manager.createNotificationChannel(
+        NotificationChannel(
+          channelId,
+          com.example.localization.AppLanguageManager.tr("JTBazar notifications", "جے ٹی بازار اطلاعات"),
+          NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+          description = com.example.localization.AppLanguageManager.tr(
+            "Order updates, delivery alerts and important JTBazar notifications",
+            "آرڈر کی تازہ ترین صورتحال، ترسیل کے الرٹس اور جے ٹی بازار کی اہم اطلاعات"
+          )
         setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
           android.media.AudioAttributes.Builder()
             .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)

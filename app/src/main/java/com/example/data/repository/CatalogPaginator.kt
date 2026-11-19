@@ -14,11 +14,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-enum class ProductSortOption(val label: String, val orderParam: String) {
-  NEWEST("Newest", "created_at.desc,id.desc"),
-  PRICE_LOW_HIGH("Price: Low-High", "price.asc,id.desc"),
-  PRICE_HIGH_LOW("Price: High-Low", "price.desc,id.desc"),
-  BIGGEST_DISCOUNT("Best Deals", "discount_percent.desc,created_at.desc,id.desc")
+enum class ProductSortOption(
+  val label: String,
+  val urduLabel: String,
+  val orderParam: String
+) {
+  NEWEST("Newest", "تازہ ترین", "created_at.desc,id.desc"),
+  PRICE_LOW_HIGH("Price: Low-High", "کم سے زیادہ قیمت", "price.asc,id.desc"),
+  PRICE_HIGH_LOW("Price: High-Low", "زیادہ سے کم قیمت", "price.desc,id.desc"),
+  BIGGEST_DISCOUNT("Best Deals", "بہترین ڈیلز", "discount_percent.desc,created_at.desc,id.desc");
+
+  fun localizedLabel(): String = com.example.localization.AppLanguageManager.tr(label, urduLabel)
 }
 
 data class CatalogQuery(

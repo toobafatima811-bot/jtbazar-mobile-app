@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -28,8 +27,11 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseClient
+import com.example.localization.AppLanguage
+import com.example.localization.AppLanguageManager
+import com.example.localization.LocalAppLanguage
+import com.example.localization.appText
 import com.example.ui.theme.*
-import kotlinx.coroutines.launch
 
 private const val OWNER_PROTECTED_EMAIL = "hunainhaider5566@gmail.com"
 
@@ -40,13 +42,11 @@ fun AccountSettingsScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
-  val coroutineScope = rememberCoroutineScope()
   val currentUser by SupabaseClient.currentUser.collectAsState()
   val userProfile by SupabaseAuthService.userProfile.collectAsState()
   val storeSettings by MarketplaceRepository.storeSettings.collectAsState()
 
-  var notificationsEnabled by remember { mutableStateOf(true) }
-  var selectedLanguage by remember { mutableStateOf("English") }
+  val activeLanguage = LocalAppLanguage.current
   var showDeleteDialog by remember { mutableStateOf(false) }
 
   Scaffold(
@@ -65,13 +65,13 @@ fun AccountSettingsScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-          text = if (selectedLanguage == "اردو") "اکاؤنٹ کی ترتیبات" else "Account Settings",
+          text = appText("Account Settings", "اکاؤنٹ کی ترتیبات"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
@@ -89,7 +89,7 @@ fun AccountSettingsScreen(
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
       Text(
-        text = if (selectedLanguage == "اردو") "ترجیحات" else "Preferences",
+        text = appText("Preferences", "ترجیحات"),
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
         color = JTPurplePrimary
@@ -102,34 +102,35 @@ fun AccountSettingsScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          // Language selector
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Column {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
               Text(
-                text = if (selectedLanguage == "اردو") "زبان / Language" else "Language / زبان",
+                text = appText("Language / زبان", "زبان / Language"),
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp
               )
               Text(
-                text = if (selectedLanguage == "اردو") "اردو اور انگریزی کے درمیان سوئچ کریں" else "Switch between English and Urdu",
+                text = appText("Switch app language between English and Urdu", "ایپ کی زبان انگریزی اور اردو کے درمیان تبدیل کریں"),
                 fontSize = 11.sp,
                 color = JTTextSecondary
               )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
               FilterChip(
-                selected = selectedLanguage == "English",
-                onClick = { selectedLanguage = "English" },
-                label = { Text("English", fontSize = 11.sp) }
+                selected = activeLanguage == AppLanguage.ENGLISH,
+                onClick = { AppLanguageManager.setLanguage(AppLanguage.ENGLISH, context) },
+                label = { Text("English", fontSize = 11.sp) },
+                modifier = Modifier.testTag("language_chip_english")
               )
               FilterChip(
-                selected = selectedLanguage == "اردو",
-                onClick = { selectedLanguage = "اردو" },
-                label = { Text("اردو", fontSize = 11.sp) }
+                selected = activeLanguage == AppLanguage.URDU,
+                onClick = { AppLanguageManager.setLanguage(AppLanguage.URDU, context) },
+                label = { Text("اردو", fontSize = 11.sp) },
+                modifier = Modifier.testTag("language_chip_urdu")
               )
             }
           }
@@ -139,7 +140,7 @@ fun AccountSettingsScreen(
       }
 
       Text(
-        text = if (selectedLanguage == "اردو") "سیکیورٹی اور رازداری" else "Security & Privacy",
+        text = appText("Security & Privacy", "سیکیورٹی اور رازداری"),
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
         color = JTPurplePrimary
@@ -164,7 +165,7 @@ fun AccountSettingsScreen(
               Icon(Icons.Filled.Lock, contentDescription = null, tint = JTPurplePrimary, modifier = Modifier.size(20.dp))
               Spacer(modifier = Modifier.width(12.dp))
               Text(
-                text = if (selectedLanguage == "اردو") "پاس ورڈ اور سیکیورٹی" else "Password & Security",
+                text = appText("Password & Security", "پاس ورڈ اور سیکیورٹی"),
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp
               )
@@ -174,7 +175,6 @@ fun AccountSettingsScreen(
 
           HorizontalDivider(color = JTBorder)
 
-          // Website Parity: Request Account Deletion
           Row(
             modifier = Modifier
               .fillMaxWidth()
@@ -184,18 +184,18 @@ fun AccountSettingsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
               Icon(Icons.Filled.DeleteOutline, contentDescription = null, tint = Color(0xFFC53030), modifier = Modifier.size(20.dp))
               Spacer(modifier = Modifier.width(12.dp))
               Column {
                 Text(
-                  text = if (selectedLanguage == "اردو") "اکاؤنٹ ختم کرنے کی درخواست" else "Request Account Deletion",
+                  text = appText("Request Account Deletion", "اکاؤنٹ ختم کرنے کی درخواست"),
                   fontWeight = FontWeight.SemiBold,
                   fontSize = 13.sp,
                   color = Color(0xFFC53030)
                 )
                 Text(
-                  text = if (selectedLanguage == "اردو") "ذاتی ڈیٹا اور اکاؤنٹ کو مستقل ختم کریں" else "Request deletion of your account and personal data",
+                  text = appText("Request deletion of your account and personal data", "اپنے اکاؤنٹ اور ذاتی ڈیٹا کو مستقل ختم کرنے کی درخواست کریں"),
                   fontSize = 11.sp,
                   color = JTTextSecondary
                 )
@@ -207,7 +207,7 @@ fun AccountSettingsScreen(
       }
 
       Text(
-        text = if (selectedLanguage == "اردو") "جے ٹی بازار کے بارے میں" else "About JTBazar",
+        text = appText("About JTBazar", "جے ٹی بازار کے بارے میں"),
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
         color = JTPurplePrimary
@@ -220,12 +220,16 @@ fun AccountSettingsScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("JTBazar Mobile App (Version 1.0.0)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
           Text(
-            text = if (selectedLanguage == "اردو")
-              "مستند پاکستانی مارکیٹ پلیس اور ایکسپریس تازہ کھانے کی ترسیل جو صارفین کو تصدیق شدہ کاریگروں، محلے کے باورچی خانوں اور پروڈیوسرز سے جوڑتی ہے۔"
-            else
+            text = appText("JTBazar Mobile App (Version 1.0.0)", "جے ٹی بازار موبائل ایپ (ورژن 1.0.0)"),
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+          )
+          Text(
+            text = appText(
               "Authentic Pakistani marketplace and express fresh food delivery connecting consumers with verified artisans, neighborhood kitchens, and producers.",
+              "مستند پاکستانی مارکیٹ پلیس اور ایکسپریس تازہ کھانے کی ترسیل جو صارفین کو تصدیق شدہ کاریگروں، محلے کے باورچی خانوں اور پروڈیوسرز سے جوڑتی ہے۔"
+            ),
             fontSize = 11.sp,
             color = JTTextSecondary,
             lineHeight = 15.sp
@@ -235,12 +239,11 @@ fun AccountSettingsScreen(
     }
   }
 
-  // Account Deletion Dialog matching website DeleteAccountPage.tsx
   if (showDeleteDialog) {
     var requesterName by remember { mutableStateOf(userProfile?.fullName ?: currentUser?.fullName ?: "") }
     var requesterEmail by remember { mutableStateOf(currentUser?.email ?: userProfile?.email ?: "") }
     var requesterReason by remember { mutableStateOf("") }
-    var isSubmitting by remember { mutableStateOf(false) }
+    val isSubmitting by remember { mutableStateOf(false) }
 
     val supportEmail = storeSettings?.supportEmail ?: "jtbazar2423@gmail.com"
     val supportWhatsapp = storeSettings?.supportWhatsapp ?: "+923700822507"
@@ -265,13 +268,26 @@ fun AccountSettingsScreen(
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Filled.Shield, contentDescription = null, tint = Color(0xFFC53030), modifier = Modifier.size(24.dp))
             Column {
-              Text("JTBazar · Privacy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF8E4E38))
-              Text("Request Account Deletion", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+              Text(
+                appText("JTBazar · Privacy", "جے ٹی بازار · رازداری"),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF8E4E38)
+              )
+              Text(
+                appText("Request Account Deletion", "اکاؤنٹ ختم کرنے کی درخواست"),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = JTTextPrimary
+              )
             }
           }
 
           Text(
-            text = "Use this form to request deletion of your JTBazar account and associated personal information. In accordance with privacy and security standards, your identity will be verified before action is taken.",
+            text = appText(
+              "Use this form to request deletion of your JTBazar account and associated personal information. In accordance with privacy and security standards, your identity will be verified before action is taken.",
+              "اپنا جے ٹی بازار اکاؤنٹ اور ذاتی معلومات ختم کرانے کی درخواست کے لیے یہ فارم استعمال کریں۔ رازداری اور سیکیورٹی کے معیار کے مطابق کارروائی سے پہلے آپ کی شناخت کی تصدیق کی جائے گی۔"
+            ),
             fontSize = 12.sp,
             color = JTTextSecondary,
             lineHeight = 16.sp
@@ -280,7 +296,7 @@ fun AccountSettingsScreen(
           OutlinedTextField(
             value = requesterName,
             onValueChange = { requesterName = it },
-            label = { Text("Your Name *") },
+            label = { Text(appText("Your Name *", "آپ کا نام *")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("delete_name_input")
           )
@@ -288,7 +304,7 @@ fun AccountSettingsScreen(
           OutlinedTextField(
             value = requesterEmail,
             onValueChange = { requesterEmail = it },
-            label = { Text("JTBazar Account Email *") },
+            label = { Text(appText("JTBazar Account Email *", "جے ٹی بازار اکاؤنٹ ای میل *")) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("delete_email_input")
           )
@@ -296,22 +312,29 @@ fun AccountSettingsScreen(
           OutlinedTextField(
             value = requesterReason,
             onValueChange = { requesterReason = it },
-            label = { Text("Reason (Optional)") },
-            placeholder = { Text("e.g. No longer needed") },
+            label = { Text(appText("Reason (Optional)", "وجہ (اختیاری)")) },
+            placeholder = { Text(appText("e.g. No longer needed", "مثلاً اب ضرورت نہیں")) },
             minLines = 2,
             modifier = Modifier.fillMaxWidth().testTag("delete_reason_input")
           )
 
-          // Legal Notice matching website
           Surface(
             shape = RoundedCornerShape(8.dp),
             color = Color(0xFFF7F5EE),
             modifier = Modifier.fillMaxWidth()
           ) {
             Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-              Text("What happens next:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF263A2B))
               Text(
-                text = "After verification, JTBazar will delete or de-identify personal account data that is not required to be retained. Limited order, transaction, fraud-prevention or legal records may be retained where required by law.",
+                appText("What happens next:", "آگے کیا ہوگا:"),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF263A2B)
+              )
+              Text(
+                text = appText(
+                  "After verification, JTBazar will delete or de-identify personal account data that is not required to be retained. Limited order, transaction, fraud-prevention or legal records may be retained where required by law.",
+                  "تصدیق کے بعد جے ٹی بازار آپ کا وہ ذاتی ڈیٹا ختم یا غیر شناختی کر دے گا جسے محفوظ رکھنا لازمی نہیں ہے۔ قانون کے تقاضوں کے تحت محدود آرڈر، لین دین یا قانونی ریکارڈ محفوظ رکھا جا سکتا ہے۔"
+                ),
                 fontSize = 10.5.sp,
                 color = Color(0xFF5A6652),
                 lineHeight = 14.sp
@@ -327,18 +350,32 @@ fun AccountSettingsScreen(
               onClick = { showDeleteDialog = false },
               modifier = Modifier.weight(1f)
             ) {
-              Text("Cancel")
+              Text(appText("Cancel", "منسوخ کریں"))
             }
 
             Button(
               onClick = {
                 val emailTrim = requesterEmail.trim()
                 if (emailTrim.equals(OWNER_PROTECTED_EMAIL, ignoreCase = true)) {
-                  Toast.makeText(context, "The primary store owner account cannot be deleted or suspended.", Toast.LENGTH_LONG).show()
+                  Toast.makeText(
+                    context,
+                    AppLanguageManager.tr(
+                      "The primary store owner account cannot be deleted or suspended.",
+                      "بنیادی اسٹور مالک کا اکاؤنٹ ختم یا معطل نہیں کیا جا سکتا۔"
+                    ),
+                    Toast.LENGTH_LONG
+                  ).show()
                   return@Button
                 }
                 if (requesterName.isBlank() || emailTrim.isBlank()) {
-                  Toast.makeText(context, "Please enter your name and account email.", Toast.LENGTH_SHORT).show()
+                  Toast.makeText(
+                    context,
+                    AppLanguageManager.tr(
+                      "Please enter your name and account email.",
+                      "براہ کرم اپنا نام اور اکاؤنٹ ای میل درج کریں۔"
+                    ),
+                    Toast.LENGTH_SHORT
+                  ).show()
                   return@Button
                 }
 
@@ -356,25 +393,40 @@ fun AccountSettingsScreen(
                 }
 
                 runCatching {
-                  context.startActivity(Intent.createChooser(mailIntent, "Send deletion request via email"))
-                  Toast.makeText(context, "Email client opened. Send email to complete your request.", Toast.LENGTH_LONG).show()
+                  context.startActivity(
+                    Intent.createChooser(
+                      mailIntent,
+                      AppLanguageManager.tr("Send deletion request via email", "ای میل کے ذریعے درخواست بھیجیں")
+                    )
+                  )
+                  Toast.makeText(
+                    context,
+                    AppLanguageManager.tr(
+                      "Email client opened. Send email to complete your request.",
+                      "ای میل ایپ کھل گئی ہے۔ اپنی درخواست مکمل کرنے کے لیے ای میل بھیجیں۔"
+                    ),
+                    Toast.LENGTH_LONG
+                  ).show()
                   showDeleteDialog = false
                 }.onFailure {
-                  // Fallback to WhatsApp
                   val cleanPhone = supportWhatsapp.replace("+", "").replace(" ", "").trim()
                   val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encode(body)}"))
                   runCatching {
                     context.startActivity(waIntent)
                     showDeleteDialog = false
                   }.onFailure {
-                    Toast.makeText(context, "Support email: $supportEmail", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                      context,
+                      AppLanguageManager.tr("Support email: $supportEmail", "معاونت ای میل: $supportEmail"),
+                      Toast.LENGTH_LONG
+                    ).show()
                   }
                 }
               },
               colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC53030)),
               modifier = Modifier.weight(1.3f).testTag("delete_submit_button")
             ) {
-              Text("Submit Request", color = Color.White)
+              Text(appText("Submit Request", "درخواست جمع کرائیں"), color = Color.White)
             }
           }
         }

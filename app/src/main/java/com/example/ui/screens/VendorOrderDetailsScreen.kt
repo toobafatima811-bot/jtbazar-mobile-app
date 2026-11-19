@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.data.supabase.VendorOrderStatus
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecondaryButton
@@ -68,8 +69,10 @@ import org.json.JSONObject
 
 private data class OrderTimelineStep(
   val status: VendorOrderStatus,
-  val title: String,
-  val subtitle: String,
+  val titleEn: String,
+  val titleUr: String,
+  val subtitleEn: String,
+  val subtitleUr: String,
   val icon: ImageVector
 )
 
@@ -77,37 +80,49 @@ private val standardFulfillmentSteps = listOf(
   OrderTimelineStep(
     VendorOrderStatus.PENDING,
     "Order Received",
+    "آرڈر موصول ہوا",
     "Order placed and awaiting customer/admin confirmation",
+    "آرڈر دے دیا گیا ہے اور صارف/ایڈمن کی تصدیق کا منتظر ہے",
     Icons.Rounded.Schedule
   ),
   OrderTimelineStep(
     VendorOrderStatus.CONFIRMED,
     "Confirmed",
+    "تصدیق شدہ",
     "Customer confirmation completed — prepare items",
+    "صارف کی تصدیق مکمل ہو گئی — آئٹمز تیار کریں",
     Icons.Rounded.Verified
   ),
   OrderTimelineStep(
     VendorOrderStatus.PROCESSING,
     "Processing",
+    "تیاری جاری",
     "Order is currently being packed and prepared",
+    "آرڈر فی الحال پیک اور تیار کیا جا رہا ہے",
     Icons.Rounded.Autorenew
   ),
   OrderTimelineStep(
     VendorOrderStatus.READY_FOR_PICKUP,
     "Ready for Pickup",
+    "پک اپ کے لیے تیار",
     "Marked ready for JTBazar courier pickup",
+    "جے ٹی بازار کوریئر پک اپ کے لیے تیار نشان زد",
     Icons.Rounded.Inventory2
   ),
   OrderTimelineStep(
     VendorOrderStatus.SHIPPED,
     "Shipped",
+    "روانہ کر دیا گیا",
     "Handed over to JTBazar courier for delivery",
+    "ڈیلیوری کے لیے جے ٹی بازار کوریئر کے حوالے کر دیا گیا",
     Icons.Rounded.LocalShipping
   ),
   OrderTimelineStep(
     VendorOrderStatus.DELIVERED,
     "Delivered",
+    "پہنچا دیا گیا",
     "Successfully delivered to the customer",
+    "صارف تک کامیابی سے پہنچا دیا گیا",
     Icons.Rounded.CheckCircle
   )
 )
@@ -143,7 +158,7 @@ fun VendorOrderDetailsScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         SecondaryButton(
-          text = "All orders",
+          text = appText("All orders", "تمام آرڈرز"),
           icon = Icons.AutoMirrored.Rounded.ArrowBack,
           onClick = onBack,
           modifier = Modifier
@@ -151,7 +166,7 @@ fun VendorOrderDetailsScreen(
             .testTag("vendor_order_details_back")
         )
         SecondaryButton(
-          text = "Refresh status",
+          text = appText("Refresh status", "حیثیت ریفریش کریں"),
           icon = Icons.Rounded.Refresh,
           enabled = !isBusy,
           onClick = onRefresh,
@@ -196,7 +211,7 @@ fun VendorOrderDetailsScreen(
           ) {
             Column(modifier = Modifier.weight(1f)) {
               Text(
-                text = "Order ${group.orderNumber}",
+                text = appText("Order ${group.orderNumber}", "آرڈر ${group.orderNumber}"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -205,7 +220,7 @@ fun VendorOrderDetailsScreen(
               )
               if (group.createdAt.isNotBlank()) {
                 Text(
-                  text = "Placed ${group.createdAt.take(16).replace('T', ' ')}",
+                  text = appText("Placed ", "آرڈر کی تاریخ: ") + group.createdAt.take(16).replace('T', ' '),
                   style = MaterialTheme.typography.bodySmall,
                   color = VendorColors.NavyHeaderSubtitle
                 )
@@ -226,13 +241,13 @@ fun VendorOrderDetailsScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            OrderHeaderMetric(label = "Items", value = "${group.items.size}")
+            OrderHeaderMetric(label = appText("Items", "آئٹمز"), value = "${group.items.size}")
             OrderHeaderMetric(
-              label = "Order stage",
+              label = appText("Order stage", "آرڈر مرحلہ"),
               value = group.orderStatusLabel.ifBlank { badgeSpec.label }
             )
             if (group.pickupStatusLabel.isNotBlank()) {
-              OrderHeaderMetric(label = "Pickup", value = group.pickupStatusLabel)
+              OrderHeaderMetric(label = appText("Pickup", "پک اپ"), value = group.pickupStatusLabel)
             }
           }
         }
@@ -244,7 +259,7 @@ fun VendorOrderDetailsScreen(
       AppCard {
         Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
           Text(
-            text = "Live fulfillment timeline",
+            text = appText("Live fulfillment timeline", "لائیو تکمیل ٹائم لائن"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = VendorColors.TextPrimary
@@ -280,9 +295,15 @@ fun VendorOrderDetailsScreen(
                   )
                   Text(
                     text = if (isCancelled) {
-                      "This order was cancelled and does not need preparation or pickup."
+                      appText(
+                        "This order was cancelled and does not need preparation or pickup.",
+                        "یہ آرڈر منسوخ کر دیا گیا ہے اور اس کی تیاری یا پک اپ کی ضرورت نہیں ہے۔"
+                      )
                     } else {
-                      "Courier marked this delivery as unsuccessful. Contact JTBazar support if needed."
+                      appText(
+                        "Courier marked this delivery as unsuccessful. Contact JTBazar support if needed.",
+                        "کوریئر نے اس ڈیلیوری کو ناکام قرار دیا۔ ضرورت پڑنے پر جے ٹی بازار سپورٹ سے رابطہ کریں۔"
+                      )
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = VendorColors.TextPrimary
@@ -330,13 +351,13 @@ fun VendorOrderDetailsScreen(
                   verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                   Text(
-                    text = step.title,
+                    text = appText(step.titleEn, step.titleUr),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (reached) VendorColors.TextPrimary else VendorColors.TextMuted
                   )
                   Text(
-                    text = step.subtitle,
+                    text = appText(step.subtitleEn, step.subtitleUr),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (reached) VendorColors.TextSecondary else VendorColors.TextMuted
                   )
@@ -362,28 +383,28 @@ fun VendorOrderDetailsScreen(
         AppCard {
           Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
             Text(
-              text = "Status synchronization details",
+              text = appText("Status synchronization details", "حیثیت ہم آہنگی کی تفصیلات"),
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
               color = VendorColors.TextPrimary
             )
             if (group.confirmationStatusLabel.isNotBlank()) {
-              MetadataLine("Customer confirmation", group.confirmationStatusLabel)
+              MetadataLine(appText("Customer confirmation", "صارف کی تصدیق"), group.confirmationStatusLabel)
             }
             if (group.pickupStatusLabel.isNotBlank()) {
-              MetadataLine("Courier pickup status", group.pickupStatusLabel)
+              MetadataLine(appText("Courier pickup status", "کوریئر پک اپ کی حیثیت"), group.pickupStatusLabel)
             }
             if (group.pickupReadyAt.isNotBlank()) {
-              MetadataLine("Marked ready at", group.pickupReadyAt.take(16).replace('T', ' '))
+              MetadataLine(appText("Marked ready at", "تیار نشان زد وقت"), group.pickupReadyAt.take(16).replace('T', ' '))
             }
             if (group.trackingNumber.isNotBlank()) {
-              MetadataLine("Tracking number", group.trackingNumber)
+              MetadataLine(appText("Tracking number", "ٹریکنگ نمبر"), group.trackingNumber)
             }
             if (group.vendorNote.isNotBlank()) {
-              MetadataLine("Vendor note", group.vendorNote)
+              MetadataLine(appText("Vendor note", "فروش کا نوٹ"), group.vendorNote)
             }
             if (group.updatedAt.isNotBlank()) {
-              MetadataLine("Last updated", group.updatedAt.take(16).replace('T', ' '))
+              MetadataLine(appText("Last updated", "آخری اپڈیٹ"), group.updatedAt.take(16).replace('T', ' '))
             }
           }
         }
@@ -393,7 +414,7 @@ fun VendorOrderDetailsScreen(
     // Line items header
     item {
       Text(
-        text = "Items in this order (${group.items.size})",
+        text = appText("Items in this order (${group.items.size})", "اس آرڈر میں شامل آئٹمز (${group.items.size})"),
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
         color = VendorColors.TextPrimary,
@@ -425,14 +446,14 @@ fun VendorOrderDetailsScreen(
               )
               if (item.canonicalStatus == VendorOrderStatus.CANCELLED) {
                 Text(
-                  text = "Cancelled by admin",
+                  text = appText("Cancelled by admin", "ایڈمن کی طرف سے منسوخ"),
                   style = MaterialTheme.typography.labelSmall,
                   fontWeight = FontWeight.Bold,
                   color = VendorColors.TextSecondary
                 )
               }
               Text(
-                text = "SKU: ${item.sku} • Variant: ${item.variantSummary}",
+                text = appText("SKU: ${item.sku} • Variant: ${item.variantSummary}", "ایس کے یو: ${item.sku} • قسم: ${item.variantSummary}"),
                 style = MaterialTheme.typography.bodySmall,
                 color = VendorColors.TextSecondary
               )
@@ -453,7 +474,7 @@ fun VendorOrderDetailsScreen(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "Quantity: ×${item.quantity}",
+              text = appText("Quantity: ×${item.quantity}", "تعداد: ×${item.quantity}"),
               style = MaterialTheme.typography.labelLarge,
               fontWeight = FontWeight.Bold,
               color = if (item.canonicalStatus == VendorOrderStatus.CANCELLED) VendorColors.TextSecondary else VendorColors.NavyHeader
@@ -477,19 +498,22 @@ fun VendorOrderDetailsScreen(
       AppCard {
         Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
           Text(
-            text = "Fulfillment actions",
+            text = appText("Fulfillment actions", "تکمیل کے اقدامات"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = VendorColors.TextPrimary
           )
           Text(
-            text = "Customer contact, payment and final delivery are managed by JTBazar. You only prepare your shop items for courier pickup.",
+            text = appText(
+              "Customer contact, payment and final delivery are managed by JTBazar. You only prepare your shop items for courier pickup.",
+              "صارف سے رابطہ، ادائیگی اور حتمی ڈیلیوری جے ٹی بازار سنبھالتا ہے۔ آپ صرف کوریئر پک اپ کے لیے اپنی دکان کی اشیاء تیار کریں۔"
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = VendorColors.TextSecondary
           )
 
           SecondaryButton(
-            text = "Print packing slip",
+            text = appText("Print packing slip", "پیکنگ سلپ پرنٹ کریں"),
             icon = Icons.Rounded.ReceiptLong,
             enabled = group.orderId.isNotBlank(),
             onClick = onPrintPackingSlip,
@@ -502,13 +526,13 @@ fun VendorOrderDetailsScreen(
             VendorOutlinedTextField(
               value = vendorNote,
               onValueChange = { vendorNote = it.take(300) },
-              label = "Pickup note for courier (optional)",
+              label = appText("Pickup note for courier (optional)", "کوریئر کے لیے پک اپ نوٹ (اختیاری)"),
               leadingIcon = Icons.Rounded.Notes,
               minLines = 2,
               enabled = !isBusy
             )
             PrimaryButton(
-              text = "Mark ready for pickup",
+              text = appText("Mark ready for pickup", "پک اپ کے لیے تیار نشان زد کریں"),
               icon = Icons.Rounded.CheckCircle,
               enabled = !isBusy && group.orderId.isNotBlank(),
               loading = isBusy,
@@ -536,7 +560,7 @@ fun VendorOrderDetailsScreen(
                   modifier = Modifier.size(18.dp)
                 )
                 Text(
-                  text = "Current order status: ${badgeSpec.label}",
+                  text = appText("Current order status: ${badgeSpec.label}", "موجودہ آرڈر کی حیثیت: ${badgeSpec.label}"),
                   style = MaterialTheme.typography.bodySmall,
                   fontWeight = FontWeight.SemiBold,
                   color = VendorColors.TextSecondary

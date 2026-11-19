@@ -35,6 +35,8 @@ import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseConfig
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -86,14 +88,14 @@ fun RegistrationScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Image(
           painter = painterResource(id = R.drawable.logo_jtbazar_header),
-          contentDescription = "JTBazar Logo",
+          contentDescription = appText("JTBazar Logo", "JTBazar لوگو"),
           contentScale = ContentScale.Fit,
           modifier = Modifier.height(26.dp)
         )
@@ -110,14 +112,17 @@ fun RegistrationScreen(
       horizontalAlignment = Alignment.Start
     ) {
       Text(
-        text = "Create an Account",
+        text = appText("Create an Account", "نیا اکاؤنٹ بنائیں"),
         fontSize = 24.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
-        text = "Join Pakistan's authentic marketplace & fresh food network",
+        text = appText(
+          "Join Pakistan's authentic marketplace & fresh food network",
+          "پاکستان کی مستند مارکیٹ پلیس اور تازہ خوراک کے نیٹ ورک میں شامل ہوں"
+        ),
         fontSize = 13.sp,
         color = JTTextSecondary
       )
@@ -152,8 +157,8 @@ fun RegistrationScreen(
       OutlinedTextField(
         value = fullName,
         onValueChange = { fullName = it; errorMessage = null },
-        label = { Text("Full Name *") },
-        placeholder = { Text("e.g. Muhammad Ali") },
+        label = { Text(appText("Full Name *", "پورا نام *")) },
+        placeholder = { Text(appText("e.g. Muhammad Ali", "مثال: محمد علی")) },
         leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null, tint = JTPurplePrimary) },
         singleLine = true,
         modifier = Modifier
@@ -167,7 +172,7 @@ fun RegistrationScreen(
       OutlinedTextField(
         value = email,
         onValueChange = { email = it; errorMessage = null },
-        label = { Text("Email Address *") },
+        label = { Text(appText("Email Address *", "ای میل پتہ *")) },
         placeholder = { Text("customer@example.com") },
         leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = JTPurplePrimary) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -175,7 +180,7 @@ fun RegistrationScreen(
         isError = email.isNotBlank() && !isEmailValid,
         supportingText = {
           if (email.isNotBlank() && !isEmailValid) {
-            Text("Please enter a valid email address", color = Color(0xFFDC2626), fontSize = 11.sp)
+            Text(appText("Please enter a valid email address", "براہ کرم درست ای میل پتہ درج کریں"), color = Color(0xFFDC2626), fontSize = 11.sp)
           }
         },
         modifier = Modifier
@@ -189,13 +194,13 @@ fun RegistrationScreen(
       OutlinedTextField(
         value = password,
         onValueChange = { password = it; errorMessage = null },
-        label = { Text("Password * (min. 6 characters)") },
+        label = { Text(appText("Password * (min. 6 characters)", "پاس ورڈ * (کم از کم 6 حروف)")) },
         leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = JTPurplePrimary) },
         trailingIcon = {
           IconButton(onClick = { passwordVisible = !passwordVisible }) {
             Icon(
               imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-              contentDescription = if (passwordVisible) "Hide password" else "Show password",
+              contentDescription = if (passwordVisible) appText("Hide password", "پاس ورڈ چھپائیں") else appText("Show password", "پاس ورڈ دکھائیں"),
               tint = JTTextSecondary
             )
           }
@@ -214,13 +219,13 @@ fun RegistrationScreen(
       OutlinedTextField(
         value = confirmPassword,
         onValueChange = { confirmPassword = it; errorMessage = null },
-        label = { Text("Confirm Password *") },
+        label = { Text(appText("Confirm Password *", "پاس ورڈ کی تصدیق کریں *")) },
         leadingIcon = { Icon(Icons.Filled.LockClock, contentDescription = null, tint = JTPurplePrimary) },
         trailingIcon = {
           IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
             Icon(
               imageVector = if (confirmPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-              contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password",
+              contentDescription = if (confirmPasswordVisible) appText("Hide password", "پاس ورڈ چھپائیں") else appText("Show password", "پاس ورڈ دکھائیں"),
               tint = JTTextSecondary
             )
           }
@@ -231,7 +236,7 @@ fun RegistrationScreen(
         isError = confirmPassword.isNotBlank() && !isPasswordMatch,
         supportingText = {
           if (confirmPassword.isNotBlank() && !isPasswordMatch) {
-            Text("Passwords do not match", color = Color(0xFFDC2626), fontSize = 11.sp)
+            Text(appText("Passwords do not match", "پاس ورڈ آپس میں مطابقت نہیں رکھتے"), color = Color(0xFFDC2626), fontSize = 11.sp)
           }
         },
         modifier = Modifier
@@ -257,7 +262,7 @@ fun RegistrationScreen(
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-          text = "I agree to the Terms of Service & Privacy Policy",
+          text = appText("I agree to the Terms of Service & Privacy Policy", "میں سروس کی شرائط اور رازداری کی پالیسی سے اتفاق کرتا ہوں"),
           fontSize = 12.sp,
           color = JTTextPrimary,
           fontWeight = FontWeight.Medium
@@ -271,12 +276,12 @@ fun RegistrationScreen(
         onClick = {
           if (!isFormValid) {
             errorMessage = when {
-              fullName.isBlank() -> "Please enter your full name."
-              !isEmailValid -> "Please enter a valid email address."
-              password.length < 6 -> "Password must be at least 6 characters."
-              !isPasswordMatch -> "Passwords do not match."
-              !termsAgreed -> "Please agree to the Terms & Conditions."
-              else -> "Please fill all required fields correctly."
+              fullName.isBlank() -> AppLanguageManager.tr("Please enter your full name.", "براہ کرم اپنا پورا نام درج کریں۔")
+              !isEmailValid -> AppLanguageManager.tr("Please enter a valid email address.", "براہ کرم درست ای میل پتہ درج کریں۔")
+              password.length < 6 -> AppLanguageManager.tr("Password must be at least 6 characters.", "پاس ورڈ کم از کم 6 حروف کا ہونا ضروری ہے۔")
+              !isPasswordMatch -> AppLanguageManager.tr("Passwords do not match.", "پاس ورڈ آپس میں مطابقت نہیں رکھتے۔")
+              !termsAgreed -> AppLanguageManager.tr("Please agree to the Terms & Conditions.", "براہ کرم شرائط و ضوابط سے اتفاق کریں۔")
+              else -> AppLanguageManager.tr("Please fill all required fields correctly.", "براہ کرم تمام ضروری خانے درست طریقے سے پُر کریں۔")
             }
             return@Button
           }
@@ -311,9 +316,9 @@ fun RegistrationScreen(
         if (isLoading) {
           CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Creating Account...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Creating Account...", "اکاؤنٹ بنایا جا رہا ہے..."), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         } else {
-          Text("Create Account", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text(appText("Create Account", "اکاؤنٹ بنائیں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
       }
 
@@ -326,7 +331,7 @@ fun RegistrationScreen(
       ) {
         HorizontalDivider(modifier = Modifier.weight(1f), color = JTBorder)
         Text(
-          text = "  OR  ",
+          text = appText("  OR  ", "  یا  "),
           fontSize = 11.sp,
           color = JTTextSecondary,
           fontWeight = FontWeight.SemiBold
@@ -362,13 +367,13 @@ fun RegistrationScreen(
       ) {
         Icon(
           imageVector = Icons.Filled.AccountCircle,
-          contentDescription = "Google",
+          contentDescription = appText("Google", "گوگل"),
           tint = JTPurplePrimary,
           modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
-          text = "Continue with Google",
+          text = appText("Continue with Google", "گوگل کے ساتھ جاری رکھیں"),
           fontWeight = FontWeight.SemiBold,
           fontSize = 13.sp,
           color = JTTextPrimary
@@ -384,12 +389,12 @@ fun RegistrationScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = "Already have an account? ",
+          text = appText("Already have an account? ", "پہلے سے اکاؤنٹ موجود ہے؟ "),
           fontSize = 13.sp,
           color = JTTextSecondary
         )
         Text(
-          text = "Sign In",
+          text = appText("Sign In", "سائن ان کریں"),
           fontSize = 13.sp,
           fontWeight = FontWeight.Bold,
           color = JTOrange,

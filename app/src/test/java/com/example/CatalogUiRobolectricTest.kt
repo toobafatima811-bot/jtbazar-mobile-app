@@ -202,7 +202,7 @@ class CatalogUiRobolectricTest {
     composeTestRule.onNodeWithText("Loading more products...").assertIsDisplayed()
 
     isLoadingState.value = false
-    errorState.value = "Products load nahi ho sake. Please try again."
+    errorState.value = "Could not load products. Please try again."
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("pagination_error_footer").assertIsDisplayed()
@@ -223,7 +223,7 @@ class CatalogUiRobolectricTest {
         if (!showEmptyState.value) {
           FriendlyErrorState(
             title = "Connection issue",
-            message = "Internet connection nahi mil raha. Please check your connection and try again.",
+            message = "No internet connection. Please check your connection and try again.",
             onRetry = { errorRetried++ }
           )
         } else {

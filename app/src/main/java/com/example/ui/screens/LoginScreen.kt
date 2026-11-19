@@ -32,6 +32,8 @@ import com.example.R
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseAuthService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -80,14 +82,14 @@ fun LoginScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Image(
           painter = painterResource(id = R.drawable.logo_jtbazar_header),
-          contentDescription = "JTBazar Logo",
+          contentDescription = appText("JTBazar Logo", "JTBazar لوگو"),
           contentScale = ContentScale.Fit,
           modifier = Modifier.height(26.dp)
         )
@@ -104,14 +106,14 @@ fun LoginScreen(
       horizontalAlignment = Alignment.Start
     ) {
       Text(
-        text = "Welcome Back",
+        text = appText("Welcome Back", "خوش آمدید"),
         fontSize = 24.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
-        text = "Sign in to track orders, manage addresses & wishlist",
+        text = appText("Sign in to track orders, manage addresses & wishlist", "آرڈرز ٹریک کرنے، پتے اور پسندیدہ اشیاء سنبھالنے کے لیے سائن ان کریں"),
         fontSize = 13.sp,
         color = JTTextSecondary
       )
@@ -146,7 +148,7 @@ fun LoginScreen(
       OutlinedTextField(
         value = email,
         onValueChange = { email = it; errorMessage = null },
-        label = { Text("Email Address") },
+        label = { Text(appText("Email Address", "ای میل پتہ")) },
         placeholder = { Text("customer@example.com") },
         leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null, tint = JTPurplePrimary) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -162,13 +164,13 @@ fun LoginScreen(
       OutlinedTextField(
         value = password,
         onValueChange = { password = it; errorMessage = null },
-        label = { Text("Password") },
+        label = { Text(appText("Password", "پاس ورڈ")) },
         leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = JTPurplePrimary) },
         trailingIcon = {
           IconButton(onClick = { passwordVisible = !passwordVisible }) {
             Icon(
               imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-              contentDescription = if (passwordVisible) "Hide password" else "Show password",
+              contentDescription = if (passwordVisible) appText("Hide password", "پاس ورڈ چھپائیں") else appText("Show password", "پاس ورڈ دکھائیں"),
               tint = JTTextSecondary
             )
           }
@@ -189,7 +191,7 @@ fun LoginScreen(
         horizontalArrangement = Arrangement.End
       ) {
         Text(
-          text = "Forgot password?",
+          text = appText("Forgot password?", "پاس ورڈ بھول گئے؟"),
           fontSize = 12.sp,
           fontWeight = FontWeight.SemiBold,
           color = JTOrange,
@@ -206,7 +208,11 @@ fun LoginScreen(
       Button(
         onClick = {
           if (!isFormValid) {
-            errorMessage = if (!isEmailValid) "Please enter a valid email." else "Please enter your password."
+            errorMessage = if (!isEmailValid) {
+              AppLanguageManager.tr("Please enter a valid email.", "براہ کرم درست ای میل درج کریں۔")
+            } else {
+              AppLanguageManager.tr("Please enter your password.", "براہ کرم اپنا پاس ورڈ درج کریں۔")
+            }
             return@Button
           }
 
@@ -243,9 +249,9 @@ fun LoginScreen(
         if (isLoading) {
           CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Signing In...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Signing In...", "سائن ان ہو رہا ہے..."), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         } else {
-          Text("Sign In", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+          Text(appText("Sign In", "سائن ان کریں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
       }
 
@@ -258,7 +264,7 @@ fun LoginScreen(
       ) {
         HorizontalDivider(modifier = Modifier.weight(1f), color = JTBorder)
         Text(
-          text = "  OR  ",
+          text = appText("  OR  ", "  یا  "),
           fontSize = 11.sp,
           color = JTTextSecondary,
           fontWeight = FontWeight.SemiBold
@@ -294,13 +300,13 @@ fun LoginScreen(
       ) {
         Icon(
           imageVector = Icons.Filled.AccountCircle,
-          contentDescription = "Google",
+          contentDescription = appText("Google", "گوگل"),
           tint = JTPurplePrimary,
           modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
-          text = "Continue with Google",
+          text = appText("Continue with Google", "گوگل کے ساتھ جاری رکھیں"),
           fontWeight = FontWeight.SemiBold,
           fontSize = 13.sp,
           color = JTTextPrimary
@@ -316,12 +322,12 @@ fun LoginScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = "Don't have an account? ",
+          text = appText("Don't have an account? ", "کیا آپ کا اکاؤنٹ نہیں ہے؟ "),
           fontSize = 13.sp,
           color = JTTextSecondary
         )
         Text(
-          text = "Register",
+          text = appText("Register", "رجسٹر کریں"),
           fontSize = 13.sp,
           fontWeight = FontWeight.Bold,
           color = JTOrange,

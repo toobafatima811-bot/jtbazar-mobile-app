@@ -80,11 +80,20 @@ internal fun missingCompletionStepsMessage(
   proofSaved: Boolean
 ): String? = when {
   !otpVerified && !proofSaved ->
-    "Incomplete steps: Verify customer OTP and upload a delivery photo proof before completing delivery."
+    com.example.localization.AppLanguageManager.tr(
+      "Incomplete steps: Verify customer OTP and upload a delivery photo proof before completing delivery.",
+      "نامکمل مراحل: ترسیل مکمل کرنے سے پہلے کسٹمر او ٹی پی کی تصدیق کریں اور ترسیل کی تصویر اپ لوڈ کریں۔"
+    )
   !otpVerified ->
-    "Incomplete step: Verify customer OTP before completing delivery."
+    com.example.localization.AppLanguageManager.tr(
+      "Incomplete step: Verify customer OTP before completing delivery.",
+      "نامکمل مرحلہ: ترسیل مکمل کرنے سے پہلے کسٹمر او ٹی پی کی تصدیق کریں۔"
+    )
   !proofSaved ->
-    "Incomplete step: Upload a delivery photo proof before completing delivery."
+    com.example.localization.AppLanguageManager.tr(
+      "Incomplete step: Upload a delivery photo proof before completing delivery.",
+      "نامکمل مرحلہ: ترسیل مکمل کرنے سے پہلے ترسیل کی تصویر اپ لوڈ کریں۔"
+    )
   else -> null
 }
 
@@ -136,7 +145,12 @@ internal fun validateDeliveryProofImage(
   rawMimeType: String?
 ): ValidatedProofImage {
   if (bytes.isEmpty()) {
-    throw IllegalArgumentException("Selected delivery photo is empty. Please choose another image.")
+    throw IllegalArgumentException(
+      com.example.localization.AppLanguageManager.tr(
+        "Selected delivery photo is empty. Please choose another image.",
+        "منتخب کردہ ترسیل کی تصویر خالی ہے۔ براہ کرم کوئی اور تصویر منتخب کریں۔"
+      )
+    )
   }
 
   val normalizedMime = rawMimeType?.trim()?.lowercase()?.substringBefore(';').orEmpty()
@@ -147,13 +161,28 @@ internal fun validateDeliveryProofImage(
     normalizedMime.startsWith("image/") -> normalizedMime
     normalizedMime.isBlank() || normalizedMime == "application/octet-stream" ->
       detectImageMimeFromMagicBytes(bytes)
-        ?: throw IllegalArgumentException("Choose an image file (JPEG, PNG, or WebP) for delivery proof.")
+        ?: throw IllegalArgumentException(
+          com.example.localization.AppLanguageManager.tr(
+            "Choose an image file (JPEG, PNG, or WebP) for delivery proof.",
+            "ترسیل کے ثبوت کے لیے تصویر کی فائل (JPEG، PNG یا WebP) منتخب کریں۔"
+          )
+        )
     else ->
-      throw IllegalArgumentException("Choose an image file (JPEG, PNG, or WebP) for delivery proof.")
+      throw IllegalArgumentException(
+        com.example.localization.AppLanguageManager.tr(
+          "Choose an image file (JPEG, PNG, or WebP) for delivery proof.",
+          "ترسیل کے ثبوت کے لیے تصویر کی فائل (JPEG، PNG یا WebP) منتخب کریں۔"
+        )
+      )
   }
 
   if (bytes.size > MAX_DRIVER_IMAGE_BYTES) {
-    throw IllegalArgumentException("Choose a delivery photo up to 8 MB.")
+    throw IllegalArgumentException(
+      com.example.localization.AppLanguageManager.tr(
+        "Choose a delivery photo up to 8 MB.",
+        "زیادہ سے زیادہ 8 ایم بی تک کی ترسیل کی تصویر منتخب کریں۔"
+      )
+    )
   }
 
   val extension = when (resolvedMime) {
@@ -173,7 +202,10 @@ internal fun extractDriverRejectionReason(application: JSONObject?): String {
 
 internal fun extractDriverFriendlyError(
   throwable: Throwable?,
-  fallback: String = "Something went wrong. Please try again."
+  fallback: String = com.example.localization.AppLanguageManager.tr(
+    "Something went wrong. Please try again.",
+    "کچھ غلط ہو گیا ہے۔ براہ کرم دوبارہ کوشش کریں۔"
+  )
 ): String {
   val raw = throwable?.message?.trim().orEmpty()
   if (raw.isBlank()) return AppErrorMapper.toCustomerMessage(throwable, ErrorContext.GENERAL)
@@ -228,5 +260,20 @@ internal fun updateAssignmentProofPathInList(
     } else {
       item
     }
+  }
+}
+
+internal fun driverAssignmentStatusLabel(rawStatus: String): String {
+  val normalized = rawStatus.trim().lowercase().replace('-', '_').replace(' ', '_')
+  return when (normalized) {
+    "assigned" -> com.example.localization.AppLanguageManager.tr("Assigned", "تفویض شدہ")
+    "pending" -> com.example.localization.AppLanguageManager.tr("Pending", "زیرِ التواء")
+    "accepted" -> com.example.localization.AppLanguageManager.tr("Accepted", "قبول شدہ")
+    "picked_up", "in_transit" -> com.example.localization.AppLanguageManager.tr("Picked Up", "اٹھایا جا چکا")
+    "delivered", "completed" -> com.example.localization.AppLanguageManager.tr("Delivered", "ترسیل مکمل")
+    "failed", "not_delivered", "delivery_failed" -> com.example.localization.AppLanguageManager.tr("Failed", "ناکام")
+    "cancelled", "canceled" -> com.example.localization.AppLanguageManager.tr("Cancelled", "منسوخ")
+    else -> com.example.data.supabase.VendorOrderStatus.parse(normalized)?.localizedLabel()
+      ?: com.example.localization.AppLanguageManager.tr("Assigned", "تفویض شدہ")
   }
 }

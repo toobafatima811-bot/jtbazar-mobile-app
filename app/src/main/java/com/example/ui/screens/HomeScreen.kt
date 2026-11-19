@@ -65,6 +65,9 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ActiveProductCampaign
 import com.example.data.repository.BannerPlacement
 import com.example.data.repository.PromotionCampaignFilter
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
+import com.example.localization.isAppUrdu
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.FriendlyEmptyState
 import com.example.ui.components.FriendlyErrorState
@@ -97,6 +100,7 @@ fun HomeScreen(
   modifier: Modifier = Modifier
 ) {
   val screenContext = LocalContext.current
+  val isUrdu = isAppUrdu()
   val productGridColumns = rememberAdaptiveColumnCount(minCellWidth = 138.dp, horizontalPadding = 32.dp, spacing = 12.dp, maxColumns = 4)
   val products by MarketplaceRepository.products.collectAsState()
   val homePopularRepo by MarketplaceRepository.homePopularProducts.collectAsState()
@@ -275,8 +279,8 @@ fun HomeScreen(
           onVoiceSearch = {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
               putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-              putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-PK")
-              putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak a product name")
+              putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (isUrdu) "ur-PK" else "en-PK")
+              putExtra(RecognizerIntent.EXTRA_PROMPT, AppLanguageManager.tr("Speak a product name", "مصنوعہ کا نام بولیں"))
             }
             runCatching { voiceSearchLauncher.launch(intent) }
           },
@@ -328,7 +332,7 @@ fun HomeScreen(
           ) {
             Icon(Icons.Filled.Storefront, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Browse Trusted Shops")
+            Text(appText("Browse Trusted Shops", "مستند دکانیں دیکھیں"))
           }
         }
       }
@@ -349,13 +353,13 @@ fun HomeScreen(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "Shop by Category",
+              text = appText("Shop by Category", "زمرے کے لحاظ سے خریداری"),
               fontWeight = FontWeight.Bold,
               fontSize = 17.sp,
               color = JTTextPrimary
             )
             Text(
-              text = "Explore All",
+              text = appText("Explore All", "سب دیکھیں"),
               fontWeight = FontWeight.SemiBold,
               fontSize = 13.sp,
               color = JTPurplePrimary,
@@ -370,7 +374,7 @@ fun HomeScreen(
 
           if (homeCategories.isEmpty()) {
             Text(
-              text = "No active collections available",
+              text = appText("No active collections available", "کوئی فعال کلیکشن دستیاب نہیں"),
               color = JTTextSecondary,
               fontSize = 12.sp,
               modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
@@ -450,10 +454,10 @@ fun HomeScreen(
               Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTOrange, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(7.dp))
-                Text("Trusted Vendor Shops", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = JTTextPrimary)
+                Text(appText("Trusted Vendor Shops", "مستند فروخت کنندگان کی دکانیں"), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = JTTextPrimary)
               }
               Text(
-                "View All",
+                appText("View All", "سب دیکھیں"),
                 color = JTPurplePrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -462,7 +466,7 @@ fun HomeScreen(
             }
             if (homeShops.isEmpty()) {
               Text(
-                "Trusted shops will appear here when vendors are approved.",
+                appText("Trusted shops will appear here when vendors are approved.", "فروخت کنندگان کی منظوری کے بعد مستند دکانیں یہاں ظاہر ہوں گی۔"),
                 fontSize = 12.sp,
                 color = JTTextSecondary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -516,7 +520,7 @@ fun HomeScreen(
                         if (shop.isVerified) {
                           Icon(
                             imageVector = Icons.Filled.Verified,
-                            contentDescription = "Verified seller",
+                            contentDescription = appText("Verified seller", "تصدیق شدہ فروخت کنندہ"),
                             tint = Color(0xFF16A34A),
                             modifier = Modifier.size(13.dp)
                           )
@@ -542,7 +546,7 @@ fun HomeScreen(
                           Text("•", fontSize = 10.sp, color = JTTextTertiary)
                         }
                         Text(
-                          "${shop.productCount} products",
+                          appText("${shop.productCount} products", "${shop.productCount} مصنوعات"),
                           fontSize = 10.sp,
                           color = JTTextSecondary,
                           maxLines = 1,
@@ -594,13 +598,13 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
             Text(
-              text = "Search Results",
+              text = appText("Search Results", "تلاش کے نتائج"),
               fontWeight = FontWeight.Bold,
               fontSize = 16.sp,
               color = JTTextPrimary
             )
             TextButton(onClick = { searchQuery = "" }) {
-              Text("Clear", color = JTOrange, fontWeight = FontWeight.SemiBold)
+              Text(appText("Clear", "صاف کریں"), color = JTOrange, fontWeight = FontWeight.SemiBold)
             }
           }
         }
@@ -614,8 +618,8 @@ fun HomeScreen(
           feedState.initialError != null && feedState.items.isEmpty() -> {
             item(key = "search_error") {
               FriendlyErrorState(
-                title = "Search failed",
-                message = feedState.initialError ?: "Products load nahi ho sake. Please try again.",
+                title = appText("Search failed", "تلاش ناکام ہو گئی"),
+                message = feedState.initialError ?: appText("Could not load products. Please try again.", "مصنوعات لوڈ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔"),
                 onRetry = { homePaginator.retry() }
               )
             }
@@ -623,9 +627,9 @@ fun HomeScreen(
           feedState.items.isEmpty() -> {
             item(key = "search_empty") {
               FriendlyEmptyState(
-                title = "No matching products found",
-                message = "Try searching with another product name or browse our categories.",
-                actionLabel = "Clear Search",
+                title = appText("No matching products found", "کوئی مماثل مصنوعات نہیں ملیں"),
+                message = appText("Try searching with another product name or browse our categories.", "کسی اور نام سے تلاش کریں یا ہمارے زمرے دیکھیں۔"),
+                actionLabel = appText("Clear Search", "تلاش صاف کریں"),
                 onAction = { searchQuery = "" }
               )
             }
@@ -685,7 +689,7 @@ fun HomeScreen(
               }
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = "Popular Products",
+                text = appText("Popular Products", "مقبول مصنوعات"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = JTTextPrimary
@@ -699,7 +703,7 @@ fun HomeScreen(
                 modifier = Modifier.defaultMinSize(minHeight = 40.dp).testTag("see_all_popular_button")
               ) {
                 Text(
-                  text = "See All",
+                  text = appText("See All", "سب دیکھیں"),
                   fontSize = 13.sp,
                   fontWeight = FontWeight.Bold,
                   color = JTPurplePrimary
@@ -707,7 +711,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.width(3.dp))
                 Icon(
                   imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                  contentDescription = "See all popular products",
+                  contentDescription = appText("See all popular products", "تمام مقبول مصنوعات دیکھیں"),
                   tint = JTPurplePrimary,
                   modifier = Modifier.size(14.dp)
                 )
@@ -729,9 +733,9 @@ fun HomeScreen(
             }
             popularProducts.isEmpty() -> {
               FriendlyErrorState(
-                title = "Products load nahi ho sake",
-                message = "Please check your internet connection and tap retry.",
-                actionLabel = "Refresh Catalog",
+                title = appText("Could not load products", "مصنوعات لوڈ نہیں ہو سکیں"),
+                message = appText("Please check your internet connection and tap retry.", "براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔"),
+                actionLabel = appText("Refresh Catalog", "کیٹلاگ تازہ کریں"),
                 onRetry = { MarketplaceRepository.refreshLiveCatalog() }
               )
             }
@@ -762,7 +766,7 @@ fun HomeScreen(
                       .heightIn(min = 48.dp)
                       .testTag("see_all_popular_cta_button")
                   ) {
-                    Text("See All Popular Products", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(appText("See All Popular Products", "تمام مقبول مصنوعات دیکھیں"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(6.dp))
                     Icon(
                       imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -798,9 +802,9 @@ fun HomeScreen(
               verticalAlignment = Alignment.CenterVertically
             ) {
               Column(modifier = Modifier.weight(1f)) {
-                Text("NEW ARRIVALS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
-                Text("Fresh additions to the store.", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
-                Text("Recently added live listings.", fontSize = 11.sp, color = JTTextSecondary)
+                Text(appText("NEW ARRIVALS", "نئی آمد"), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = JTOrangeDark)
+                Text(appText("Fresh additions to the store.", "اسٹور میں نئی اشیاء کا اضافہ۔"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+                Text(appText("Recently added live listings.", "حال ہی میں شامل کردہ لائیو مصنوعات۔"), fontSize = 11.sp, color = JTTextSecondary)
               }
               if (hasMoreNewArrivals) {
                 TextButton(
@@ -809,7 +813,7 @@ fun HomeScreen(
                   modifier = Modifier.defaultMinSize(minHeight = 40.dp).testTag("see_all_new_arrivals_button")
                 ) {
                   Text(
-                    "See All",
+                    appText("See All", "سب دیکھیں"),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = JTOrangeDark
@@ -817,7 +821,7 @@ fun HomeScreen(
                   Spacer(modifier = Modifier.width(3.dp))
                   Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "See all new arrivals",
+                    contentDescription = appText("See all new arrivals", "تمام نئی اشیاء دیکھیں"),
                     tint = JTOrangeDark,
                     modifier = Modifier.size(14.dp)
                   )
@@ -850,7 +854,7 @@ fun HomeScreen(
                       .heightIn(min = 48.dp)
                       .testTag("see_all_new_arrivals_cta_button")
                   ) {
-                    Text("See All New Arrivals", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(appText("See All New Arrivals", "تمام نئی اشیاء دیکھیں"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(6.dp))
                     Icon(
                       imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -912,8 +916,8 @@ fun HomeScreen(
               }
               Spacer(modifier = Modifier.width(12.dp))
               Column(modifier = Modifier.weight(1f)) {
-                Text("Budget Shopping Corner", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF92400E))
-                Text("Explore products under Rs. 500, 1,000 & 2,000", fontSize = 11.sp, color = Color(0xFFB45309))
+                Text(appText("Budget Shopping Corner", "بجٹ شاپنگ کارنر"), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF92400E))
+                Text(appText("Explore products under Rs. 500, 1,000 & 2,000", "500، 1,000 اور 2,000 روپے سے کم مصنوعات دیکھیں"), fontSize = 11.sp, color = Color(0xFFB45309))
               }
               Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFF92400E), modifier = Modifier.size(16.dp))
             }
@@ -1065,7 +1069,7 @@ fun SearchInputBar(
     ) {
       Icon(
         imageVector = Icons.Filled.Search,
-        contentDescription = "Search",
+        contentDescription = appText("Search", "تلاش"),
         tint = JTPurplePrimary,
         modifier = Modifier.size(20.dp)
       )
@@ -1073,7 +1077,7 @@ fun SearchInputBar(
       Box(modifier = Modifier.weight(1f)) {
         if (query.isEmpty()) {
           Text(
-            text = "Search products, brands and sho...",
+            text = appText("Search products, brands and shops...", "مصنوعات، برانڈز اور دکانیں تلاش کریں..."),
             color = JTTextSecondary,
             fontSize = 13.sp,
             maxLines = 1,
@@ -1101,7 +1105,7 @@ fun SearchInputBar(
       ) {
         Icon(
           imageVector = Icons.Filled.Mic,
-          contentDescription = "Voice Search",
+          contentDescription = appText("Voice Search", "آواز سے تلاش"),
           tint = JTTextSecondary,
           modifier = Modifier.size(19.dp)
         )
@@ -1147,13 +1151,13 @@ fun InstantDeliveryBanner(
 
       Column(modifier = Modifier.weight(1f)) {
         Text(
-          text = "Instant delivery to $area",
+          text = appText("Instant delivery to $area", "$area میں فوری ڈلیوری"),
           fontSize = 12.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
         )
         Text(
-          text = "Centralized delivery by JTBazar",
+          text = appText("Centralized delivery by JTBazar", "جے ٹی بازار کی مرکزی ڈلیوری"),
           fontSize = 10.sp,
           color = JTTextSecondary
         )
@@ -1164,7 +1168,7 @@ fun InstantDeliveryBanner(
         color = Color.White
       ) {
         Text(
-          text = "25 Mins",
+          text = appText("25 Mins", "25 منٹ"),
           fontSize = 11.sp,
           fontWeight = FontWeight.Bold,
           color = JTOrangeDark,
@@ -1237,7 +1241,7 @@ fun GrandBachatPromoCard(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-              text = "GRAND BACHAT OFFER",
+              text = appText("SUPER SAVINGS OFFER", "عظیم بچت کی پیشکش"),
               fontSize = 10.sp,
               fontWeight = FontWeight.ExtraBold,
               color = Color.White
@@ -1247,7 +1251,7 @@ fun GrandBachatPromoCard(
 
         Column {
           Text(
-            text = "JTBazar Super Savings\nMela",
+            text = appText("JTBazar Super Savings\nFestival", "جے ٹی بازار عظیم بچت\nمیلہ"),
             fontSize = 18.sp,
             fontWeight = FontWeight.ExtraBold,
             color = Color.White,
@@ -1255,7 +1259,7 @@ fun GrandBachatPromoCard(
           )
           Spacer(modifier = Modifier.height(4.dp))
           Text(
-            text = "Up to 40% OFF on fresh groceries, spices & home essentials",
+            text = appText("Up to 40% OFF on fresh groceries, spices & home essentials", "تازہ راشن، مصالحہ جات اور گھریلو ضروریات پر 40٪ تک رعایت"),
             fontSize = 11.sp,
             color = Color.White.copy(alpha = 0.9f),
             lineHeight = 14.sp
@@ -1275,7 +1279,7 @@ fun GrandBachatPromoCard(
             .testTag("shop_now_promo_button")
         ) {
           Text(
-            text = "Shop Now",
+            text = appText("Shop Now", "ابھی خریدیں"),
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold
           )
@@ -1411,7 +1415,7 @@ fun ProductCard(
           Box(contentAlignment = Alignment.Center) {
             Icon(
               imageVector = if (product.isWishlisted) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-              contentDescription = "Wishlist",
+              contentDescription = appText("Wishlist", "پسندیدہ"),
               tint = if (product.isWishlisted) JTRed else JTTextSecondary,
               modifier = Modifier.size(16.dp)
             )
@@ -1561,7 +1565,7 @@ fun ProductCard(
               modifier = Modifier.testTag("out_of_stock_${product.id}")
             ) {
               Text(
-                text = "Out of Stock",
+                text = appText("Out of Stock", "اسٹاک ختم"),
                 color = Color(0xFFBE123C),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
@@ -1587,13 +1591,13 @@ fun ProductCard(
               ) {
                 Icon(
                   imageVector = if (isInCart) Icons.Filled.Check else if (hasVariants) Icons.Filled.Tune else Icons.Filled.Add,
-                  contentDescription = if (isInCart) "Added to cart" else if (hasVariants) "Choose options" else "Add to cart",
+                  contentDescription = if (isInCart) appText("Added to cart", "ٹوکری میں شامل") else if (hasVariants) appText("Choose options", "اختیارات منتخب کریں") else appText("Add to cart", "ٹوکری میں ڈالیں"),
                   tint = Color.White,
                   modifier = Modifier.size(17.dp)
                 )
                 if (hasVariants) {
                   Spacer(Modifier.width(3.dp))
-                  Text("Choose", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                  Text(appText("Choose", "منتخب کریں"), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                 }
               }
             }
@@ -1614,14 +1618,17 @@ fun SocialMediaSection(modifier: Modifier = Modifier) {
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     Text(
-      text = "Connect with JTBazar",
+      text = appText("Connect with JTBazar", "جے ٹی بازار سے جڑیں"),
       fontSize = 14.sp,
       fontWeight = FontWeight.Bold,
       color = JTTextPrimary
     )
     Spacer(modifier = Modifier.height(4.dp))
     Text(
-      text = "Follow our official channels for live updates, vendor stories & deals",
+      text = appText(
+        "Follow our official channels for live updates, vendor stories & deals",
+        "لائیو اپ ڈیٹس، فروخت کنندگان کی کہانیوں اور ڈیلز کے لیے ہمارے آفیشل چینلز فالو کریں"
+      ),
       fontSize = 11.sp,
       color = JTTextSecondary,
       textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1689,7 +1696,7 @@ fun SocialMediaSection(modifier: Modifier = Modifier) {
 
     Spacer(modifier = Modifier.height(14.dp))
     Text(
-      text = "© 2026 JTBazar • Authentic Marketplace Pakistan",
+      text = appText("© 2026 JTBazar • Authentic Marketplace Pakistan", "© 2026 جے ٹی بازار • مستند پاکستانی مارکیٹ پلیس"),
       fontSize = 10.sp,
       color = JTTextSecondary.copy(alpha = 0.7f)
     )
@@ -1710,10 +1717,10 @@ private fun ProductCampaignSection(
   val campaign = activeCampaign.campaign
   val title = campaign.displayTitle.ifBlank { campaign.name }
   val dealLabel = when (campaign.campaignType.lowercase()) {
-    "bogo" -> "Buy ${campaign.buyQuantity}, Get ${campaign.getQuantity}"
-    "bundle" -> "Bundle price deal"
-    "flash_sale", "seasonal", "custom" -> "${campaign.discountPercent.toInt()}% off"
-    else -> "Special offer"
+    "bogo" -> appText("Buy ${campaign.buyQuantity}, Get ${campaign.getQuantity}", "${campaign.buyQuantity} خریدیں، ${campaign.getQuantity} مفت پائیں")
+    "bundle" -> appText("Bundle price deal", "بنڈل قیمت ڈیل")
+    "flash_sale", "seasonal", "custom" -> appText("${campaign.discountPercent.toInt()}% off", "${campaign.discountPercent.toInt()}٪ رعایت")
+    else -> appText("Special offer", "خصوصی پیشکش")
   }
   val campaignTypeLabel = campaign.campaignType.replace('_', ' ').uppercase()
   val isExpiredInitially = remember(campaign.id, campaign.endsAt) {
@@ -1723,7 +1730,7 @@ private fun ProductCampaignSection(
   if (isExpiredInitially) return
 
   val description = campaign.description?.takeIf { it.isNotBlank() }
-    ?: "Limited-time deal on selected products. Shop now before the offer ends!"
+    ?: appText("Limited-time deal on selected products. Shop now before the offer ends!", "منتخب مصنوعات پر محدود وقت کی ڈیل۔ پیشکش ختم ہونے سے پہلے خریداری کریں!")
   val dealColumns = productGridColumns.coerceAtLeast(2)
   val featuredDealProducts = remember(activeCampaign.products) { activeCampaign.products.take(6) }
   val hasMoreDeals = activeCampaign.products.size > 6 || activeCampaign.campaign.productIds.size > 6
@@ -1762,8 +1769,8 @@ private fun ProductCampaignSection(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-          Text("HANDPICKED FOR YOU", color = Color(0xFFC45B22), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
-          Text("Shop this deal", color = JTTextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+          Text(appText("HANDPICKED FOR YOU", "آپ کے لیے خاص انتخاب"), color = Color(0xFFC45B22), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+          Text(appText("Shop this deal", "اس ڈیل سے خریداری کریں"), color = JTTextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         if (hasMoreDeals) {
           TextButton(
@@ -1772,7 +1779,7 @@ private fun ProductCampaignSection(
             modifier = Modifier.defaultMinSize(minHeight = 40.dp).testTag("see_all_deals_${campaign.id}")
           ) {
             Text(
-              text = "See All Deals",
+              text = appText("See All Deals", "تمام ڈیلز دیکھیں"),
               color = Color(0xFFC45B22),
               fontSize = 13.sp,
               fontWeight = FontWeight.Bold
@@ -1780,13 +1787,13 @@ private fun ProductCampaignSection(
             Spacer(modifier = Modifier.width(3.dp))
             Icon(
               imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-              contentDescription = "See all deals",
+              contentDescription = appText("See all deals", "تمام ڈیلز دیکھیں"),
               tint = Color(0xFFC45B22),
               modifier = Modifier.size(14.dp)
             )
           }
         } else if (!isCompact) {
-          Text("Limited-time prices · While stocks last", color = JTTextSecondary, fontSize = 10.sp)
+          Text(appText("Limited-time prices · While stocks last", "محدود وقت کی قیمتیں · اسٹاک دستیاب رہنے تک"), color = JTTextSecondary, fontSize = 10.sp)
         }
       }
       chunkedDealRows.forEach { rowProducts ->
@@ -1823,7 +1830,7 @@ private fun ProductCampaignSection(
             .heightIn(min = 48.dp)
             .testTag("see_all_deals_button_${campaign.id}")
         ) {
-          Text("See All Deals ($totalDealCount items)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+          Text(appText("See All Deals ($totalDealCount items)", "تمام ڈیلز دیکھیں ($totalDealCount اشیاء)"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
           Spacer(modifier = Modifier.width(6.dp))
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -1843,7 +1850,7 @@ private fun CampaignBannerCopy(title: String, description: String, dealLabel: St
       Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFFFD16B)))
       Text(campaignTypeLabel, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.2.sp)
       Surface(color = Color.White.copy(alpha = 0.15f), shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.28f))) {
-        Text("SPECIAL OFFER", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
+        Text(appText("SPECIAL OFFER", "خصوصی پیشکش"), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
       }
     }
     Text(title, color = Color.White, fontSize = 25.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -1851,7 +1858,11 @@ private fun CampaignBannerCopy(title: String, description: String, dealLabel: St
     Spacer(Modifier.height(2.dp))
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       Text(dealLabel, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-      Text("$productCount deal item${if (productCount == 1) "" else "s"} selected", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
+      Text(
+        appText("$productCount deal item${if (productCount == 1) "" else "s"} selected", "$productCount ڈیل اشیاء منتخب"),
+        color = Color.White.copy(alpha = 0.75f),
+        fontSize = 10.sp
+      )
     }
   }
 }
@@ -1890,9 +1901,9 @@ private fun CampaignCountdownPanel(remainingSeconds: Long, modifier: Modifier = 
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(9.dp)
   ) {
-    Text("OFFER ENDS IN", color = Color.White.copy(alpha = 0.86f), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+    Text(appText("OFFER ENDS IN", "پیشکش ختم ہونے میں"), color = Color.White.copy(alpha = 0.86f), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
     if (remainingSeconds < 0) {
-      Text("Limited-time offer", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+      Text(appText("Limited-time offer", "محدود وقت کی پیشکش"), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
       return@Column
     }
     val days = remainingSeconds / 86400L
@@ -1900,12 +1911,17 @@ private fun CampaignCountdownPanel(remainingSeconds: Long, modifier: Modifier = 
     val minutes = if (remainingSeconds < 0) 0L else (remainingSeconds % 3600L) / 60L
     val seconds = if (remainingSeconds < 0) 0L else remainingSeconds % 60L
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
-      CountdownTimeUnit(days.toString().padStart(2, '0'), "DAYS", Modifier.weight(1f))
-      CountdownTimeUnit(hours.toString().padStart(2, '0'), "HRS", Modifier.weight(1f))
-      CountdownTimeUnit(minutes.toString().padStart(2, '0'), "MIN", Modifier.weight(1f))
-      CountdownTimeUnit(seconds.toString().padStart(2, '0'), "SEC", Modifier.weight(1f))
+      CountdownTimeUnit(days.toString().padStart(2, '0'), appText("DAYS", "دن"), Modifier.weight(1f))
+      CountdownTimeUnit(hours.toString().padStart(2, '0'), appText("HRS", "گھنٹے"), Modifier.weight(1f))
+      CountdownTimeUnit(minutes.toString().padStart(2, '0'), appText("MIN", "منٹ"), Modifier.weight(1f))
+      CountdownTimeUnit(seconds.toString().padStart(2, '0'), appText("SEC", "سیکنڈ"), Modifier.weight(1f))
     }
-    Text(if (remainingSeconds < 0) "Limited-time offer" else "Don't miss your deal", color = Color.White.copy(alpha = 0.82f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+    Text(
+      if (remainingSeconds < 0) appText("Limited-time offer", "محدود وقت کی پیشکش") else appText("Don't miss your deal", "یہ موقع ہاتھ سے نہ جانے دیں"),
+      color = Color.White.copy(alpha = 0.82f),
+      fontSize = 9.sp,
+      fontWeight = FontWeight.SemiBold
+    )
   }
 }
 

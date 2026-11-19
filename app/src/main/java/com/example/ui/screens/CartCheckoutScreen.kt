@@ -59,6 +59,8 @@ import com.example.ui.theme.*
 import com.example.location.AddressReverseGeocoder
 import com.example.location.LocationFetchResult
 import com.example.location.LocationResolver
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import kotlinx.coroutines.launch
 
 enum class CartCheckoutStage {
@@ -170,12 +172,16 @@ fun CartCheckoutScreen(
       if (resolved.city.isNotBlank()) city = resolved.city
       Toast.makeText(
         context,
-        if (resolved.street.isNotBlank()) "Location and street detected. Please verify your house number."
-        else "Location captured. Please enter your street and house number.",
+        if (resolved.street.isNotBlank()) AppLanguageManager.tr("Location and street detected. Please verify your house number.", "مقام اور گلی کا پتہ مل گیا۔ براہ کرم اپنا گھر نمبر تصدیق کریں۔")
+        else AppLanguageManager.tr("Location captured. Please enter your street and house number.", "مقام محفوظ ہو گیا۔ براہ کرم اپنی گلی اور گھر نمبر درج کریں۔"),
         Toast.LENGTH_LONG
       ).show()
     } else {
-      Toast.makeText(context, "Location captured. Please enter your street and house number.", Toast.LENGTH_LONG).show()
+      Toast.makeText(
+        context,
+        AppLanguageManager.tr("Location captured. Please enter your street and house number.", "مقام محفوظ ہو گیا۔ براہ کرم اپنی گلی اور گھر نمبر درج کریں۔"),
+        Toast.LENGTH_LONG
+      ).show()
     }
   }
 
@@ -188,7 +194,11 @@ fun CartCheckoutScreen(
       startCheckoutLocationFetch()
     } else {
       isLocatingPin = false
-      Toast.makeText(context, "Turn on device location / GPS to confirm your delivery pin.", Toast.LENGTH_LONG).show()
+      Toast.makeText(
+        context,
+        AppLanguageManager.tr("Turn on device location / GPS to confirm your delivery pin.", "ڈیلیوری پن کی تصدیق کے لیے ڈیوائس لوکیشن / GPS آن کریں۔"),
+        Toast.LENGTH_LONG
+      ).show()
     }
   }
 
@@ -206,7 +216,11 @@ fun CartCheckoutScreen(
               locationSettingsLauncher.launch(IntentSenderRequest.Builder(result.exception.resolution).build())
             }.onFailure {
               isLocatingPin = false
-              Toast.makeText(context, "Turn on device location / GPS and try again.", Toast.LENGTH_LONG).show()
+              Toast.makeText(
+                context,
+                AppLanguageManager.tr("Turn on device location / GPS and try again.", "ڈیوائس لوکیشن / GPS آن کر کے دوبارہ کوشش کریں۔"),
+                Toast.LENGTH_LONG
+              ).show()
             }
           }
           is LocationFetchResult.Failure -> {
@@ -216,7 +230,11 @@ fun CartCheckoutScreen(
         }
       } catch (_: Exception) {
         isLocatingPin = false
-        Toast.makeText(context, "Unable to get your current location. Please try again.", Toast.LENGTH_LONG).show()
+        Toast.makeText(
+          context,
+          AppLanguageManager.tr("Unable to get your current location. Please try again.", "آپ کا موجودہ مقام حاصل نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"),
+          Toast.LENGTH_LONG
+        ).show()
       }
     }
   }
@@ -228,7 +246,11 @@ fun CartCheckoutScreen(
     if (granted) {
       startCheckoutLocationFetch()
     } else {
-      Toast.makeText(context, "Location permission is required to confirm your delivery pin.", Toast.LENGTH_SHORT).show()
+      Toast.makeText(
+        context,
+        AppLanguageManager.tr("Location permission is required to confirm your delivery pin.", "ڈیلیوری پن کی تصدیق کے لیے لوکیشن کی اجازت درکار ہے۔"),
+        Toast.LENGTH_SHORT
+      ).show()
     }
   }
 
@@ -252,7 +274,7 @@ fun CartCheckoutScreen(
   fun applyCoupon() {
     val clean = couponCodeInput.trim()
     if (clean.isBlank()) {
-      couponMessage = "Please enter a coupon code."
+      couponMessage = AppLanguageManager.tr("Please enter a coupon code.", "براہ کرم کوپن کوڈ درج کریں۔")
       couponIsError = true
       return
     }
@@ -262,10 +284,11 @@ fun CartCheckoutScreen(
     if (promo != null && (promo.discountPercent ?: 0.0) > 0.0) {
       appliedCouponCode = promo.couponCode
       appliedDiscountPercent = promo.discountPercent ?: 0.0
-      couponMessage = "Coupon applied! ${(promo.discountPercent ?: 0.0).toInt()}% off discount."
+      val pct = (promo.discountPercent ?: 0.0).toInt()
+      couponMessage = AppLanguageManager.tr("Coupon applied! $pct% off discount.", "کوپن لاگو ہو گیا! $pct% رعایت۔")
       couponIsError = false
     } else {
-      couponMessage = "Invalid or expired coupon code."
+      couponMessage = AppLanguageManager.tr("Invalid or expired coupon code.", "غلط یا میعاد ختم کوپن کوڈ۔")
       couponIsError = true
     }
   }
@@ -275,9 +298,9 @@ fun CartCheckoutScreen(
     topBar = {
       JTBazarTopBar(
         title = when (stage) {
-          CartCheckoutStage.CART -> "Shopping Cart"
-          CartCheckoutStage.CHECKOUT -> "Checkout & Delivery"
-          CartCheckoutStage.CONFIRMATION -> "Order Confirmation"
+          CartCheckoutStage.CART -> appText("Shopping Cart", "خریداری کارٹ")
+          CartCheckoutStage.CHECKOUT -> appText("Checkout & Delivery", "چیک آؤٹ اور ڈیلیوری")
+          CartCheckoutStage.CONFIRMATION -> appText("Order Confirmation", "آرڈر کی تصدیق")
         },
         showBack = stage != CartCheckoutStage.CONFIRMATION,
         onBackClick = {
@@ -309,7 +332,7 @@ fun CartCheckoutScreen(
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
             Column {
-              Text("TOTAL (INCL. DELIVERY)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = JTTextSecondary)
+              Text(appText("TOTAL (INCL. DELIVERY)", "کل رقم (ڈیلیوری سمیت)"), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = JTTextSecondary)
               Text(
                 text = "PKR ${String.format("%,d", grandTotal)}",
                 fontWeight = FontWeight.ExtraBold,
@@ -323,7 +346,7 @@ fun CartCheckoutScreen(
               colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
               modifier = Modifier.height(44.dp).testTag("cart_proceed_checkout_btn")
             ) {
-              Text("Proceed to Checkout", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              Text(appText("Proceed to Checkout", "چیک آؤٹ پر جائیں"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
               Spacer(modifier = Modifier.width(4.dp))
               Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
             }
@@ -424,23 +447,23 @@ fun CartCheckoutScreen(
             onPlaceOrder = {
               orderErrorMessage = null
               if (recipientName.isBlank() || recipientPhone.isBlank() || city.isBlank() || streetAddress.isBlank()) {
-                Toast.makeText(context, "Please complete all required delivery fields.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, AppLanguageManager.tr("Please complete all required delivery fields.", "براہ کرم تمام ضروری ڈیلیوری خانے مکمل کریں۔"), Toast.LENGTH_SHORT).show()
                 return@CheckoutView
               }
               if (streetAddress.trim().length < 3) {
-                Toast.makeText(context, "Please enter a complete street address (at least 3 characters).", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, AppLanguageManager.tr("Please enter a complete street address (at least 3 characters).", "براہ کرم مکمل گلی کا پتہ درج کریں (کم از کم 3 حروف)۔"), Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
               if (!com.example.data.supabase.SupabaseApiService.isValidPakistaniMobile(recipientPhone)) {
-                Toast.makeText(context, "Enter a valid Pakistani mobile number like 03001234567 or +923001234567.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, AppLanguageManager.tr("Enter a valid Pakistani mobile number like 03001234567 or +923001234567.", "درست پاکستانی موبائل نمبر درج کریں جیسے 03001234567 یا +923001234567۔"), Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
               if (customerEmail.isNotBlank() && (customerEmail.trim().length > 254 || !android.util.Patterns.EMAIL_ADDRESS.matcher(customerEmail.trim()).matches())) {
-                Toast.makeText(context, "Enter a valid email address.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, AppLanguageManager.tr("Enter a valid email address.", "درست ای میل پتہ درج کریں۔"), Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
               if (!codEnabled) {
-                Toast.makeText(context, "Cash on delivery is currently unavailable.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, AppLanguageManager.tr("Cash on delivery is currently unavailable.", "کیش آن ڈیلیوری فی الحال دستیاب نہیں ہے۔"), Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
               val unavailableCartItem = cartItems.firstOrNull { item ->
@@ -450,11 +473,18 @@ fun CartCheckoutScreen(
                   (!item.variantId.isNullOrBlank() && item.product.variantAvailability[item.variantId] != true)
               }
               if (unavailableCartItem != null) {
-                Toast.makeText(context, unavailableCartItem.product.title + " stock or selected option could not be verified. Refresh the catalog or remove it from your cart.", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                  context,
+                  AppLanguageManager.tr(
+                    "${unavailableCartItem.product.title} stock or selected option could not be verified. Refresh the catalog or remove it from your cart.",
+                    "${unavailableCartItem.product.title} کا اسٹاک یا منتخب کردہ آپشن تصدیق نہیں ہو سکا۔ کیٹلاگ ریفریش کریں یا اسے کارٹ سے ہٹائیں۔"
+                  ),
+                  Toast.LENGTH_LONG
+                ).show()
                 return@CheckoutView
               }
               if (deliveryLat == null || deliveryLng == null || !isPinConfirmed) {
-                Toast.makeText(context, "Add your current location pin to confirm the 5 km food delivery area.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, AppLanguageManager.tr("Add your current location pin to confirm the 5 km food delivery area.", "5 کلومیٹر فوڈ ڈیلیوری ایریا کی تصدیق کے لیے اپنا موجودہ لوکیشن پن شامل کریں۔"), Toast.LENGTH_LONG).show()
                 return@CheckoutView
               }
 
@@ -528,9 +558,20 @@ fun CartCheckoutScreen(
 
 private fun readableOrderError(raw: String): String {
   val normalized = raw.replace("\\/", "/")
-  if (normalized.contains("currently closed", ignoreCase = true) ||
-      normalized.contains("not accepting new customer orders", ignoreCase = true)) {
-    return "JTBazar is currently closed and is not accepting new orders. Please try again during store opening hours."
+  val lower = normalized.lowercase()
+  if (AppErrorMapper.isVendorShopClosedMessage(lower)) {
+    return AppLanguageManager.tr(
+      "This vendor shop is currently closed and is not accepting orders right now. Please check the shop's opening hours and try again later.",
+      "یہ دکان اس وقت بند ہے اور فی الحال آرڈر قبول نہیں کر رہی۔ براہ کرم دکان کے کھلنے کے اوقات دیکھیں اور بعد میں دوبارہ کوشش کریں۔"
+    )
+  }
+  if (lower.contains("jtbazar is currently closed") ||
+      lower.contains("not accepting new customer orders") ||
+      lower.contains("currently closed")) {
+    return AppLanguageManager.tr(
+      "JTBazar is currently closed and is not accepting new orders. Please try again during store opening hours.",
+      "جے ٹی بازار اس وقت بند ہے اور نئے آرڈرز قبول نہیں کر رہا۔ براہ کرم اسٹور کے کھلنے کے اوقات میں دوبارہ کوشش کریں۔"
+    )
   }
   return AppErrorMapper.sanitizeMessage(normalized, ErrorContext.ORDER_PLACE)
 }
@@ -572,10 +613,13 @@ private fun CartView(
         }
       }
       Spacer(modifier = Modifier.height(16.dp))
-      Text("Your Cart is Empty", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+      Text(appText("Your Cart is Empty", "آپ کا کارٹ خالی ہے"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
       Spacer(modifier = Modifier.height(6.dp))
       Text(
-        text = "Explore handcrafted Multani pottery, Pure Honey, and Fresh Kitchen essentials.",
+        text = appText(
+          "Explore handcrafted Multani pottery, Pure Honey, and Fresh Kitchen essentials.",
+          "ہاتھ سے بنے ملتانی برتن، خالص شہد اور تازہ کچن ضروریات دیکھیں۔"
+        ),
         fontSize = 13.sp,
         color = JTTextSecondary,
         textAlign = TextAlign.Center
@@ -586,7 +630,7 @@ private fun CartView(
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White)
       ) {
-        Text("Start Shopping", fontWeight = FontWeight.Bold)
+        Text(appText("Start Shopping", "خریداری شروع کریں"), fontWeight = FontWeight.Bold)
       }
     }
   } else {
@@ -601,11 +645,16 @@ private fun CartView(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Text("${items.size} item(s) in cart", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+          Text(
+            appText("${items.size} item(s) in cart", "کارٹ میں ${items.size} آئٹم"),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = JTTextPrimary
+          )
           TextButton(onClick = onClearCart, modifier = Modifier.testTag("clear_cart_btn")) {
             Icon(Icons.Outlined.Delete, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Clear Cart", fontSize = 12.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+            Text(appText("Clear Cart", "کارٹ خالی کریں"), fontSize = 12.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
           }
         }
       }
@@ -702,7 +751,7 @@ private fun CartView(
                   onClick = { MarketplaceRepository.removeFromCart(item.id) },
                   modifier = Modifier.size(28.dp).testTag("cart_item_delete_${item.id}")
                 ) {
-                  Icon(Icons.Outlined.Delete, contentDescription = "Remove", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                  Icon(Icons.Outlined.Delete, contentDescription = appText("Remove", "ہٹائیں"), tint = Color.Gray, modifier = Modifier.size(18.dp))
                 }
               }
             }
@@ -719,7 +768,7 @@ private fun CartView(
           modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         ) {
           Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Have a Promo / Coupon Code?", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+            Text(appText("Have a Promo / Coupon Code?", "کیا آپ کے پاس پرومو / کوپن کوڈ ہے؟"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -728,7 +777,7 @@ private fun CartView(
               OutlinedTextField(
                 value = couponCodeInput,
                 onValueChange = onCouponCodeChange,
-                placeholder = { Text("e.g. JTSALE", fontSize = 12.sp) },
+                placeholder = { Text(appText("e.g. JTSALE", "مثلاً JTSALE"), fontSize = 12.sp) },
                 singleLine = true,
                 modifier = Modifier.weight(1f).height(48.dp)
               )
@@ -738,7 +787,7 @@ private fun CartView(
                 colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
                 modifier = Modifier.height(48.dp)
               ) {
-                Text("Apply", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(appText("Apply", "لاگو کریں"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
               }
             }
             if (!couponMessage.isNullOrBlank()) {
@@ -761,21 +810,21 @@ private fun CartView(
           modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         ) {
           Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Order Summary", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTTextPrimary)
+            Text(appText("Order Summary", "آرڈر کا خلاصہ"), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTTextPrimary)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-              Text("Subtotal", fontSize = 13.sp, color = JTTextSecondary)
+              Text(appText("Subtotal", "ذیلی کل"), fontSize = 13.sp, color = JTTextSecondary)
               Text("PKR ${String.format("%,d", subtotal)}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
             }
             if (discountAmount > 0) {
               Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Coupon Discount", fontSize = 13.sp, color = Color(0xFF03543F), fontWeight = FontWeight.SemiBold)
+                Text(appText("Coupon Discount", "کوپن رعایت"), fontSize = 13.sp, color = Color(0xFF03543F), fontWeight = FontWeight.SemiBold)
                 Text("-PKR ${String.format("%,d", discountAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03543F))
               }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-              Text("Delivery Charges", fontSize = 13.sp, color = JTTextSecondary)
+              Text(appText("Delivery Charges", "ڈیلیوری چارجز"), fontSize = 13.sp, color = JTTextSecondary)
               Text(
-                if (deliveryFee == 0) "Free" else "PKR ${String.format("%,d", deliveryFee)}",
+                if (deliveryFee == 0) appText("Free", "مفت") else "PKR ${String.format("%,d", deliveryFee)}",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (deliveryFee == 0) Color(0xFF03543F) else JTTextPrimary
@@ -783,7 +832,7 @@ private fun CartView(
             }
             HorizontalDivider(color = Color.LightGray)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-              Text("Estimated Total", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+              Text(appText("Estimated Total", "تخمینی کل"), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
               Text("PKR ${String.format("%,d", grandTotal)}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = JTPurplePrimary)
             }
           }
@@ -862,7 +911,7 @@ private fun CheckoutView(
         ) {
           Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = Color(0xFFB42318))
           Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Order could not be placed", fontWeight = FontWeight.Bold, color = Color(0xFF912018))
+            Text(appText("Order could not be placed", "آرڈر مکمل نہیں ہو سکا"), fontWeight = FontWeight.Bold, color = Color(0xFF912018))
             Text(orderErrorMessage, color = Color(0xFF7A271A), fontSize = 13.sp)
           }
         }
@@ -880,7 +929,7 @@ private fun CheckoutView(
       )
     }
 
-    Text("Delivery Details", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
+    Text(appText("Delivery Details", "ڈیلیوری کی تفصیلات"), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
 
     // Keep the save-address choice prominent near the start of checkout.
     Card(
@@ -900,10 +949,15 @@ private fun CheckoutView(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-          Text("Save this address for next time", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+          Text(appText("Save this address for next time", "یہ پتہ آئندہ کے لیے محفوظ کریں"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
           Text(
-            if (SupabaseClient.isAuthenticated) "This address will be added to your saved addresses when you place the order."
-            else "Sign in to your JTBazar account to save this address for future orders.",
+            if (SupabaseClient.isAuthenticated) appText(
+              "This address will be added to your saved addresses when you place the order.",
+              "آرڈر دینے پر یہ پتہ آپ کے محفوظ کردہ پتوں میں شامل کر دیا جائے گا۔"
+            ) else appText(
+              "Sign in to your JTBazar account to save this address for future orders.",
+              "مستقبل کے آرڈرز کے لیے یہ پتہ محفوظ کرنے کے واسطے اپنے جے ٹی بازار اکاؤنٹ میں سائن ان کریں۔"
+            ),
             fontSize = 11.sp,
             color = JTTextSecondary
           )
@@ -915,7 +969,7 @@ private fun CheckoutView(
     OutlinedTextField(
       value = recipientName,
       onValueChange = onRecipientNameChange,
-      label = { Text("Full Name *") },
+      label = { Text(appText("Full Name *", "پورا نام *")) },
       singleLine = true,
       modifier = Modifier.fillMaxWidth().testTag("checkout_name_input")
     )
@@ -923,7 +977,7 @@ private fun CheckoutView(
     OutlinedTextField(
       value = recipientPhone,
       onValueChange = onRecipientPhoneChange,
-      label = { Text("Mobile Number (for COD verification) *") },
+      label = { Text(appText("Mobile Number (for COD verification) *", "موبائل نمبر (COD تصدیق کے لیے) *")) },
       placeholder = { Text("0300 1234567") },
       keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
       singleLine = true,
@@ -933,8 +987,8 @@ private fun CheckoutView(
     OutlinedTextField(
       value = city,
       onValueChange = onCityChange,
-      label = { Text("City *") },
-      placeholder = { Text("e.g. Lahore, Karachi, Islamabad") },
+      label = { Text(appText("City *", "شہر *")) },
+      placeholder = { Text(appText("e.g. Lahore, Karachi, Islamabad", "مثلاً لاہور، کراچی، اسلام آباد")) },
       singleLine = true,
       modifier = Modifier.fillMaxWidth().testTag("checkout_city_input")
     )
@@ -942,8 +996,8 @@ private fun CheckoutView(
     OutlinedTextField(
       value = streetAddress,
       onValueChange = onStreetAddressChange,
-      label = { Text("Full Street Address *") },
-      placeholder = { Text("House / Flat #, Street #, Building") },
+      label = { Text(appText("Full Street Address *", "مکمل گلی کا پتہ *")) },
+      placeholder = { Text(appText("House / Flat #, Street #, Building", "گھر / فلیٹ نمبر، گلی نمبر، عمارت")) },
       singleLine = true,
       modifier = Modifier.fillMaxWidth().testTag("checkout_address_input")
     )
@@ -951,8 +1005,8 @@ private fun CheckoutView(
     OutlinedTextField(
       value = areaLocality,
       onValueChange = onAreaLocalityChange,
-      label = { Text("Area / Locality / Landmark") },
-      placeholder = { Text("e.g. Gulberg III, DHA Phase 5") },
+      label = { Text(appText("Area / Locality / Landmark", "علاقہ / نشانی")) },
+      placeholder = { Text(appText("e.g. Gulberg III, DHA Phase 5", "مثلاً گلبرگ، ڈی ایچ اے")) },
       singleLine = true,
       modifier = Modifier.fillMaxWidth().testTag("checkout_area_input")
     )
@@ -960,7 +1014,7 @@ private fun CheckoutView(
     OutlinedTextField(
       value = customerEmail,
       onValueChange = onCustomerEmailChange,
-      label = { Text("Email Address (for order receipt)") },
+      label = { Text(appText("Email Address (for order receipt)", "ای میل پتہ (آرڈر رسید کے لیے)")) },
       keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
       singleLine = true,
       modifier = Modifier.fillMaxWidth().testTag("checkout_email_input")
@@ -969,8 +1023,8 @@ private fun CheckoutView(
     OutlinedTextField(
       value = deliveryInstructions,
       onValueChange = onDeliveryInstructionsChange,
-      label = { Text("Delivery Instructions (Optional)") },
-      placeholder = { Text("e.g. Leave parcel at security gate, call on arrival") },
+      label = { Text(appText("Delivery Instructions (Optional)", "ڈیلیوری ہدایات (اختیاری)")) },
+      placeholder = { Text(appText("e.g. Leave parcel at security gate, call on arrival", "مثلاً سیکیورٹی گیٹ پر پارسل رکھیں، پہنچنے پر کال کریں")) },
       singleLine = true,
       modifier = Modifier.fillMaxWidth().testTag("checkout_instructions_input")
     )
@@ -997,7 +1051,8 @@ private fun CheckoutView(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = if (isPinConfirmed) "Delivery Location Confirmed" else "Delivery Location Pin",
+              text = if (isPinConfirmed) appText("Delivery Location Confirmed", "ڈیلیوری مقام کی تصدیق ہو گئی")
+              else appText("Delivery Location Pin", "ڈیلیوری لوکیشن پن"),
               fontWeight = FontWeight.Bold,
               fontSize = 13.sp,
               color = if (isPinConfirmed) Color(0xFF03543F) else JTTextPrimary
@@ -1006,7 +1061,7 @@ private fun CheckoutView(
 
           if (isPinConfirmed) {
             Text(
-              text = "Change Pin",
+              text = appText("Change Pin", "پن تبدیل کریں"),
               fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = JTOrange,
@@ -1019,13 +1074,19 @@ private fun CheckoutView(
 
         if (isPinConfirmed && deliveryLat != null && deliveryLng != null) {
           Text(
-            text = "Your delivery pin is saved securely for JTBazar delivery.",
+            text = appText(
+              "Your delivery pin is saved securely for JTBazar delivery.",
+              "جے ٹی بازار ڈیلیوری کے لیے آپ کا لوکیشن پن محفوظ کر لیا گیا ہے۔"
+            ),
             fontSize = 11.sp,
             color = Color(0xFF03543F)
           )
         } else {
           Text(
-            text = "Confirm your delivery location pin. It is required for every order so the driver and Admin can find your address accurately.",
+            text = appText(
+              "Confirm your delivery location pin. It is required for every order so the driver and Admin can find your address accurately.",
+              "اپنے ڈیلیوری لوکیشن پن کی تصدیق کریں۔ ہر آرڈر کے لیے یہ ضروری ہے تاکہ ڈرائیور آپ کا پتہ درست تلاش کر سکے۔"
+            ),
             fontSize = 11.sp,
             color = JTTextSecondary
           )
@@ -1039,7 +1100,7 @@ private fun CheckoutView(
           ) {
             Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(14.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Confirm My Delivery Location", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(appText("Confirm My Delivery Location", "اپنے ڈیلیوری مقام کی تصدیق کریں"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
           }
         }
       }
@@ -1059,8 +1120,8 @@ private fun CheckoutView(
         Icon(Icons.Filled.Payment, contentDescription = null, tint = Color(0xFF1D4ED8), modifier = Modifier.size(24.dp))
         Spacer(modifier = Modifier.width(10.dp))
         Column {
-          Text("Payment Method: Cash on Delivery (COD)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E40AF))
-          Text("Pay with cash when your parcel is delivered to your doorstep.", fontSize = 11.sp, color = Color(0xFF1E3A8A))
+          Text(appText("Payment Method: Cash on Delivery (COD)", "ادائیگی کا طریقہ: کیش آن ڈیلیوری (COD)"), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E40AF))
+          Text(appText("Pay with cash when your parcel is delivered to your doorstep.", "جب پارسل آپ کے دروازے پر پہنچے تو نقد ادائیگی کریں۔"), fontSize = 11.sp, color = Color(0xFF1E3A8A))
         }
       }
     }
@@ -1073,7 +1134,7 @@ private fun CheckoutView(
       modifier = Modifier.fillMaxWidth()
     ) {
       Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Have a Coupon Code?", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+        Text(appText("Have a Coupon Code?", "کیا آپ کے پاس کوپن کوڈ ہے؟"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1082,7 +1143,7 @@ private fun CheckoutView(
           OutlinedTextField(
             value = couponCodeInput,
             onValueChange = onCouponCodeChange,
-            placeholder = { Text("e.g. JTSALE", fontSize = 12.sp) },
+            placeholder = { Text(appText("e.g. JTSALE", "مثلاً JTSALE"), fontSize = 12.sp) },
             singleLine = true,
             modifier = Modifier.weight(1f).height(48.dp)
           )
@@ -1092,7 +1153,7 @@ private fun CheckoutView(
             colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
             modifier = Modifier.height(48.dp)
           ) {
-            Text("Apply", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(appText("Apply", "لاگو کریں"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
           }
         }
         if (!couponMessage.isNullOrBlank()) {
@@ -1114,19 +1175,19 @@ private fun CheckoutView(
     ) {
       Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text("Items Subtotal (${items.size})", fontSize = 12.sp, color = JTTextSecondary)
+          Text(appText("Items Subtotal (${items.size})", "آئٹمز ذیلی کل (${items.size})"), fontSize = 12.sp, color = JTTextSecondary)
           Text("PKR ${String.format("%,d", subtotal)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
         if (discountAmount > 0) {
           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Coupon Discount", fontSize = 12.sp, color = Color(0xFF03543F), fontWeight = FontWeight.SemiBold)
+            Text(appText("Coupon Discount", "کوپن رعایت"), fontSize = 12.sp, color = Color(0xFF03543F), fontWeight = FontWeight.SemiBold)
             Text("-PKR ${String.format("%,d", discountAmount)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03543F))
           }
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text("Delivery Charges", fontSize = 12.sp, color = JTTextSecondary)
+          Text(appText("Delivery Charges", "ڈیلیوری چارجز"), fontSize = 12.sp, color = JTTextSecondary)
           Text(
-            if (deliveryFee == 0) "Free" else "PKR ${String.format("%,d", deliveryFee)}",
+            if (deliveryFee == 0) appText("Free", "مفت") else "PKR ${String.format("%,d", deliveryFee)}",
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = if (deliveryFee == 0) Color(0xFF03543F) else JTTextPrimary
@@ -1134,7 +1195,7 @@ private fun CheckoutView(
         }
         HorizontalDivider(color = Color.LightGray)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text("Total Payable on Delivery", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(appText("Total Payable on Delivery", "ڈیلیوری پر قابل ادائیگی کل"), fontWeight = FontWeight.Bold, fontSize = 14.sp)
           Text("PKR ${String.format("%,d", grandTotal)}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = JTPurplePrimary)
         }
       }
@@ -1151,9 +1212,9 @@ private fun CheckoutView(
       if (isPlacingOrder) {
         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Validating & Placing Order...", fontWeight = FontWeight.Bold)
+        Text(appText("Validating & Placing Order...", "تصدیق اور آرڈر دیا جا رہا ہے..."), fontWeight = FontWeight.Bold)
       } else {
-        Text("Place Cash on Delivery Order", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text(appText("Place Cash on Delivery Order", "کیش آن ڈیلیوری آرڈر دیں"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
       }
     }
 
@@ -1189,19 +1250,22 @@ private fun OrderConfirmationView(
 
     Spacer(modifier = Modifier.height(20.dp))
 
-    Text("Thank You! Order Placed", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+    Text(appText("Thank You! Order Placed", "شکریہ! آرڈر موصول ہو گیا"), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
     Spacer(modifier = Modifier.height(6.dp))
 
     if (order != null) {
       Text(
-        text = "Order Number: ${order.orderNumber}",
+        text = appText("Order Number: ${order.orderNumber}", "آرڈر نمبر: ${order.orderNumber}"),
         fontSize = 15.sp,
         fontWeight = FontWeight.ExtraBold,
         color = JTPurplePrimary
       )
       Spacer(modifier = Modifier.height(6.dp))
       Text(
-        text = "Total: PKR ${String.format("%,d", order.grandTotal)} • Cash on Delivery",
+        text = appText(
+          "Total: PKR ${String.format("%,d", order.grandTotal)} • Cash on Delivery",
+          "کل رقم: PKR ${String.format("%,d", order.grandTotal)} • کیش آن ڈیلیوری"
+        ),
         fontSize = 13.sp,
         color = JTTextSecondary
       )
@@ -1209,7 +1273,10 @@ private fun OrderConfirmationView(
 
     Spacer(modifier = Modifier.height(10.dp))
     Text(
-      text = "Our verified vendor and delivery partners have been notified. Your items will be dispatched promptly.",
+      text = appText(
+        "Our verified vendor and delivery partners have been notified. Your items will be dispatched promptly.",
+        "ہمارے تصدیق شدہ فروش اور ڈیلیوری پارٹنرز کو اطلاع دے دی گئی ہے۔ آپ کی اشیاء جلد روانہ کر دی جائیں گی۔"
+      ),
       fontSize = 12.sp,
       color = JTTextSecondary,
       textAlign = TextAlign.Center,
@@ -1226,7 +1293,7 @@ private fun OrderConfirmationView(
     ) {
       Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null)
       Spacer(modifier = Modifier.width(8.dp))
-      Text("Track Order Status", fontWeight = FontWeight.Bold)
+      Text(appText("Track Order Status", "آرڈر کی صورتحال دیکھیں"), fontWeight = FontWeight.Bold)
     }
 
     Spacer(modifier = Modifier.height(12.dp))
@@ -1236,7 +1303,7 @@ private fun OrderConfirmationView(
       shape = RoundedCornerShape(12.dp),
       modifier = Modifier.fillMaxWidth().height(46.dp).testTag("confirm_continue_shopping_btn")
     ) {
-      Text("Continue Shopping", fontWeight = FontWeight.Bold)
+      Text(appText("Continue Shopping", "خریداری جاری رکھیں"), fontWeight = FontWeight.Bold)
     }
   }
 }
@@ -1264,7 +1331,7 @@ internal fun SavedAddressDropdown(
       .joinToString(", ")
     "${activeSaved.name} • $locationParts"
   } else {
-    "Use a New Delivery Address"
+    appText("Use a New Delivery Address", "نیا ڈیلیوری پتہ استعمال کریں")
   }
 
   Surface(
@@ -1290,7 +1357,7 @@ internal fun SavedAddressDropdown(
             modifier = Modifier.size(18.dp)
           )
           Text(
-            text = "Saved Delivery Addresses",
+            text = appText("Saved Delivery Addresses", "محفوظ شدہ ڈیلیوری پتے"),
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
             color = JTTextPrimary
@@ -1301,7 +1368,7 @@ internal fun SavedAddressDropdown(
           color = JTPurplePrimary.copy(alpha = 0.12f)
         ) {
           Text(
-            text = "${savedAddresses.size} saved",
+            text = appText("${savedAddresses.size} saved", "${savedAddresses.size} محفوظ"),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = JTPurplePrimary,
@@ -1320,7 +1387,7 @@ internal fun SavedAddressDropdown(
           onValueChange = {},
           readOnly = true,
           singleLine = true,
-          label = { Text("Choose Saved Address") },
+          label = { Text(appText("Choose Saved Address", "محفوظ پتہ منتخب کریں")) },
           trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
           colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = Color.White,
@@ -1380,7 +1447,7 @@ internal fun SavedAddressDropdown(
                         color = Color(0xFFDEF7EC)
                       ) {
                         Text(
-                          text = "DEFAULT",
+                          text = appText("DEFAULT", "بنیادی"),
                           fontSize = 9.sp,
                           fontWeight = FontWeight.Bold,
                           color = Color(0xFF03543F),
@@ -1394,7 +1461,7 @@ internal fun SavedAddressDropdown(
                         color = JTPurpleContainer
                       ) {
                         Text(
-                          text = "GPS",
+                          text = appText("GPS", "جی پی ایس"),
                           fontSize = 9.sp,
                           fontWeight = FontWeight.Bold,
                           color = JTPurplePrimary,
@@ -1442,7 +1509,7 @@ internal fun SavedAddressDropdown(
             },
             text = {
               Text(
-                text = "Use a New Delivery Address",
+                text = appText("Use a New Delivery Address", "نیا ڈیلیوری پتہ استعمال کریں"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 color = JTOrange

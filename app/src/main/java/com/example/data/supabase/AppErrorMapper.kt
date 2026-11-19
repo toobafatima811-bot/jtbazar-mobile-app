@@ -1,6 +1,7 @@
 package com.example.data.supabase
 
 import android.util.Log
+import com.example.localization.AppLanguageManager.tr
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
@@ -51,48 +52,91 @@ object AppErrorMapper {
       runCatching { Log.e(TAG, "Technical error in $context: ${throwable.message}", throwable) }
     }
     if (isOnline == false || isNetworkError(throwable)) {
-      return "Internet connection nahi mil raha. Please check your connection and try again."
+      return tr(
+        "No internet connection. Please check your connection and try again.",
+        "انٹرنیٹ کنکشن دستیاب نہیں ہے۔ براہ کرم اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔"
+      )
     }
     if (isTimeoutError(throwable)) {
       return when (context) {
         ErrorContext.PRODUCT_LOAD, ErrorContext.SEARCH ->
-          "Products load nahi ho sake because the connection timed out. Please try again."
+          tr(
+            "Could not load products because the connection timed out. Please try again.",
+            "کنکشن کا وقت ختم ہونے کی وجہ سے مصنوعات لوڈ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔"
+          )
         ErrorContext.ORDER_PLACE ->
-          "The request took too long. Please check your order status before trying again."
-        else -> "The connection timed out. Please try again."
+          tr(
+            "The request took too long. Please check your order status before trying again.",
+            "درخواست میں بہت زیادہ وقت لگ گیا۔ دوبارہ کوشش کرنے سے پہلے براہ کرم اپنے آرڈر کی صورتحال دیکھیں۔"
+          )
+        else -> tr(
+          "The connection timed out. Please try again.",
+          "کنکشن کا وقت ختم ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔"
+        )
       }
     }
 
     val raw = throwable?.message.orEmpty()
-    val lower = raw.lowercase()
+    val extractedServerMessage = extractEmbeddedErrorMessage(raw)
+    val inspectText = listOfNotNull(extractedServerMessage, raw).joinToString(" ").lowercase()
 
-    if (lower.contains("currently closed") || lower.contains("not accepting new customer orders")) {
-      return "JTBazar is currently closed and is not accepting new orders. Please try again during store hours."
+    if (isVendorShopClosedMessage(inspectText)) {
+      return tr(
+        "This vendor shop is currently closed and is not accepting orders right now. Please check the shop's opening hours and try again later.",
+        "یہ دکان اس وقت بند ہے اور فی الحال آرڈر قبول نہیں کر رہی۔ براہ کرم دکان کے کھلنے کے اوقات دیکھیں اور بعد میں دوبارہ کوشش کریں۔"
+      )
     }
+    if (inspectText.contains("jtbazar is currently closed") ||
+      inspectText.contains("currently closed") ||
+      inspectText.contains("not accepting new customer orders")
+    ) {
+      return tr(
+        "JTBazar is currently closed and is not accepting new orders. Please try again during store hours.",
+        "جے ٹی بازار اس وقت بند ہے اور نئے آرڈرز قبول نہیں کر رہا۔ براہ کرم اسٹور کے اوقات میں دوبارہ کوشش کریں۔"
+      )
+    }
+    val lower = raw.lowercase()
     if (lower.contains("5 km food delivery") || lower.contains("current location pin")) {
-      return "Please share your current location pin so we can verify fresh food delivery availability."
+      return tr(
+        "Please share your current location pin so we can verify fresh food delivery availability.",
+        "براہ کرم اپنا موجودہ لوکیشن پن شیئر کریں تاکہ ہم تازہ کھانے کی ترسیل کی دستیابی کی تصدیق کر سکیں۔"
+      )
     }
     if (lower.contains("invalid login credentials")) {
-      return "Incorrect email or password. Please check and try again."
+      return tr(
+        "Incorrect email or password. Please check and try again.",
+        "غلط ای میل یا پاس ورڈ۔ براہ کرم چیک کریں اور دوبارہ کوشش کریں۔"
+      )
     }
     if (lower.contains("email not confirmed")) {
-      return "Please verify your email address with the OTP code before signing in."
+      return tr(
+        "Please verify your email address with the OTP code before signing in.",
+        "سائن ان کرنے سے پہلے براہ کرم او ٹی پی کوڈ کے ذریعے اپنے ای میل ایڈریس کی تصدیق کریں۔"
+      )
     }
     if (lower.contains("user already registered") || lower.contains("already been registered")) {
-      return "An account with this email already exists. Try signing in instead."
+      return tr(
+        "An account with this email already exists. Try signing in instead.",
+        "اس ای میل پر پہلے سے ایک اکاؤنٹ موجود ہے۔ براہ کرم سائن ان کریں۔"
+      )
     }
     if (lower.contains("rate limit") || lower.contains("too many requests") || lower.contains("429")) {
-      return "Too many attempts right now. Please wait a moment and try again."
+      return tr(
+        "Too many attempts right now. Please wait a moment and try again.",
+        "اس وقت بہت زیادہ کوششیں ہو چکی ہیں۔ براہ کرم تھوڑا انتظار کریں اور دوبارہ کوشش کریں۔"
+      )
     }
     if (isAuthExpired(lower)) {
-      return if (context == ErrorContext.SUPPORT || context == ErrorContext.REVIEWS || context == ErrorContext.ORDER_PLACE) {
-        "Your session has expired. Please sign in again."
-      } else {
-        "Your session has expired. Please sign in again."
-      }
+      return tr(
+        "Your session has expired. Please sign in again.",
+        "آپ کا سیشن ختم ہو چکا ہے۔ براہ کرم دوبارہ سائن ان کریں۔"
+      )
     }
     if (isOutOfStockMessage(lower)) {
-      return "This item is currently out of stock or unavailable."
+      return tr(
+        "This item is currently out of stock or unavailable.",
+        "یہ آئٹم اس وقت دستیاب نہیں ہے یا اسٹاک ختم ہو چکا ہے۔"
+      )
     }
     if (isServerError(lower)) {
       return defaultMessageFor(context)
@@ -103,18 +147,62 @@ object AppErrorMapper {
     return cleaned
   }
 
+  private fun extractEmbeddedErrorMessage(raw: String): String? {
+    val start = raw.indexOf('{')
+    val end = raw.lastIndexOf('}')
+    if (start < 0 || end <= start) return null
+    val jsonSlice = raw.substring(start, end + 1)
+    return runCatching {
+      val obj = org.json.JSONObject(jsonSlice)
+      listOf("message", "details", "hint", "error_description", "error")
+        .mapNotNull { key -> obj.optString(key, "").takeIf { it.isNotBlank() && it != "null" } }
+        .joinToString(" ")
+        .takeIf { it.isNotBlank() }
+    }.getOrNull()
+  }
+
+  internal fun isVendorShopClosedMessage(lower: String): Boolean {
+    if (lower.isBlank()) return false
+    if (lower.contains("jtbazar is currently closed") || lower.contains("جے ٹی بازار اس وقت بند ہے")) return false
+    val mentionsShopOrVendor = lower.contains("vendor") ||
+      lower.contains("shop") ||
+      lower.contains("seller") ||
+      lower.contains("storefront") ||
+      lower.contains("opening hours") ||
+      lower.contains("shop_hours") ||
+      lower.contains("shop_is_open") ||
+      lower.contains("enforce_vendor_daily_order_rules") ||
+      lower.contains("دکان")
+    val mentionsClosed = lower.contains("closed") ||
+      lower.contains("outside") ||
+      lower.contains("not open") ||
+      lower.contains("not accepting") ||
+      lower.contains("unavailable") ||
+      lower.contains("بند")
+    return mentionsShopOrVendor && mentionsClosed
+  }
+
   fun sanitizeMessage(rawMessage: String?, context: ErrorContext = ErrorContext.GENERAL): String {
     val trimmed = rawMessage?.trim().orEmpty()
     if (trimmed.isBlank()) return defaultMessageFor(context)
     val lower = trimmed.lowercase()
     if (isNetworkText(lower)) {
-      return "Internet connection nahi mil raha. Please check your connection and try again."
+      return tr(
+        "No internet connection. Please check your connection and try again.",
+        "انٹرنیٹ کنکشن دستیاب نہیں ہے۔ براہ کرم اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔"
+      )
     }
     if (isTimeoutText(lower)) {
-      return "The connection timed out. Please try again."
+      return tr(
+        "The connection timed out. Please try again.",
+        "کنکشن کا وقت ختم ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     }
     if (isAuthExpired(lower)) {
-      return "Your session has expired. Please sign in again."
+      return tr(
+        "Your session has expired. Please sign in again.",
+        "آپ کا سیشن ختم ہو چکا ہے۔ براہ کرم دوبارہ سائن ان کریں۔"
+      )
     }
     if (containsTechnicalLeak(lower)) {
       runCatching { Log.w(TAG, "Suppressed technical error string for $context: $trimmed") }
@@ -125,31 +213,70 @@ object AppErrorMapper {
 
   fun defaultMessageFor(context: ErrorContext): String = when (context) {
     ErrorContext.PRODUCT_LOAD, ErrorContext.SEARCH ->
-      "Products load nahi ho sake. Please try again."
+      tr(
+        "Could not load products. Please try again.",
+        "مصنوعات لوڈ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.CATEGORY_LOAD ->
-      "Categories load nahi ho sakin. Please try again."
+      tr(
+        "Could not load categories. Please try again.",
+        "اقسام لوڈ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.CART_ADD ->
-      "Your item could not be added to the cart. Please try again."
+      tr(
+        "Your item could not be added to the cart. Please try again.",
+        "آپ کا آئٹم کارٹ میں شامل نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.CART_UPDATE ->
-      "Your cart could not be updated. Please try again."
+      tr(
+        "Your cart could not be updated. Please try again.",
+        "آپ کا کارٹ اپ ڈیٹ نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.WISHLIST ->
-      "Could not update your wishlist. Please try again."
+      tr(
+        "Could not update your wishlist. Please try again.",
+        "آپ کی پسندیدہ فہرست اپ ڈیٹ نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.ADDRESS ->
-      "Your delivery address could not be saved. Please try again."
+      tr(
+        "Your delivery address could not be saved. Please try again.",
+        "آپ کا ترسیلی پتہ محفوظ نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.ORDER_PLACE ->
-      "Your order could not be placed. Please check your details and try again."
+      tr(
+        "Your order could not be placed. Please check your details and try again.",
+        "آپ کا آرڈر مکمل نہیں ہو سکا۔ براہ کرم اپنی تفصیلات چیک کریں اور دوبارہ کوشش کریں۔"
+      )
     ErrorContext.ORDER_CANCEL ->
-      "Your order could not be cancelled right now. Please try again."
+      tr(
+        "Your order could not be cancelled right now. Please try again.",
+        "آپ کا آرڈر اس وقت منسوخ نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.REVIEWS ->
-      "Could not submit your review right now. Please try again."
+      tr(
+        "Could not submit your review right now. Please try again.",
+        "اس وقت آپ کا تبصرہ جمع نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.SUPPORT ->
-      "Could not send your support request. Please try again."
+      tr(
+        "Could not send your support request. Please try again.",
+        "آپ کی مدد کی درخواست نہیں بھیجی جا سکی۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.AUTH ->
-      "Authentication could not be completed. Please try again."
+      tr(
+        "Authentication could not be completed. Please try again.",
+        "تصدیق مکمل نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.STORE_SETTINGS ->
-      "Store information could not be refreshed. Please try again."
+      tr(
+        "Store information could not be refreshed. Please try again.",
+        "اسٹور کی معلومات تازہ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
     ErrorContext.GENERAL ->
-      "Something went wrong. Please try again."
+      tr(
+        "Something went wrong. Please try again.",
+        "کچھ غلط ہو گیا ہے۔ براہ کرم دوبارہ کوشش کریں۔"
+      )
   }
 
   private fun isNetworkError(t: Throwable?): Boolean {

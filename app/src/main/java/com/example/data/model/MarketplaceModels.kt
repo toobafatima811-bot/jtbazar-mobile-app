@@ -156,5 +156,7 @@ data class ShopRecord(
   val rating: Double = 0.0,
   val isVerified: Boolean = false,
   val phone: String = "",
-  val deliveryRadiusKm: Double = 0.0
+  val deliveryRadiusKm: Double = 0.0,
+  val shopIsOpen: Boolean? = null,
+  val weeklyHoursRaw: String? = null
 )

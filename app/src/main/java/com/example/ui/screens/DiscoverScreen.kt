@@ -69,6 +69,8 @@ import com.example.data.supabase.SupabaseApiService
 import com.example.data.supabase.SupabaseProductVideoDto
 import com.example.data.model.ShopRecord
 import com.example.data.repository.MarketplaceRepository
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
@@ -124,7 +126,7 @@ fun DiscoverScreen(
   }
   var userLatitude by remember { mutableStateOf<Double?>(null) }
   var userLongitude by remember { mutableStateOf<Double?>(null) }
-  var selectedCityName by remember { mutableStateOf("Select city") }
+  var selectedCityName by remember { mutableStateOf("") }
   var selectedShop by remember { mutableStateOf<ShopRecord?>(null) }
 
   fun loadCurrentLocation() {
@@ -142,14 +144,22 @@ fun DiscoverScreen(
               val resolved = AddressReverseGeocoder.resolve(context, location.latitude, location.longitude)
               selectedCityName = listOf(resolved?.area, resolved?.city)
                 .filterNotNull().filter { it.isNotBlank() }.distinct().joinToString(", ")
-                .ifBlank { "Your current area" }
+                .ifBlank { AppLanguageManager.tr("Your current area", "آپ کا موجودہ علاقہ") }
             }
           } else {
-            Toast.makeText(context, "Current location unavailable. Please enable device location.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+              context,
+              AppLanguageManager.tr("Current location unavailable. Please enable device location.", "موجودہ لوکیشن دستیاب نہیں۔ براہ کرم ڈیوائس کی لوکیشن آن کریں۔"),
+              Toast.LENGTH_SHORT
+            ).show()
           }
         }
         .addOnFailureListener {
-          Toast.makeText(context, "Unable to get your location. Try again.", Toast.LENGTH_SHORT).show()
+          Toast.makeText(
+            context,
+            AppLanguageManager.tr("Unable to get your location. Try again.", "آپ کی لوکیشن حاصل نہیں ہو سکی۔ دوبارہ کوشش کریں۔"),
+            Toast.LENGTH_SHORT
+          ).show()
         }
     } catch (_: SecurityException) {
       hasLocationPermission = false
@@ -182,7 +192,7 @@ fun DiscoverScreen(
           .background(if (selectedTab == DiscoverTab.PRODUCTS_FEED) Color.Black else Color.White)
       ) {
         JTBazarTopBar(
-          title = "Discover",
+          title = appText("Discover", "دریافت کریں"),
           onCartClick = onCartClick,
           onAvatarClick = onAccountClick,
           cartCount = cartCount,
@@ -218,7 +228,7 @@ fun DiscoverScreen(
               )
               Spacer(modifier = Modifier.width(6.dp))
               Text(
-                text = "Nearby Shops",
+                text = appText("Nearby Shops", "قریبی دکانیں"),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (selectedTab == DiscoverTab.NEARBY_SHOPS) Color.White else (if (selectedTab == DiscoverTab.PRODUCTS_FEED) Color.White else JTTextPrimary)
@@ -248,7 +258,7 @@ fun DiscoverScreen(
               )
               Spacer(modifier = Modifier.width(6.dp))
               Text(
-                text = "Products Feed",
+                text = appText("Products Feed", "مصنوعات فیڈ"),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (selectedTab == DiscoverTab.PRODUCTS_FEED) Color.White else JTTextPrimary
@@ -294,7 +304,11 @@ fun DiscoverScreen(
             onProductClick = onProductClick,
             onAddToCart = { prod ->
               MarketplaceRepository.addToCart(prod, 1)
-              Toast.makeText(context, "Added ${prod.title} to cart!", Toast.LENGTH_SHORT).show()
+              Toast.makeText(
+                context,
+                AppLanguageManager.tr("Added ${prod.title} to cart!", "${prod.title} ٹوکری میں شامل ہو گیا!"),
+                Toast.LENGTH_SHORT
+              ).show()
             },
             onToggleWishlist = { prod ->
               MarketplaceRepository.toggleWishlist(prod.id, prod)
@@ -302,10 +316,13 @@ fun DiscoverScreen(
             onShare = { prod ->
               val sendIntent = Intent().apply {
                 action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, "Check out ${prod.title} on JTBazar: Rs. ${prod.price}")
+                putExtra(
+                  Intent.EXTRA_TEXT,
+                  AppLanguageManager.tr("Check out ${prod.title} on JTBazar: Rs. ${prod.price}", "جے ٹی بازار پر ${prod.title} دیکھیں: ${prod.price} روپے")
+                )
                 type = "text/plain"
               }
-              context.startActivity(Intent.createChooser(sendIntent, "Share Product"))
+              context.startActivity(Intent.createChooser(sendIntent, AppLanguageManager.tr("Share Product", "مصنوعہ شیئر کریں")))
             }
           )
         }
@@ -348,7 +365,7 @@ private fun NearbyShopsMapView(
     validShops.map { it to distanceKm(it) }
       .filter { (shop, distance) ->
         if (distance != null) distance <= 10.0
-        else cityName != "Select city" && (shop.city.contains(cityName, ignoreCase = true) ||
+        else cityName.isNotBlank() && (shop.city.contains(cityName, ignoreCase = true) ||
           shop.address.contains(cityName, ignoreCase = true))
       }
       .sortedBy { it.second ?: Double.MAX_VALUE }
@@ -396,7 +413,7 @@ private fun NearbyShopsMapView(
           if (userLat != null && userLng != null) {
             Marker(map).apply {
               position = GeoPoint(userLat, userLng)
-              title = "You are here"
+              title = AppLanguageManager.tr("You are here", "آپ یہاں ہیں")
               setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
               map.overlays.add(this)
             }
@@ -457,8 +474,8 @@ private fun NearbyShopsMapView(
               val names = group.map { it.first.name }
               Marker(map).apply {
                 position = center
-                title = "${group.size} nearby shops"
-                snippet = names.take(4).joinToString(" • ") + if (names.size > 4) " • +${names.size - 4} more" else ""
+                title = AppLanguageManager.tr("${group.size} nearby shops", "${group.size} قریبی دکانیں")
+                snippet = names.take(4).joinToString(" • ") + if (names.size > 4) " • +${names.size - 4}" else ""
                 icon = createShopClusterIcon(context, group.size)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 setOnMarkerClickListener { marker, _ ->
@@ -493,12 +510,12 @@ private fun NearbyShopsMapView(
             Spacer(Modifier.width(7.dp))
             Column {
               Text(
-                if (hasPermission && userLat != null) "Your current location" else cityName,
+                if (hasPermission && userLat != null) appText("Your current location", "آپ کی موجودہ لوکیشن") else cityName.ifBlank { appText("Select city", "شہر منتخب کریں") },
                 fontWeight = FontWeight.Bold, fontSize = 12.sp, color = JTTextPrimary
               )
               Text(
-                if (userLat != null && userLng != null) "Shops within 10 km radius"
-                else "Choose a city or enable location",
+                if (userLat != null && userLng != null) appText("Shops within 10 km radius", "10 کلومیٹر کے دائرے میں دکانیں")
+                else appText("Choose a city or enable location", "شہر منتخب کریں یا لوکیشن آن کریں"),
                 fontSize = 10.sp, color = JTTextSecondary
               )
             }
@@ -511,14 +528,14 @@ private fun NearbyShopsMapView(
                 colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier.height(34.dp).testTag("nearby_gps_button")
-              ) { Text("Use my location", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+              ) { Text(appText("Use my location", "میری لوکیشن استعمال کریں"), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
             }
             OutlinedButton(
               onClick = onPickCity,
               shape = RoundedCornerShape(8.dp),
               contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
               modifier = Modifier.height(34.dp).testTag("nearby_city_picker")
-            ) { Text("City", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+            ) { Text(appText("City", "شہر"), fontSize = 11.sp, fontWeight = FontWeight.Bold) }
           }
         }
       }
@@ -529,10 +546,10 @@ private fun NearbyShopsMapView(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
-        Text("No shops with map locations found nearby", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
+        Text(appText("No shops with map locations found nearby", "قریب میں نقشے والی کوئی دکان نہیں ملی"), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = JTTextPrimary)
         Text(
-          if (validShops.isEmpty()) "Approved shops need valid latitude and longitude to appear on the map."
-          else "Try another city or expand your search area.",
+          if (validShops.isEmpty()) appText("Approved shops need valid latitude and longitude to appear on the map.", "منظور شدہ دکانوں کے نقشے پر ظاہر ہونے کے لیے درست کوآرڈینیٹس درکار ہیں۔")
+          else appText("Try another city or expand your search area.", "دوسرا شہر آزمائیں یا تلاش کا دائرہ بڑھائیں۔"),
           fontSize = 11.sp, color = JTTextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
       }
@@ -564,15 +581,15 @@ private fun NearbyShopsMapView(
                 Text(activeShop.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (activeShop.isVerified) {
                   Spacer(Modifier.width(4.dp))
-                  Icon(Icons.Filled.Verified, contentDescription = "Verified", tint = JTPurplePrimary, modifier = Modifier.size(14.dp))
+                  Icon(Icons.Filled.Verified, contentDescription = appText("Verified", "تصدیق شدہ"), tint = JTPurplePrimary, modifier = Modifier.size(14.dp))
                 }
               }
               Text(
-                activeDistance?.let { String.format(Locale.US, "%.1f km from you", it) } ?: activeShop.city.ifBlank { activeShop.address },
+                activeDistance?.let { appText(String.format(Locale.US, "%.1f km from you", it), String.format(Locale.US, "آپ سے %.1f کلومیٹر دور", it)) } ?: activeShop.city.ifBlank { activeShop.address },
                 fontSize = 11.sp, color = JTTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
               )
             }
-            Text("${nearbyShops.size} nearby", fontSize = 10.sp, color = JTPurplePrimary, fontWeight = FontWeight.Bold)
+            Text(appText("${nearbyShops.size} nearby", "${nearbyShops.size} قریب"), fontSize = 10.sp, color = JTPurplePrimary, fontWeight = FontWeight.Bold)
           }
           if (activeShop.description.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
@@ -584,7 +601,7 @@ private fun NearbyShopsMapView(
             shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
             modifier = Modifier.fillMaxWidth().height(40.dp).testTag("open_shop_button")
-          ) { Text("Open Shop & View Products", fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+          ) { Text(appText("Open Shop & View Products", "دکان کھولیں اور مصنوعات دیکھیں"), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
           Spacer(Modifier.height(10.dp))
           Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             nearbyShops.forEach { (shop, distance) ->
@@ -672,9 +689,9 @@ private fun ProductsFeedReelsView(
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(Icons.Filled.ShoppingBag, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
         Spacer(modifier = Modifier.height(12.dp))
-        Text("No Products in Feed", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+        Text(appText("No Products in Feed", "فیڈ میں کوئی مصنوعات نہیں"), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
         Spacer(modifier = Modifier.height(4.dp))
-        Text("Products will appear here in full discovery mode.", fontSize = 12.sp, color = Color.Gray)
+        Text(appText("Products will appear here in full discovery mode.", "مصنوعات یہاں مکمل ڈسکوری موڈ میں ظاہر ہوں گی۔"), fontSize = 12.sp, color = Color.Gray)
       }
     }
   } else {
@@ -776,7 +793,7 @@ private fun ProductsFeedReelsView(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
               Icon(Icons.Filled.PlayCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
               Spacer(Modifier.width(5.dp))
-              Text("Product video", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+              Text(appText("Product video", "مصنوعہ کی ویڈیو"), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
           }
           IconButton(
@@ -792,7 +809,7 @@ private fun ProductsFeedReelsView(
           ) {
             Icon(
               imageVector = if (isVideoMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-              contentDescription = if (isVideoMuted) "Unmute video sound" else "Mute video sound",
+              contentDescription = if (isVideoMuted) appText("Unmute video sound", "آواز چالو کریں") else appText("Mute video sound", "آواز بند کریں"),
               tint = Color.White,
               modifier = Modifier.size(22.dp)
             )
@@ -913,7 +930,7 @@ private fun ProductsFeedReelsView(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
             modifier = Modifier.height(34.dp)
           ) {
-            Text("View Full Details", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(appText("View Full Details", "مکمل تفصیلات دیکھیں"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.width(4.dp))
             Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp))
           }
@@ -937,7 +954,7 @@ private fun ProductsFeedReelsView(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-              text = if (product.isWishlisted) "Saved" else "Save",
+              text = if (product.isWishlisted) appText("Saved", "محفوظ") else appText("Save", "محفوظ کریں"),
               color = Color.White,
               fontSize = 10.sp,
               fontWeight = FontWeight.Medium
@@ -950,7 +967,7 @@ private fun ProductsFeedReelsView(
             val isOutOfStock = (product.availabilityKnown && !product.isAvailable) ||
               dailyState in setOf("out_of_stock", "out-of-stock", "unavailable", "not_available", "not available", "sold_out", "sold out", "closed")
             if (isOutOfStock) {
-              Text("Out of Stock", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+              Text(appText("Out of Stock", "اسٹاک ختم"), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             } else {
               FloatingReelsAction(
                 icon = Icons.Filled.AddShoppingCart,
@@ -959,7 +976,7 @@ private fun ProductsFeedReelsView(
                 tag = "reels_add_cart_btn_${product.id}"
               )
               Spacer(modifier = Modifier.height(2.dp))
-              Text("Add", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+              Text(appText("Add", "شامل کریں"), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
             }
           }
 
@@ -973,7 +990,7 @@ private fun ProductsFeedReelsView(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-              text = "Share",
+              text = appText("Share", "شیئر"),
               color = Color.White,
               fontSize = 10.sp,
               fontWeight = FontWeight.Medium

@@ -11,6 +11,7 @@ import android.os.CancellationSignal
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
+import com.example.localization.AppLanguageManager
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationCallback
@@ -47,7 +48,12 @@ object LocationResolver {
   @SuppressLint("MissingPermission")
   suspend fun fetchCurrentLocation(context: Context): LocationFetchResult {
     if (!hasLocationPermission(context)) {
-      return LocationFetchResult.Failure("Location permission is required.")
+      return LocationFetchResult.Failure(
+        AppLanguageManager.tr(
+          "Location permission is required.",
+          "مقام تک رسائی کی اجازت ضروری ہے۔"
+        )
+      )
     }
 
     val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -59,7 +65,12 @@ object LocationResolver {
       return if (resolvable != null) {
         LocationFetchResult.NeedsResolution(resolvable)
       } else {
-        LocationFetchResult.Failure("Device location is turned off. Turn on Location / GPS and try again.")
+        LocationFetchResult.Failure(
+          AppLanguageManager.tr(
+            "Device location is turned off. Turn on Location / GPS and try again.",
+            "آلے کی لوکیشن بند ہے۔ لوکیشن / جی پی ایس آن کر کے دوبارہ کوشش کریں۔"
+          )
+        )
       }
     }
 
@@ -106,7 +117,12 @@ object LocationResolver {
     return if (resolvable != null) {
       LocationFetchResult.NeedsResolution(resolvable)
     } else {
-      LocationFetchResult.Failure("Could not get current location. Move near a window or turn on Wi-Fi/GPS and try again.")
+      LocationFetchResult.Failure(
+        AppLanguageManager.tr(
+          "Could not get current location. Move near a window or turn on Wi-Fi/GPS and try again.",
+          "موجودہ لوکیشن حاصل نہیں ہو سکی۔ کھڑکی کے قریب جائیں یا وائی فائی/جی پی ایس آن کر کے دوبارہ کوشش کریں۔"
+        )
+      )
     }
   }
 

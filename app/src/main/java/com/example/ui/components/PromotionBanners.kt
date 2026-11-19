@@ -137,7 +137,7 @@ fun PromotionBannerItem(
 
     AsyncImage(
       model = imageRequest,
-      contentDescription = promotion.title.ifBlank { "Promotional Banner" },
+      contentDescription = promotion.title.ifBlank { com.example.localization.appText("Promotional Banner", "تشہیری بینر") },
       contentScale = if (intrinsicAspectRatio != null) ContentScale.Fit else ContentScale.FillWidth,
       onLoading = {
         isLoading = true

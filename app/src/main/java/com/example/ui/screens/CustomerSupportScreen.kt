@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -39,7 +41,14 @@ fun CustomerSupportScreen(
   var category by remember { mutableStateOf("Order Delivery") }
   var isSubmitting by remember { mutableStateOf(false) }
 
-  val categories = listOf("Order Delivery", "Payment & Refund", "Product Quality", "Vendor Experience", "App Issue", "Other")
+  val categories = listOf(
+    "Order Delivery" to appText("Order Delivery", "آرڈر ڈیلیوری"),
+    "Payment & Refund" to appText("Payment & Refund", "ادائیگی اور واپسی"),
+    "Product Quality" to appText("Product Quality", "پروڈکٹ کا معیار"),
+    "Vendor Experience" to appText("Vendor Experience", "فروشندہ کا تجربہ"),
+    "App Issue" to appText("App Issue", "ایپ کا مسئلہ"),
+    "Other" to appText("Other", "دیگر")
+  )
 
   Scaffold(
     containerColor = Color.White,
@@ -57,13 +66,13 @@ fun CustomerSupportScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-          text = "Customer Support & Complaints",
+          text = appText("Customer Support & Complaints", "کسٹمر سپورٹ اور شکایات"),
           fontSize = 17.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
@@ -90,11 +99,14 @@ fun CustomerSupportScreen(
           Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.HeadsetMic, contentDescription = null, tint = JTPurplePrimary, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Need Quick Assistance?", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTPurplePrimary)
+            Text(appText("Need Quick Assistance?", "فوری مدد درکار ہے؟"), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = JTPurplePrimary)
           }
           Spacer(modifier = Modifier.height(8.dp))
           Text(
-            text = "JTBazar customer support is available through our official support email. Please include your order number so we can help you faster:",
+            text = appText(
+              "JTBazar customer support is available through our official support email. Please include your order number so we can help you faster:",
+              "JTBazar کسٹمر سپورٹ ہماری سرکاری سپورٹ ای میل کے ذریعے دستیاب ہے۔ براہ کرم اپنا آرڈر نمبر شامل کریں تاکہ ہم آپ کی جلد مدد کر سکیں:"
+            ),
             fontSize = 12.sp,
             color = JTTextSecondary,
             lineHeight = 16.sp
@@ -121,23 +133,23 @@ fun CustomerSupportScreen(
       }
 
       Text(
-        text = "Submit a Support Ticket / Complaint",
+        text = appText("Submit a Support Ticket / Complaint", "سپورٹ ٹکٹ / شکایت جمع کریں"),
         fontSize = 16.sp,
         fontWeight = FontWeight.Bold,
         color = JTTextPrimary
       )
 
       // Category Selection Chips
-      Text("Inquiry Category *", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
+      Text(appText("Inquiry Category *", "استفسار کا زمرہ *"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        categories.take(3).forEach { cat ->
+        categories.take(3).forEach { (catKey, catLabel) ->
           FilterChip(
-            selected = category == cat,
-            onClick = { category = cat },
-            label = { Text(cat, fontSize = 11.sp) }
+            selected = category == catKey,
+            onClick = { category = catKey },
+            label = { Text(catLabel, fontSize = 11.sp) }
           )
         }
       }
@@ -145,11 +157,11 @@ fun CustomerSupportScreen(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        categories.drop(3).forEach { cat ->
+        categories.drop(3).forEach { (catKey, catLabel) ->
           FilterChip(
-            selected = category == cat,
-            onClick = { category = cat },
-            label = { Text(cat, fontSize = 11.sp) }
+            selected = category == catKey,
+            onClick = { category = catKey },
+            label = { Text(catLabel, fontSize = 11.sp) }
           )
         }
       }
@@ -158,8 +170,8 @@ fun CustomerSupportScreen(
       OutlinedTextField(
         value = subject,
         onValueChange = { subject = it },
-        label = { Text("Subject *") },
-        placeholder = { Text("Brief summary of your inquiry") },
+        label = { Text(appText("Subject *", "موضوع *")) },
+        placeholder = { Text(appText("Brief summary of your inquiry", "اپنے استفسار کا مختصر خلاصہ")) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth().testTag("support_subject_input")
       )
@@ -168,8 +180,8 @@ fun CustomerSupportScreen(
       OutlinedTextField(
         value = message,
         onValueChange = { message = it },
-        label = { Text("Detailed Description *") },
-        placeholder = { Text("Please describe the issue or inquiry in detail...") },
+        label = { Text(appText("Detailed Description *", "مکمل تفصیل *")) },
+        placeholder = { Text(appText("Please describe the issue or inquiry in detail...", "براہ کرم مسئلے یا استفسار کی مکمل تفصیل بیان کریں...")) },
         minLines = 4,
         maxLines = 8,
         modifier = Modifier.fillMaxWidth().testTag("support_message_input")
@@ -178,7 +190,7 @@ fun CustomerSupportScreen(
       Button(
         onClick = {
           if (subject.isBlank() || message.isBlank()) {
-            Toast.makeText(context, "Please complete all required fields", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, AppLanguageManager.tr("Please complete all required fields", "براہ کرم تمام ضروری خانے پُر کریں"), Toast.LENGTH_SHORT).show()
             return@Button
           }
 
@@ -187,7 +199,7 @@ fun CustomerSupportScreen(
             val result = MarketplaceRepository.submitComplaint(null, "[$category] ${subject.trim()}", message.trim())
             isSubmitting = false
             if (result.isSuccess) {
-              Toast.makeText(context, "Support request submitted successfully.", Toast.LENGTH_LONG).show()
+              Toast.makeText(context, AppLanguageManager.tr("Support request submitted successfully.", "سپورٹ کی درخواست کامیابی سے جمع ہو گئی۔"), Toast.LENGTH_LONG).show()
               subject = ""
               message = ""
             } else {
@@ -204,7 +216,7 @@ fun CustomerSupportScreen(
         colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
         modifier = Modifier.fillMaxWidth().height(48.dp).testTag("support_submit_button")
       ) {
-        Text("Submit Support Request", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(appText("Submit Support Request", "سپورٹ درخواست جمع کریں"), fontWeight = FontWeight.Bold, fontSize = 14.sp)
       }
     }
   }

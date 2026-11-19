@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.Product
 import com.example.data.repository.MarketplaceRepository
+import com.example.localization.appText
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
@@ -48,7 +49,7 @@ fun WishlistScreen(
     containerColor = Color.White,
     topBar = {
       JTBazarTopBar(
-        title = "My Wishlist",
+        title = appText("My Wishlist", "میری پسندیدہ فہرست"),
         onCartClick = onCartClick,
         onAvatarClick = onAccountClick,
         cartCount = cartCount,
@@ -84,14 +85,17 @@ fun WishlistScreen(
           }
           Spacer(modifier = Modifier.height(14.dp))
           Text(
-            text = "Your Wishlist is Empty",
+            text = appText("Your Wishlist is Empty", "آپ کی پسندیدہ فہرست خالی ہے"),
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
             color = JTTextPrimary
           )
           Spacer(modifier = Modifier.height(4.dp))
           Text(
-            text = "Tap the heart icon on any craft or fresh grocery item to save it for later.",
+            text = appText(
+              "Tap the heart icon on any craft or fresh grocery item to save it for later.",
+              "بعد میں محفوظ کرنے کے لیے کسی بھی دستکاری یا تازہ راشن کی شے پر دل کے نشان کو دبائیں۔"
+            ),
             fontSize = 12.sp,
             color = JTTextSecondary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -189,7 +193,7 @@ fun WishlistScreen(
                 ) {
                   Icon(
                     imageVector = Icons.Filled.DeleteOutline,
-                    contentDescription = "Remove",
+                    contentDescription = appText("Remove", "ہٹائیں"),
                     tint = JTRed,
                     modifier = Modifier.size(18.dp)
                   )
@@ -199,7 +203,7 @@ fun WishlistScreen(
                 val isOutOfStock = (product.availabilityKnown && !product.isAvailable) ||
                   dailyState in setOf("out_of_stock", "out-of-stock", "unavailable", "not_available", "not available", "sold_out", "sold out", "closed")
                 if (isOutOfStock) {
-                  Text("Out of Stock", color = JTRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                  Text(appText("Out of Stock", "اسٹاک ختم"), color = JTRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 } else {
                   Button(
                     onClick = { MarketplaceRepository.addToCart(product) },
@@ -214,7 +218,7 @@ fun WishlistScreen(
                       modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add", fontSize = 11.sp)
+                    Text(appText("Add", "شامل کریں"), fontSize = 11.sp)
                   }
                 }
               }

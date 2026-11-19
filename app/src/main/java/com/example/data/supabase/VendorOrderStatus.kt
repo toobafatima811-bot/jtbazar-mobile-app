@@ -13,16 +13,20 @@ import org.json.JSONObject
 enum class VendorOrderStatus(
   val key: String,
   val label: String,
+  val urduLabel: String,
   val progressionRank: Int
 ) {
-  PENDING("pending", "Pending", 1),
-  CONFIRMED("confirmed", "Confirmed", 2),
-  PROCESSING("processing", "Processing", 3),
-  READY_FOR_PICKUP("ready_for_pickup", "Ready for Pickup", 4),
-  SHIPPED("shipped", "Collected by JTBazar", 5),
-  DELIVERED("delivered", "Delivered", 6),
-  NOT_DELIVERED("not_delivered", "Not Delivered", 7),
-  CANCELLED("cancelled", "Cancelled", 8);
+  PENDING("pending", "Pending", "زیرِ التواء", 1),
+  CONFIRMED("confirmed", "Confirmed", "تصدیق شدہ", 2),
+  PROCESSING("processing", "Processing", "تیاری جاری", 3),
+  READY_FOR_PICKUP("ready_for_pickup", "Ready for Pickup", "پک اپ کے لیے تیار", 4),
+  SHIPPED("shipped", "Collected by JTBazar", "جے ٹی بازار نے وصول کر لیا", 5),
+  DELIVERED("delivered", "Delivered", "ترسیل مکمل", 6),
+  NOT_DELIVERED("not_delivered", "Not Delivered", "ترسیل نہیں ہو سکی", 7),
+  CANCELLED("cancelled", "Cancelled", "منسوخ", 8);
+
+  fun localizedLabel(): String =
+    com.example.localization.AppLanguageManager.tr(label, urduLabel)
 
   val needsPreparation: Boolean
     get() = this == PENDING || this == CONFIRMED || this == PROCESSING
@@ -61,7 +65,7 @@ enum class VendorOrderStatus(
       }
     }
 
-    fun formatLabel(raw: String?): String = parse(raw)?.label ?: "Pending"
+    fun formatLabel(raw: String?): String = parse(raw)?.localizedLabel() ?: PENDING.localizedLabel()
 
     private fun JSONObject.safeText(key: String): String =
       optString(key, "").takeUnless { it.equals("null", ignoreCase = true) }.orEmpty().trim()

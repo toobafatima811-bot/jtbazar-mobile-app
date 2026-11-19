@@ -40,6 +40,8 @@ import com.example.data.repository.CatalogPaginator
 import com.example.data.repository.CatalogQuery
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ProductSortOption
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.FriendlyEmptyState
 import com.example.ui.components.FriendlyErrorState
 import com.example.ui.components.PaginationFooter
@@ -161,8 +163,8 @@ fun CollectionProductsScreen(
 
   val screenTitle = when (target) {
     is HomeCollectionTarget.Deal -> target.activeCampaign.campaign.displayTitle.ifBlank { target.activeCampaign.campaign.name }
-    is HomeCollectionTarget.Popular -> "Popular Products"
-    is HomeCollectionTarget.NewArrivals -> "New Arrivals"
+    is HomeCollectionTarget.Popular -> appText("Popular Products", "مقبول مصنوعات")
+    is HomeCollectionTarget.NewArrivals -> appText("New Arrivals", "نئی آمد")
   }
 
   Scaffold(
@@ -189,7 +191,7 @@ fun CollectionProductsScreen(
             ) {
               Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = appText("Back", "واپس"),
                 tint = JTTextPrimary
               )
             }
@@ -202,7 +204,7 @@ fun CollectionProductsScreen(
               ) {
                 Icon(
                   imageVector = if (searchVisible) Icons.Rounded.Close else Icons.Filled.Search,
-                  contentDescription = if (searchVisible) "Close search" else "Search products",
+                  contentDescription = if (searchVisible) appText("Close search", "تلاش بند کریں") else appText("Search products", "مصنوعات تلاش کریں"),
                   tint = JTTextPrimary
                 )
               }
@@ -222,7 +224,7 @@ fun CollectionProductsScreen(
               ) {
                 Icon(
                   imageVector = Icons.Filled.ShoppingBag,
-                  contentDescription = "Cart",
+                  contentDescription = appText("Cart", "ٹوکری"),
                   tint = JTTextPrimary
                 )
               }
@@ -234,14 +236,14 @@ fun CollectionProductsScreen(
           OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search in $screenTitle...", fontSize = 13.sp) },
+            placeholder = { Text(appText("Search in $screenTitle...", "$screenTitle میں تلاش کریں..."), fontSize = 13.sp) },
             leadingIcon = {
               Icon(Icons.Filled.Search, contentDescription = null, tint = JTOrange)
             },
             trailingIcon = {
               if (searchQuery.isNotEmpty()) {
                 IconButton(onClick = { searchQuery = "" }) {
-                  Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                  Icon(Icons.Rounded.Close, contentDescription = appText("Clear search", "تلاش صاف کریں"))
                 }
               }
             },
@@ -274,9 +276,9 @@ fun CollectionProductsScreen(
         is HomeCollectionTarget.Popular -> {
           item(key = "popular_collection_header") {
             CollectionAccentHeader(
-              badge = "FEATURED PICKS",
-              title = "Most Popular on JTBazar",
-              subtitle = "Top customer favorites across trusted Pakistani sellers",
+              badge = appText("FEATURED PICKS", "نمایاں انتخاب"),
+              title = appText("Most Popular on JTBazar", "جے ٹی بازار پر مقبول ترین"),
+              subtitle = appText("Top customer favorites across trusted Pakistani sellers", "مستند پاکستانی فروخت کنندگان کی پسندیدہ مصنوعات"),
               icon = Icons.Filled.LocalFireDepartment,
               accentColor = JTRed,
               accentContainer = JTRedContainer
@@ -292,9 +294,9 @@ fun CollectionProductsScreen(
         is HomeCollectionTarget.NewArrivals -> {
           item(key = "new_arrivals_collection_header") {
             CollectionAccentHeader(
-              badge = "JUST LANDED",
-              title = "Fresh New Arrivals",
-              subtitle = "Latest verified listings added by our vendors",
+              badge = appText("JUST LANDED", "ابھی شامل"),
+              title = appText("Fresh New Arrivals", "تازہ نئی آمد"),
+              subtitle = appText("Latest verified listings added by our vendors", "ہمارے فروخت کنندگان کی شامل کردہ تازہ ترین تصدیق شدہ مصنوعات"),
               icon = Icons.Filled.NewReleases,
               accentColor = JTOrangeDark,
               accentContainer = JTOrangeContainer
@@ -318,8 +320,8 @@ fun CollectionProductsScreen(
         feedState.initialError != null && feedState.items.isEmpty() -> {
           item(key = "collection_error") {
             FriendlyErrorState(
-              title = "Products load nahi ho sake",
-              message = feedState.initialError ?: "Please check your connection and try again.",
+              title = appText("Could not load products", "مصنوعات لوڈ نہیں ہو سکیں"),
+              message = feedState.initialError ?: appText("Please check your connection and try again.", "براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔"),
               onRetry = { activePaginator.retry() }
             )
           }
@@ -327,13 +329,13 @@ fun CollectionProductsScreen(
         feedState.items.isEmpty() -> {
           item(key = "collection_empty") {
             FriendlyEmptyState(
-              title = if (debouncedSearch.isNotBlank()) "No matching products" else "No products available yet",
+              title = if (debouncedSearch.isNotBlank()) appText("No matching products", "کوئی مماثل مصنوعات نہیں ملیں") else appText("No products available yet", "ابھی کوئی مصنوعات دستیاب نہیں"),
               message = if (debouncedSearch.isNotBlank()) {
-                "Try another search keyword or clear filters."
+                appText("Try another search keyword or clear filters.", "کوئی اور لفظ تلاش کریں یا فلٹرز صاف کریں۔")
               } else {
-                "Fresh inventory is being updated. Please check back soon."
+                appText("Fresh inventory is being updated. Please check back soon.", "نیا اسٹاک اپ ڈیٹ کیا جا رہا ہے۔ براہ کرم جلد دوبارہ دیکھیں۔")
               },
-              actionLabel = if (debouncedSearch.isNotBlank()) "Clear Search" else null,
+              actionLabel = if (debouncedSearch.isNotBlank()) appText("Clear Search", "تلاش صاف کریں") else null,
               onAction = if (debouncedSearch.isNotBlank()) {
                 { searchQuery = "" }
               } else null
@@ -354,7 +356,7 @@ fun CollectionProductsScreen(
                 onAddToCart = { product ->
                   MarketplaceRepository.addToCart(product)
                   if (MarketplaceRepository.canAddProductToCart(product)) {
-                    Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, AppLanguageManager.tr("Added to cart!", "ٹوکری میں شامل ہو گیا!"), Toast.LENGTH_SHORT).show()
                   }
                 },
                 onToggleWishlist = { product ->
@@ -385,13 +387,13 @@ private fun DealCollectionHeaderBanner(activeCampaign: ActiveProductCampaign) {
   val campaign = activeCampaign.campaign
   val title = campaign.displayTitle.ifBlank { campaign.name }
   val dealLabel = when (campaign.campaignType.lowercase()) {
-    "bogo" -> "Buy ${campaign.buyQuantity}, Get ${campaign.getQuantity}"
-    "bundle" -> "Bundle price deal"
-    "flash_sale", "seasonal", "custom" -> "${campaign.discountPercent.toInt()}% off"
-    else -> "Special offer"
+    "bogo" -> appText("Buy ${campaign.buyQuantity}, Get ${campaign.getQuantity}", "${campaign.buyQuantity} خریدیں، ${campaign.getQuantity} مفت پائیں")
+    "bundle" -> appText("Bundle price deal", "بنڈل قیمت ڈیل")
+    "flash_sale", "seasonal", "custom" -> appText("${campaign.discountPercent.toInt()}% off", "${campaign.discountPercent.toInt()}٪ رعایت")
+    else -> appText("Special offer", "خصوصی پیشکش")
   }
   val description = campaign.description?.takeIf { it.isNotBlank() }
-    ?: "Limited-time deal on ${campaign.productIds.size} selected items. Grab yours before stock runs out!"
+    ?: appText("Limited-time deal on ${campaign.productIds.size} selected items. Grab yours before stock runs out!", "${campaign.productIds.size} منتخب اشیاء پر محدود وقت کی ڈیل۔ اسٹاک ختم ہونے سے پہلے حاصل کریں!")
 
   BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
     val isCompact = maxWidth < 520.dp
@@ -433,7 +435,7 @@ private fun DealHeaderCopy(title: String, description: String, dealLabel: String
       border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f))
     ) {
       Text(
-        text = "$dealLabel • $totalItems ITEMS",
+        text = appText("$dealLabel • $totalItems ITEMS", "$dealLabel • $totalItems اشیاء"),
         color = Color.White,
         fontSize = 10.sp,
         fontWeight = FontWeight.Bold,
@@ -517,7 +519,7 @@ private fun CollectionSortBar(
         onClick = { onSortSelected(option) },
         label = {
           Text(
-            text = option.label,
+            text = option.localizedLabel(),
             fontSize = 12.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
           )

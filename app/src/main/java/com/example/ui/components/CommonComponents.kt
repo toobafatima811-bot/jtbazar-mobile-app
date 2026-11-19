@@ -52,13 +52,15 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.DeliveryAddress
 import com.example.data.repository.MarketplaceRepository
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.theme.*
 
 @Composable
 fun JTBazarBrandLogo(modifier: Modifier = Modifier) {
   Image(
     painter = painterResource(id = R.drawable.logo_jtbazar_header),
-    contentDescription = "JTBazar Logo",
+    contentDescription = appText("JTBazar Logo", "جے ٹی بازار لوگو"),
     contentScale = ContentScale.Fit,
     modifier = modifier
       .height(30.dp)
@@ -75,7 +77,7 @@ fun JTBazarTopBar(
   onAvatarClick: () -> Unit = {},
   onLocationClick: () -> Unit = {},
   cartCount: Int = 2,
-  currentLocation: String = "Select delivery address",
+  currentLocation: String = appText("Select delivery address", "ترسیل کا پتہ منتخب کریں"),
   showLocationText: Boolean = true,
   modifier: Modifier = Modifier
 ) {
@@ -106,7 +108,7 @@ fun JTBazarTopBar(
           ) {
             Icon(
               imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Back",
+              contentDescription = appText("Back", "واپس"),
               tint = JTTextPrimary
             )
           }
@@ -121,7 +123,6 @@ fun JTBazarTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        // Compact location action on the home screen; other screens may show the address label.
         if (title == null) {
           Surface(
             shape = if (showLocationText) RoundedCornerShape(16.dp) else CircleShape,
@@ -141,7 +142,7 @@ fun JTBazarTopBar(
             ) {
               Icon(
                 imageVector = Icons.Filled.LocationOn,
-                contentDescription = if (showLocationText) currentLocation else "Select delivery location",
+                contentDescription = if (showLocationText) currentLocation else appText("Select delivery location", "ترسیل کا مقام منتخب کریں"),
                 tint = JTPurplePrimary,
                 modifier = Modifier.size(19.dp)
               )
@@ -175,7 +176,7 @@ fun JTBazarTopBar(
         ) {
           Icon(
             imageVector = Icons.Outlined.ShoppingBag,
-            contentDescription = "Shopping Cart",
+            contentDescription = appText("Shopping Cart", "شاپنگ کارٹ"),
             tint = JTTextPrimary,
             modifier = Modifier.size(24.dp)
           )
@@ -331,9 +332,9 @@ fun TrustBadgesRow(modifier: Modifier = Modifier) {
     horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    TrustItem(icon = Icons.Filled.Security, title = "100% Genuine", modifier = Modifier.weight(1f))
-    TrustItem(icon = Icons.Filled.Payment, title = "Cash On Delivery", modifier = Modifier.weight(1f))
-    TrustItem(icon = Icons.Filled.HeadsetMic, title = "24/7 Helpline", modifier = Modifier.weight(1f))
+    TrustItem(icon = Icons.Filled.Security, title = appText("100% Genuine", "100% اصل اشیاء"), modifier = Modifier.weight(1f))
+    TrustItem(icon = Icons.Filled.Payment, title = appText("Cash On Delivery", "کیش آن ڈیلیوری"), modifier = Modifier.weight(1f))
+    TrustItem(icon = Icons.Filled.HeadsetMic, title = appText("24/7 Helpline", "24/7 ہیلپ لائن"), modifier = Modifier.weight(1f))
   }
 }
 
@@ -415,13 +416,22 @@ fun AddressSelectionSheet(
       if (resolved.city.isNotBlank()) city = resolved.city
       locationError = null
       locationStatus = if (resolved.street.isBlank()) {
-        "Location detected. Please verify or enter your house/street details."
+        AppLanguageManager.tr(
+          "Location detected. Please verify or enter your house/street details.",
+          "مقام کی نشاندہی ہو گئی۔ براہ کرم اپنا گھر یا گلی کا پتہ چیک یا درج کریں۔"
+        )
       } else {
-        "Current location detected. Verify details and save."
+        AppLanguageManager.tr(
+          "Current location detected. Verify details and save.",
+          "موجودہ مقام مل گیا۔ تفصیلات کی تصدیق کر کے محفوظ کریں۔"
+        )
       }
     } else {
       locationError = null
-      locationStatus = "GPS coordinates captured. Please enter your street, area and city."
+      locationStatus = AppLanguageManager.tr(
+        "GPS coordinates captured. Please enter your street, area and city.",
+        "جی پی ایس مقام محفوظ ہو گیا۔ براہ کرم اپنی گلی، علاقہ اور شہر درج کریں۔"
+      )
     }
   }
 
@@ -434,7 +444,10 @@ fun AddressSelectionSheet(
       startLocationFetch()
     } else {
       locating = false
-      locationError = "Turn on device location / GPS to detect your current address."
+      locationError = AppLanguageManager.tr(
+        "Turn on device location / GPS to detect your current address.",
+        "اپنا موجودہ پتہ معلوم کرنے کے لیے ڈیوائس کی لوکیشن / جی پی ایس آن کریں۔"
+      )
     }
   }
 
@@ -455,7 +468,10 @@ fun AddressSelectionSheet(
               locationSettingsLauncher.launch(request)
             }.onFailure {
               locating = false
-              locationError = "Turn on device location / GPS and try again."
+              locationError = AppLanguageManager.tr(
+                "Turn on device location / GPS and try again.",
+                "ڈیوائس کی لوکیشن / جی پی ایس آن کریں اور دوبارہ کوشش کریں۔"
+              )
             }
           }
           is LocationFetchResult.Failure -> {
@@ -465,7 +481,10 @@ fun AddressSelectionSheet(
         }
       } catch (_: Exception) {
         locating = false
-        locationError = "Unable to detect current location. Please try again."
+        locationError = AppLanguageManager.tr(
+          "Unable to detect current location. Please try again.",
+          "موجودہ مقام معلوم نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔"
+        )
       }
     }
   }
@@ -477,7 +496,10 @@ fun AddressSelectionSheet(
       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     if (!granted) {
       locating = false
-      locationError = "Location permission was not granted."
+      locationError = AppLanguageManager.tr(
+        "Location permission was not granted.",
+        "مقام کی اجازت نہیں دی گئی۔"
+      )
     } else {
       startLocationFetch()
     }
@@ -506,11 +528,14 @@ fun AddressSelectionSheet(
             val cleanArea = area.trim()
             val cleanCity = city.trim()
             val err = when {
-              cleanName.isEmpty() -> "Please enter recipient full name."
+              cleanName.isEmpty() -> AppLanguageManager.tr("Please enter recipient full name.", "براہ کرم وصول کنندہ کا مکمل نام درج کریں۔")
               !com.example.data.supabase.SupabaseApiService.isValidPakistaniMobile(cleanPhone) ->
-                "Enter a valid Pakistani mobile number like 03001234567 or +923001234567."
-              cleanLine.length < 3 -> "Please enter a complete street address (at least 3 characters)."
-              cleanCity.isEmpty() -> "Please enter your city."
+                AppLanguageManager.tr(
+                  "Enter a valid Pakistani mobile number like 03001234567 or +923001234567.",
+                  "درست پاکستانی موبائل نمبر درج کریں جیسے 03001234567 یا +923001234567۔"
+                )
+              cleanLine.length < 3 -> AppLanguageManager.tr("Please enter a complete street address (at least 3 characters).", "براہ کرم مکمل پتہ درج کریں (کم از کم 3 حروف)۔")
+              cleanCity.isEmpty() -> AppLanguageManager.tr("Please enter your city.", "براہ کرم اپنا شہر درج کریں۔")
               else -> null
             }
             if (err != null) {
@@ -537,21 +562,26 @@ fun AddressSelectionSheet(
             onDismiss()
           },
           colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
-        ) { Text("Save Location", fontWeight = FontWeight.Bold) }
+        ) { Text(appText("Save Location", "مقام محفوظ کریں"), fontWeight = FontWeight.Bold) }
       } else {
-        TextButton(onClick = onDismiss) { Text("Done", color = JTPurplePrimary, fontWeight = FontWeight.Bold) }
+        TextButton(onClick = onDismiss) { Text(appText("Done", "مکمل"), color = JTPurplePrimary, fontWeight = FontWeight.Bold) }
       }
     },
     dismissButton = {
       if (showNewAddressForm && addresses.isNotEmpty()) {
-        TextButton(onClick = { showNewAddressForm = false }) { Text("Cancel", color = JTTextSecondary) }
+        TextButton(onClick = { showNewAddressForm = false }) { Text(appText("Cancel", "منسوخ کریں"), color = JTTextSecondary) }
       }
     },
     title = {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Filled.LocationOn, contentDescription = null, tint = JTPurplePrimary)
         Spacer(modifier = Modifier.width(8.dp))
-        Text(if (showNewAddressForm) "Add Delivery Location" else "Select Saved Location", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Text(
+          if (showNewAddressForm) appText("Add Delivery Location", "ترسیل کا نیا مقام شامل کریں")
+          else appText("Select Saved Location", "محفوظ شدہ مقام منتخب کریں"),
+          fontWeight = FontWeight.Bold,
+          fontSize = 17.sp
+        )
       }
     },
     text = {
@@ -573,7 +603,10 @@ fun AddressSelectionSheet(
               Icon(Icons.Filled.MyLocation, contentDescription = null)
             }
             Spacer(Modifier.width(6.dp))
-            Text(if (locating) "Getting current location..." else "Use Current Location")
+            Text(
+              if (locating) appText("Getting current location...", "موجودہ مقام حاصل کیا جا رہا ہے...")
+              else appText("Use Current Location", "موجودہ مقام استعمال کریں")
+            )
           }
           if (latitude != null && longitude != null) {
             Text("GPS: ${String.format(Locale.US, "%.6f", latitude)} , ${String.format(Locale.US, "%.6f", longitude)}", fontSize = 11.sp, color = JTTextSecondary)
@@ -581,23 +614,38 @@ fun AddressSelectionSheet(
           locationStatus?.let { Text(it, color = JTPurplePrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium) }
           locationError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
           Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("HOME", "OFFICE", "OTHER").forEach { value ->
-              FilterChip(selected = label == value, onClick = { label = value }, label = { Text(value, fontSize = 11.sp) })
+            listOf(
+              "HOME" to appText("HOME", "گھر"),
+              "OFFICE" to appText("OFFICE", "دفتر"),
+              "OTHER" to appText("OTHER", "دیگر")
+            ).forEach { (value, display) ->
+              FilterChip(selected = label == value, onClick = { label = value }, label = { Text(display, fontSize = 11.sp) })
             }
           }
           if (label == "OTHER") {
-            OutlinedTextField(value = customLabel, onValueChange = { customLabel = it }, label = { Text("Your location name") }, placeholder = { Text("e.g. Shop, Warehouse") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+              value = customLabel,
+              onValueChange = { customLabel = it },
+              label = { Text(appText("Your location name", "مقام کا نام")) },
+              placeholder = { Text(appText("e.g. Shop, Warehouse", "مثلاً دکان، گودام")) },
+              singleLine = true,
+              modifier = Modifier.fillMaxWidth()
+            )
           }
-          OutlinedTextField(value = recipientName, onValueChange = { recipientName = it }, label = { Text("Recipient Full Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-          OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Mobile Phone Number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-          OutlinedTextField(value = addressLine, onValueChange = { addressLine = it }, label = { Text("House / Street / Building") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+          OutlinedTextField(value = recipientName, onValueChange = { recipientName = it }, label = { Text(appText("Recipient Full Name", "وصول کنندہ کا مکمل نام")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+          OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text(appText("Mobile Phone Number", "موبائل فون نمبر")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+          OutlinedTextField(value = addressLine, onValueChange = { addressLine = it }, label = { Text(appText("House / Street / Building", "مکان / گلی / عمارت")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Area / Colony") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("City") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text(appText("Area / Colony", "علاقہ / کالونی")) }, modifier = Modifier.weight(1f))
+            OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text(appText("City", "شہر")) }, modifier = Modifier.weight(1f))
           }
         } else {
           if (addresses.isEmpty()) {
-            Text("No saved locations yet. Add a delivery location to continue.", fontSize = 12.sp, color = JTTextSecondary)
+            Text(
+              appText("No saved locations yet. Add a delivery location to continue.", "ابھی کوئی محفوظ مقام نہیں۔ جاری رکھنے کے لیے ترسیل کا مقام شامل کریں۔"),
+              fontSize = 12.sp,
+              color = JTTextSecondary
+            )
           } else {
             addresses.forEach { addr ->
               val isSelected = addr.id == selectedAddress?.id
@@ -612,7 +660,7 @@ fun AddressSelectionSheet(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                       Text(addr.tag, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                       Spacer(Modifier.width(6.dp))
-                      if (addr.isDefault) Text("DEFAULT", color = JTPurplePrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                      if (addr.isDefault) Text(appText("DEFAULT", "بنیادی"), color = JTPurplePrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                     Text(
                       text = listOf(addr.area, addr.city).filter { it.isNotBlank() }.joinToString(", "),
@@ -620,9 +668,9 @@ fun AddressSelectionSheet(
                       color = JTTextSecondary
                     )
                     Text(addr.addressLine, fontSize = 12.sp, color = JTTextSecondary)
-                    if (addr.latitude != null && addr.longitude != null) Text("GPS location saved", fontSize = 10.sp, color = JTPurplePrimary)
+                    if (addr.latitude != null && addr.longitude != null) Text(appText("GPS location saved", "جی پی ایس مقام محفوظ ہے"), fontSize = 10.sp, color = JTPurplePrimary)
                   }
-                  if (isSelected) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = JTPurplePrimary)
+                  if (isSelected) Icon(Icons.Filled.Check, contentDescription = appText("Selected", "منتخب"), tint = JTPurplePrimary)
                 }
               }
             }
@@ -637,7 +685,7 @@ fun AddressSelectionSheet(
           ) {
             Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Use Current Location", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(appText("Use Current Location", "موجودہ مقام استعمال کریں"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
           }
           OutlinedButton(
             onClick = { showNewAddressForm = true },
@@ -646,7 +694,7 @@ fun AddressSelectionSheet(
           ) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Add New Location", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(appText("Add New Location", "نیا مقام شامل کریں"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
           }
         }
       }

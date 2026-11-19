@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CategoryItem
 import com.example.data.repository.MarketplaceRepository
+import com.example.localization.appText
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.theme.*
@@ -114,7 +115,7 @@ fun CategoriesScreen(
           ) {
             Icon(
               imageVector = Icons.Filled.Search,
-              contentDescription = "Search",
+              contentDescription = appText("Search", "تلاش"),
               tint = JTPurplePrimary,
               modifier = Modifier.size(20.dp)
             )
@@ -122,7 +123,7 @@ fun CategoriesScreen(
             Box(modifier = Modifier.weight(1f)) {
               if (searchQuery.isEmpty()) {
                 Text(
-                  text = "Search 12+ categories & verified stores",
+                  text = appText("Search 12+ categories & verified stores", "12 سے زائد زمرے اور مستند دکانیں تلاش کریں"),
                   color = JTTextSecondary,
                   fontSize = 13.sp,
                   maxLines = 1,
@@ -147,7 +148,7 @@ fun CategoriesScreen(
             ) {
               Icon(
                 imageVector = Icons.Filled.Mic,
-                contentDescription = "Mic",
+                contentDescription = appText("Mic", "مائیک"),
                 tint = JTTextSecondary,
                 modifier = Modifier.size(18.dp)
               )
@@ -159,7 +160,7 @@ fun CategoriesScreen(
             ) {
               Icon(
                 imageVector = Icons.Filled.Tune,
-                contentDescription = "Filter",
+                contentDescription = appText("Filter", "فلٹر"),
                 tint = JTTextSecondary,
                 modifier = Modifier.size(18.dp)
               )
@@ -174,7 +175,7 @@ fun CategoriesScreen(
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           item {
             FilterChip(selected = selectedCategoryId == null, onClick = { selectedCategoryId = null },
-              label = { Text("All", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+              label = { Text(appText("All", "سب"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
               leadingIcon = { Icon(Icons.Filled.GridView, contentDescription = null, modifier = Modifier.size(15.dp)) },
               colors = FilterChipDefaults.filterChipColors(selectedContainerColor = JTOrange, selectedLabelColor = Color.White, selectedLeadingIconColor = Color.White))
           }
@@ -186,7 +187,7 @@ fun CategoriesScreen(
           }
         }
       }
-      // 3. Section Header: Explore Categories (10 Departments)
+      // 3. Section Header: Explore Categories
       item {
         Spacer(modifier = Modifier.height(18.dp))
         Row(
@@ -197,13 +198,13 @@ fun CategoriesScreen(
           verticalAlignment = Alignment.CenterVertically
         ) {
           Text(
-            text = "Explore Categories",
+            text = appText("Explore Categories", "زمرہ جات دیکھیں"),
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = JTTextPrimary
           )
           Text(
-            text = "${categories.size} Departments",
+            text = appText("${categories.size} Departments", "${categories.size} شعبے"),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = JTTextSecondary
@@ -227,16 +228,16 @@ fun CategoriesScreen(
             ) {
               Icon(Icons.Filled.Category, contentDescription = null, tint = JTPurplePrimary, modifier = Modifier.size(36.dp))
               Spacer(modifier = Modifier.height(10.dp))
-              Text("No categories available", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
+              Text(appText("No categories available", "کوئی زمرے دستیاب نہیں"), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = JTTextPrimary)
               Spacer(modifier = Modifier.height(4.dp))
-              Text("Tap refresh to fetch live categories from JTBazar.", fontSize = 12.sp, color = JTTextSecondary)
+              Text(appText("Tap refresh to fetch live categories from JTBazar.", "جے ٹی بازار سے لائیو زمرے حاصل کرنے کے لیے ریفریش دبائیں۔"), fontSize = 12.sp, color = JTTextSecondary)
               Spacer(modifier = Modifier.height(14.dp))
               Button(
                 onClick = { MarketplaceRepository.refreshLiveCatalog() },
                 colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
                 shape = RoundedCornerShape(8.dp)
               ) {
-                Text("Refresh Categories", fontWeight = FontWeight.Bold)
+                Text(appText("Refresh Categories", "زمرے تازہ کریں"), fontWeight = FontWeight.Bold)
               }
             }
           }

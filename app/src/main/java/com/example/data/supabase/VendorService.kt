@@ -29,6 +29,7 @@ data class VendorApplication(
   val shopImageUrl: String = "",
   val showShopOnMap: Boolean = false,
   val shopIsOpen: Boolean = true,
+  val shopHours: WeeklyShopHours = WeeklyShopHours.defaults(),
   val minimumOrderValue: Int = 0,
   val createdAt: String = "",
   val documentPath: String = "",
@@ -42,15 +43,16 @@ object VendorService {
 
   suspend fun getOwnApplication(): VendorApplication? {
     val user = SupabaseClient.currentUser.value ?: return null
-    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason,created_at,document_path,cnic_front_path,cnic_back_path&limit=1"))
+    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,shop_hours,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason,created_at,document_path,cnic_front_path,cnic_back_path&limit=1"))
     val rows = JSONArray(raw)
     if (rows.length() == 0) return null
     val o = rows.getJSONObject(0)
+    val parsedShopHours = WeeklyShopHours.parse(if (o.has("shop_hours") && !o.isNull("shop_hours")) o.opt("shop_hours") else null)
     return VendorApplication(text(o,"id"), text(o,"status"), text(o,"shop_name"), text(o,"rejection_reason").ifBlank { null }, o.optBoolean("vendor_locked", false), text(o,"vendor_lock_reason").ifBlank { null },
       text(o,"slug"), text(o,"description"), text(o,"phone"), text(o,"current_address"), text(o,"complete_address"), text(o,"contact_email"),
       text(o,"vendor_type","individual_seller"), text(o,"owner_full_name"), text(o,"cnic_number"), text(o,"shop_location_text"),
       if (o.isNull("shop_lat")) null else o.optDouble("shop_lat"), if (o.isNull("shop_lng")) null else o.optDouble("shop_lng"),
-      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), o.optInt("minimum_order_value", 0), text(o,"created_at"), text(o,"document_path"), text(o,"cnic_front_path"), text(o,"cnic_back_path"))
+      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), parsedShopHours, o.optInt("minimum_order_value", 0), text(o,"created_at"), text(o,"document_path"), text(o,"cnic_front_path"), text(o,"cnic_back_path"))
   }
 
   suspend fun isVendor(): Boolean {
@@ -263,11 +265,23 @@ object VendorService {
     } catch (e: Exception) {
       val details = generateSequence(e as Throwable?) { it.cause }.mapNotNull { it.message }.joinToString(" ").lowercase()
       if (details.contains("only customer-confirmed orders")) {
-        throw IOException("Customer ne abhi order confirm nahi kiya. Confirmation ke baad hi item Ready for pickup ho sakta hai.")
+        throw IOException(
+          com.example.localization.AppLanguageManager.tr(
+            "The customer has not confirmed this order yet. It can be marked Ready for Pickup only after customer confirmation.",
+            "صارف نے ابھی اس آرڈر کی تصدیق نہیں کی۔ صارف کی تصدیق کے بعد ہی آئٹم پک اپ کے لیے تیار ہو سکتا ہے۔"
+          )
+        )
       }
       throw e
     }
-    if (raw == "null" || raw == "false" || raw.isBlank()) throw IOException("Order could not be marked ready.")
+    if (raw == "null" || raw == "false" || raw.isBlank()) {
+      throw IOException(
+        com.example.localization.AppLanguageManager.tr(
+          "Order could not be marked ready.",
+          "آرڈر کو تیار کے طور پر نشان زد نہیں کیا جا سکا۔"
+        )
+      )
+    }
   }
   suspend fun setProductVisibility(productId: String, hidden: Boolean) {
     fail(SupabaseClient.rpc("vendor_set_product_visibility", JSONObject().put("p_product_id", productId).put("p_hidden", hidden).toString()))

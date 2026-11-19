@@ -35,6 +35,7 @@ import com.example.ui.components.AppCard
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StatusTone
+import com.example.localization.appText
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
@@ -87,7 +88,7 @@ fun VendorMoreMenuContent(
             verticalArrangement = Arrangement.spacedBy(2.dp)
           ) {
             Text(
-              text = shopName.ifBlank { "Your Shop" },
+              text = shopName.ifBlank { appText("Your Shop", "آپ کی دکان") },
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
               color = Color.White,
@@ -105,7 +106,7 @@ fun VendorMoreMenuContent(
             }
           }
           StatusBadge(
-            text = "Approved",
+            text = appText("Approved", "منظور شدہ"),
             tone = StatusTone.SUCCESS,
             icon = Icons.Rounded.Verified
           )
@@ -115,21 +116,32 @@ fun VendorMoreMenuContent(
 
     item {
       SectionHeader(
-        title = "Shop tools & support",
-        subtitle = "Manage customer disputes, shop details, variants and stock history."
+        title = appText("Shop tools & support", "دکان کے ٹولز اور سپورٹ"),
+        subtitle = appText(
+          "Manage customer disputes, shop details, variants and stock history.",
+          "کسٹمر شکایات، دکان کی تفصیلات، ویرینٹس اور اسٹاک ہسٹری منظم کریں۔"
+        )
       )
     }
 
     item {
       VendorMoreMenuCard(
         icon = Icons.Rounded.Notifications,
-        title = "Notifications",
+        title = appText("Notifications", "اطلاعات"),
         subtitle = if (unreadNotificationsCount > 0) {
-          "$unreadNotificationsCount unread order or store alert(s)"
+          appText(
+            "$unreadNotificationsCount unread order or store alert(s)",
+            "$unreadNotificationsCount غیر پڑھے گئے آرڈر یا اسٹور الرٹس"
+          )
         } else {
-          "View order status updates and store alerts"
+          appText(
+            "View order status updates and store alerts",
+            "آرڈر اسٹیٹس اپڈیٹس اور اسٹور الرٹس دیکھیں"
+          )
         },
-        badgeText = if (unreadNotificationsCount > 0) "$unreadNotificationsCount unread" else null,
+        badgeText = if (unreadNotificationsCount > 0) {
+          appText("$unreadNotificationsCount unread", "$unreadNotificationsCount غیر پڑھے")
+        } else null,
         onClick = onOpenNotifications,
         modifier = Modifier.testTag("vendor_more_notifications")
       )
@@ -138,8 +150,11 @@ fun VendorMoreMenuContent(
     item {
       VendorMoreMenuCard(
         icon = Icons.Rounded.SupportAgent,
-        title = "Cases & Support",
-        subtitle = "Respond to customer cases and chat with JTBazar Support",
+        title = appText("Cases & Support", "کیسز اور سپورٹ"),
+        subtitle = appText(
+          "Respond to customer cases and chat with JTBazar Support",
+          "کسٹمر کیسز کا جواب دیں اور جے ٹی بازار سپورٹ سے بات کریں"
+        ),
         onClick = onOpenCasesSupport,
         modifier = Modifier.testTag("vendor_more_cases_support")
       )
@@ -148,8 +163,11 @@ fun VendorMoreMenuContent(
     item {
       VendorMoreMenuCard(
         icon = Icons.Rounded.Storefront,
-        title = "Shop Settings",
-        subtitle = "Update public profile, shop image, map pin and verification docs",
+        title = appText("Shop Settings", "دکان کی ترتیبات"),
+        subtitle = appText(
+          "Update profile, weekly opening hours, emergency close, map pin and docs",
+          "پروفائل، ہفتہ وار کھلنے کے اوقات، ہنگامی بندش، میپ پن اور دستاویزات اپڈیٹ کریں"
+        ),
         onClick = onOpenShopSettings,
         modifier = Modifier.testTag("vendor_more_shop_settings")
       )
@@ -158,8 +176,11 @@ fun VendorMoreMenuContent(
     item {
       VendorMoreMenuCard(
         icon = Icons.Rounded.Tune,
-        title = "Variants & Inventory History",
-        subtitle = "Manage product variants, photo uploads and stock movement logs",
+        title = appText("Variants & Inventory History", "ویرینٹس اور انوینٹری ہسٹری"),
+        subtitle = appText(
+          "Manage product variants, photo uploads and stock movement logs",
+          "پروڈکٹ ویرینٹس، تصاویر اور اسٹاک نقل و حرکت لاگز منظم کریں"
+        ),
         onClick = onOpenAdvancedTools,
         modifier = Modifier.testTag("vendor_more_advanced_tools")
       )

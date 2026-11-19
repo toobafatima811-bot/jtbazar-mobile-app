@@ -114,6 +114,8 @@ import com.example.data.supabase.SupabaseRealtimeClient
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorOrderStatus
 import com.example.data.supabase.VendorService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.ErrorState
 import com.example.ui.components.PrimaryButton
@@ -345,10 +347,12 @@ fun VendorCenterScreen(
   suspend fun upload(uri: Uri, side: String): String {
     val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-      ?: throw IllegalStateException("Selected file could not be read.")
-    require(bytes.size <= 10 * 1024 * 1024) { "Each verification file must be 10 MB or smaller." }
+      ?: throw IllegalStateException(AppLanguageManager.tr("Selected file could not be read.", "منتخب کردہ فائل پڑھی نہیں جا سکی۔"))
+    require(bytes.size <= 10 * 1024 * 1024) {
+      AppLanguageManager.tr("Each verification file must be 10 MB or smaller.", "ہر تصدیقی فائل 10 ایم بی یا اس سے کم ہونی چاہیے۔")
+    }
     require(mime in listOf("application/pdf", "image/jpeg", "image/png", "image/webp")) {
-      "Use PDF, JPG, PNG or WebP files."
+      AppLanguageManager.tr("Use PDF, JPG, PNG or WebP files.", "صرف PDF، JPG، PNG یا WebP فائلیں استعمال کریں۔")
     }
     val ext = when (mime) {
       "image/jpeg" -> "jpg"
@@ -377,9 +381,9 @@ fun VendorCenterScreen(
           "cnic-front" -> frontPath = path
           "cnic-back" -> backPath = path
         }
-        info = "Document uploaded securely."
+        info = AppLanguageManager.tr("Document uploaded securely.", "دستاویز محفوظ طریقے سے اپ لوڈ ہو گئی۔")
       } catch (e: Exception) {
-        actionErrorMessage = e.message ?: "Document upload failed."
+        actionErrorMessage = e.message ?: AppLanguageManager.tr("Document upload failed.", "دستاویز اپ لوڈ ناکام ہو گئی۔")
       } finally {
         saving = false
       }
@@ -436,25 +440,25 @@ fun VendorCenterScreen(
   }
 
   val topBarTitle = when {
-    activeSubScreen == "product_add" -> "Add listing"
-    activeSubScreen == "product_edit" -> "Edit product"
-    activeSubScreen == "product_details" -> "Product details"
-    activeSubScreen == "order_details" -> "Order details"
+    activeSubScreen == "product_add" -> appText("Add listing", "نئی پروڈکٹ شامل کریں")
+    activeSubScreen == "product_edit" -> appText("Edit product", "پروڈکٹ میں ترمیم")
+    activeSubScreen == "product_details" -> appText("Product details", "پروڈکٹ کی تفصیلات")
+    activeSubScreen == "order_details" -> appText("Order details", "آرڈر کی تفصیلات")
     isApprovedVendor && selectedTab == VendorBottomTab.MORE -> when (moreSection) {
-      VendorMoreSection.CASES_SUPPORT -> "Cases & Support"
-      VendorMoreSection.SHOP_SETTINGS -> "Shop Settings"
-      VendorMoreSection.ADVANCED_TOOLS -> "More Tools"
-      VendorMoreSection.MENU -> "Vendor Center"
+      VendorMoreSection.CASES_SUPPORT -> appText("Cases & Support", "کیسز اور سپورٹ")
+      VendorMoreSection.SHOP_SETTINGS -> appText("Shop Settings", "دکان کی ترتیبات")
+      VendorMoreSection.ADVANCED_TOOLS -> appText("More Tools", "مزید ٹولز")
+      VendorMoreSection.MENU -> appText("Vendor Center", "وینڈر سینٹر")
     }
-    else -> "Vendor Center"
+    else -> appText("Vendor Center", "وینڈر سینٹر")
   }
 
   val topBarSubtitle = when {
     activeSubScreen == "order_details" && selectedOrderGroup != null ->
-      "Order ${selectedOrderGroup.orderNumber}"
+      appText("Order ${selectedOrderGroup.orderNumber}", "آرڈر ${selectedOrderGroup.orderNumber}")
     activeSubScreen != null -> application?.shopName?.takeIf { it.isNotBlank() }
-    isApprovedVendor -> application?.shopName?.takeIf { it.isNotBlank() } ?: "Your shop, products & pickup"
-    else -> "Your shop, products & pickup preparation"
+    isApprovedVendor -> application?.shopName?.takeIf { it.isNotBlank() } ?: appText("Your shop, products & pickup", "آپ کی دکان، مصنوعات اور پک اپ")
+    else -> appText("Your shop, products & pickup preparation", "آپ کی دکان، مصنوعات اور پک اپ کی تیاری")
   }
 
   VendorCenterTheme {
@@ -478,7 +482,7 @@ fun VendorCenterScreen(
               ) {
                 Icon(
                   imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                  contentDescription = "Back"
+                  contentDescription = appText("Back", "واپس")
                 )
               }
             },
@@ -528,7 +532,7 @@ fun VendorCenterScreen(
                   ) {
                     Icon(
                       imageVector = Icons.Rounded.Notifications,
-                      contentDescription = "Notifications",
+                      contentDescription = appText("Notifications", "نوٹیفیکیشنز"),
                       tint = VendorColors.TextPrimary
                     )
                   }
@@ -551,7 +555,7 @@ fun VendorCenterScreen(
                   } else {
                     Icon(
                       imageVector = Icons.Rounded.Refresh,
-                      contentDescription = "Refresh Vendor Center",
+                      contentDescription = appText("Refresh Vendor Center", "وینڈر سینٹر ریفریش کریں"),
                       tint = VendorColors.PrimaryOrange
                     )
                   }
@@ -618,21 +622,21 @@ fun VendorCenterScreen(
                       ) {
                         Icon(
                           imageVector = icon,
-                          contentDescription = tab.label,
+                          contentDescription = tab.localizedLabel(),
                           modifier = Modifier.size(24.dp)
                         )
                       }
                     } else {
                       Icon(
                         imageVector = icon,
-                        contentDescription = tab.label,
+                        contentDescription = tab.localizedLabel(),
                         modifier = Modifier.size(24.dp)
                       )
                     }
                   },
                   label = {
                     Text(
-                      text = tab.label,
+                      text = tab.localizedLabel(),
                       style = MaterialTheme.typography.labelSmall,
                       fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                       maxLines = 1,
@@ -682,9 +686,12 @@ fun VendorCenterScreen(
               verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
             ) {
               ErrorState(
-                title = "Connection problem",
-                message = "$errorMessage\n\nNo application or shop data was submitted. Check your internet connection and try again.",
-                retryLabel = "Retry connection",
+                title = appText("Connection problem", "کنکشن کا مسئلہ"),
+                message = "$errorMessage\n\n" + appText(
+                  "No application or shop data was submitted. Check your internet connection and try again.",
+                  "کوئی درخواست یا دکان کا ڈیٹا جمع نہیں ہوا۔ اپنا انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔"
+                ),
+                retryLabel = appText("Retry connection", "دوبارہ کوشش کریں"),
                 onRetry = { refresh() }
               )
             }
@@ -699,17 +706,17 @@ fun VendorCenterScreen(
               verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
             ) {
               SectionHeader(
-                title = "Vendor account restricted",
-                subtitle = "Seller access is currently paused for this account."
+                title = appText("Vendor account restricted", "فروش اکاؤنٹ محدود ہے"),
+                subtitle = appText("Seller access is currently paused for this account.", "اس اکاؤنٹ کے لیے فروش تک رسائی فی الحال معطل ہے۔")
               )
               StatusPanel(application!!)
               VendorAlertBanner(
                 message = application?.lockReason
-                  ?: "Vendor tools are temporarily unavailable. Contact JTBazar support for details.",
+                  ?: appText("Vendor tools are temporarily unavailable. Contact JTBazar support for details.", "فروش ٹولز عارضی طور پر دستیاب نہیں ہیں۔ تفصیلات کے لیے جے ٹی بازار سپورٹ سے رابطہ کریں۔"),
                 isError = true
               )
               SecondaryButton(
-                text = "Refresh status",
+                text = appText("Refresh status", "حیثیت ریفریش کریں"),
                 icon = Icons.Rounded.Refresh,
                 onClick = { refresh() },
                 modifier = Modifier.fillMaxWidth()
@@ -728,7 +735,7 @@ fun VendorCenterScreen(
                     productDeletionRequests = VendorService.listProductDeletionRequests()
                   } catch (e: Exception) {
                     actionErrorMessage = e.message
-                      ?: "Listing was submitted, but the product list could not refresh."
+                      ?: AppLanguageManager.tr("Listing was submitted, but the product list could not refresh.", "پروڈکٹ جمع ہو گئی، لیکن فہرست ریفریش نہیں ہو سکی۔")
                   }
                   activeSubScreen = null
                   selectedTab = VendorBottomTab.PRODUCTS
@@ -769,7 +776,7 @@ fun VendorCenterScreen(
                       viewingProduct = null
                       activeSubScreen = null
                       selectedTab = VendorBottomTab.PRODUCTS
-                      info = "Product updated and sent for moderation where required."
+                      info = AppLanguageManager.tr("Product updated and sent for moderation where required.", "پروڈکٹ اپڈیٹ ہو گئی اور جہاں ضروری ہو جائزے کے لیے بھیج دی گئی۔")
                     }
                   )
                 } else {
@@ -804,10 +811,10 @@ fun VendorCenterScreen(
                         info = ""
                         try {
                           VendorService.markOrderReady(group.orderId, note)
-                          info = "Marked ready for JTBazar pickup."
+                          info = AppLanguageManager.tr("Marked ready for JTBazar pickup.", "جے ٹی بازار پک اپ کے لیے تیار نشان زد کر دیا گیا۔")
                           refreshOrdersInternal(showLoader = false)
                         } catch (e: Exception) {
-                          actionErrorMessage = e.message ?: "Could not update order."
+                          actionErrorMessage = e.message ?: AppLanguageManager.tr("Could not update order.", "آرڈر اپڈیٹ نہیں ہو سکا۔")
                         } finally {
                           saving = false
                         }
@@ -915,12 +922,12 @@ fun VendorCenterScreen(
                             VendorService.setProductVisibility(model.id, !model.isHidden)
                             products = VendorService.listProducts()
                             info = if (model.isHidden) {
-                              "Product is now visible to shoppers."
+                              AppLanguageManager.tr("Product is now visible to shoppers.", "پروڈکٹ اب خریداروں کو نظر آ رہی ہے۔")
                             } else {
-                              "Product hidden from shoppers."
+                              AppLanguageManager.tr("Product hidden from shoppers.", "پروڈکٹ خریداروں سے مخفی کر دی گئی۔")
                             }
                           } catch (e: Exception) {
-                            actionErrorMessage = e.message ?: "Visibility update failed."
+                            actionErrorMessage = e.message ?: AppLanguageManager.tr("Visibility update failed.", "ظاہری حیثیت اپڈیٹ ناکام ہو گئی۔")
                           } finally {
                             saving = false
                           }
@@ -936,19 +943,19 @@ fun VendorCenterScreen(
                               try {
                                 VendorService.setProductVisibility(model.id, true)
                                 products = VendorService.listProducts()
-                                info = "Product archived and hidden from your storefront."
+                                info = AppLanguageManager.tr("Product archived and hidden from your storefront.", "پروڈکٹ محفوظ کر دی گئی اور آپ کی دکان سے مخفی ہے۔")
                               } catch (e: Exception) {
-                                actionErrorMessage = e.message ?: "Archive update failed."
+                                actionErrorMessage = e.message ?: AppLanguageManager.tr("Archive update failed.", "آرکائیو اپڈیٹ ناکام ہو گئی۔")
                               } finally {
                                 saving = false
                               }
                             }
                           }
                           model.isHidden -> {
-                            info = "This product is already archived/hidden from shoppers."
+                            info = AppLanguageManager.tr("This product is already archived/hidden from shoppers.", "یہ پروڈکٹ پہلے ہی خریداروں سے مخفی ہے۔")
                           }
                           else -> {
-                            actionErrorMessage = "Only approved listings can be archived or hidden."
+                            actionErrorMessage = AppLanguageManager.tr("Only approved listings can be archived or hidden.", "صرف منظور شدہ مصنوعات کو مخفی یا آرکائیو کیا جا سکتا ہے۔")
                           }
                         }
                       },
@@ -1019,10 +1026,10 @@ fun VendorCenterScreen(
                           info = ""
                           try {
                             VendorService.markOrderReady(group.orderId)
-                            info = "Marked ready for JTBazar pickup."
+                            info = AppLanguageManager.tr("Marked ready for JTBazar pickup.", "جے ٹی بازار پک اپ کے لیے تیار نشان زد کر دیا گیا۔")
                             refreshOrdersInternal(showLoader = false)
                           } catch (e: Exception) {
-                            actionErrorMessage = e.message ?: "Could not update order."
+                            actionErrorMessage = e.message ?: AppLanguageManager.tr("Could not update order.", "آرڈر اپڈیٹ نہیں ہو سکا۔")
                           } finally {
                             saving = false
                           }
@@ -1109,24 +1116,25 @@ fun VendorCenterScreen(
                 )
               } else {
                 SectionHeader(
-                  title = "Seller application",
-                  subtitle = "Review your current application status and feedback."
+                  title = appText("Seller application", "فروش کی درخواست"),
+                  subtitle = appText("Review your current application status and feedback.", "اپنی درخواست کی موجودہ حیثیت اور تاثرات دیکھیں۔")
                 )
                 StatusPanel(application!!)
                 if (application?.status == "rejected") {
                   VendorAlertBanner(
-                    message = "Reason: ${application?.rejectionReason ?: "Please review your application."}",
+                    message = appText("Reason: ", "وجہ: ") +
+                      (application?.rejectionReason ?: appText("Please review your application.", "براہ کرم اپنی درخواست کا جائزہ لیں۔")),
                     isError = true
                   )
                   AppCard {
                     VendorApplicationResubmissionPanel(application!!) {
                       application = it
-                      info = "Application resubmitted."
+                      info = AppLanguageManager.tr("Application resubmitted.", "درخواست دوبارہ جمع کرا دی گئی۔")
                     }
                   }
                 }
                 SecondaryButton(
-                  text = "Refresh application status",
+                  text = appText("Refresh application status", "درخواست کی حیثیت ریفریش کریں"),
                   icon = Icons.Rounded.Refresh,
                   onClick = { refresh() },
                   modifier = Modifier.fillMaxWidth()
@@ -1164,18 +1172,21 @@ fun VendorCenterScreen(
               ) {
                 Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
                   StatusBadge(
-                    text = "Seller onboarding",
+                    text = appText("Seller onboarding", "فروش اندراج"),
                     tone = StatusTone.PRIMARY,
                     icon = Icons.Rounded.Storefront
                   )
                   Text(
-                    text = "Become a JTBazar Vendor",
+                    text = appText("Become a JTBazar Vendor", "جے ٹی بازار فروش بنیں"),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                   )
                   Text(
-                    text = "Submit your shop and identity details. All verification files are stored privately for JTBazar review.",
+                    text = appText(
+                      "Submit your shop and identity details. All verification files are stored privately for JTBazar review.",
+                      "اپنی دکان اور شناخت کی تفصیلات جمع کرائیں۔ تمام تصدیقی فائلیں جے ٹی بازار کے جائزے کے لیے نجی طور پر محفوظ کی جاتی ہیں۔"
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = VendorColors.NavyHeaderSubtitle
                   )
@@ -1185,19 +1196,19 @@ fun VendorCenterScreen(
               AppCard {
                 Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
                   SectionHeader(
-                    title = "Shop details",
-                    subtitle = "Storefront name, description and business type"
+                    title = appText("Shop details", "دکان کی تفصیلات"),
+                    subtitle = appText("Storefront name, description and business type", "دکان کا نام، تفصیل اور کاروبار کی قسم")
                   )
                   VendorOutlinedTextField(
                     value = shopName,
                     onValueChange = { shopName = it },
-                    label = "Shop name *",
+                    label = appText("Shop name *", "دکان کا نام *"),
                     leadingIcon = Icons.Rounded.Storefront
                   )
                   VendorOutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = "Shop description (at least 10 characters) *",
+                    label = appText("Shop description (at least 10 characters) *", "دکان کی تفصیل (کم از کم 10 حروف) *"),
                     leadingIcon = Icons.Rounded.Description,
                     minLines = 3
                   )
@@ -1211,46 +1222,46 @@ fun VendorCenterScreen(
               AppCard {
                 Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
                   SectionHeader(
-                    title = "Owner & addresses",
-                    subtitle = "Legal verification and contact details"
+                    title = appText("Owner & addresses", "مالک اور پتے"),
+                    subtitle = appText("Legal verification and contact details", "قانونی تصدیق اور رابطے کی تفصیلات")
                   )
                   VendorOutlinedTextField(
                     value = ownerName,
                     onValueChange = { ownerName = it },
-                    label = "Owner full legal name *",
+                    label = appText("Owner full legal name *", "مالک کا پورا قانونی نام *"),
                     leadingIcon = Icons.Rounded.Person
                   )
                   VendorOutlinedTextField(
                     value = cnic,
                     onValueChange = { cnic = it.filter(Char::isDigit).take(13) },
-                    label = "CNIC number (13 digits, no dashes) *",
+                    label = appText("CNIC number (13 digits, no dashes) *", "شناختی کارڈ نمبر (13 ہندسے، بغیر ڈیش) *"),
                     leadingIcon = Icons.Rounded.CreditCard,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                   )
                   VendorOutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = "Contact phone (03XXXXXXXXX) *",
+                    label = appText("Contact phone (03XXXXXXXXX) *", "رابطہ نمبر (03XXXXXXXXX) *"),
                     leadingIcon = Icons.Rounded.Phone,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                   )
                   VendorOutlinedTextField(
                     value = currentAddress,
                     onValueChange = { currentAddress = it },
-                    label = "Current address *",
+                    label = appText("Current address *", "موجودہ پتہ *"),
                     leadingIcon = Icons.Rounded.LocationOn
                   )
                   VendorOutlinedTextField(
                     value = fullAddress,
                     onValueChange = { fullAddress = it },
-                    label = "Complete address *",
+                    label = appText("Complete address *", "مکمل پتہ *"),
                     leadingIcon = Icons.Rounded.Home,
                     minLines = 2
                   )
                   VendorOutlinedTextField(
                     value = shopLocation,
                     onValueChange = { shopLocation = it },
-                    label = "Shop location / landmark details *",
+                    label = appText("Shop location / landmark details *", "دکان کا مقام / قریبی نشانی *"),
                     leadingIcon = Icons.Rounded.LocationCity,
                     minLines = 2
                   )
@@ -1260,8 +1271,8 @@ fun VendorCenterScreen(
               AppCard {
                 Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
                   SectionHeader(
-                    title = "Shop location & picture",
-                    subtitle = "Pin your location on the map and add a shop photo"
+                    title = appText("Shop location & picture", "دکان کا مقام اور تصویر"),
+                    subtitle = appText("Pin your location on the map and add a shop photo", "نقشے پر اپنا مقام پن کریں اور دکان کی تصویر شامل کریں")
                   )
                   Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1270,16 +1281,16 @@ fun VendorCenterScreen(
                   ) {
                     Text(
                       text = if (latitude.isNotBlank() && longitude.isNotBlank()) {
-                        "Selected: $latitude, $longitude"
+                        appText("Selected: $latitude, $longitude", "منتخب شدہ: $latitude, $longitude")
                       } else {
-                        "Choose your shop location on the map."
+                        appText("Choose your shop location on the map.", "نقشے پر اپنی دکان کا مقام منتخب کریں۔")
                       },
                       style = MaterialTheme.typography.bodySmall,
                       color = VendorColors.TextSecondary,
                       modifier = Modifier.weight(1f)
                     )
                     StatusBadge(
-                      text = if (latitude.isNotBlank() && longitude.isNotBlank()) "Pinned" else "Required",
+                      text = if (latitude.isNotBlank() && longitude.isNotBlank()) appText("Pinned", "پن شدہ") else appText("Required", "ضروری"),
                       tone = if (latitude.isNotBlank() && longitude.isNotBlank()) {
                         StatusTone.SUCCESS
                       } else {
@@ -1289,9 +1300,9 @@ fun VendorCenterScreen(
                   }
                   SecondaryButton(
                     text = if (latitude.isNotBlank() && longitude.isNotBlank()) {
-                      "Change shop location on map"
+                      appText("Change shop location on map", "نقشے پر دکان کا مقام تبدیل کریں")
                     } else {
-                      "Choose shop location on map"
+                      appText("Choose shop location on map", "نقشے پر دکان کا مقام منتخب کریں")
                     },
                     icon = Icons.Rounded.Map,
                     onClick = { showMapPicker = true },
@@ -1303,7 +1314,7 @@ fun VendorCenterScreen(
                   shopImageUri?.let { uri ->
                     AsyncImage(
                       model = uri,
-                      contentDescription = "Shop picture preview",
+                      contentDescription = appText("Shop picture preview", "دکان کی تصویر کا پیش نظارہ"),
                       modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
@@ -1312,7 +1323,8 @@ fun VendorCenterScreen(
                     )
                   }
                   SecondaryButton(
-                    text = if (shopImageUri == null) "Choose public shop picture" else "Change selected shop picture",
+                    text = if (shopImageUri == null) appText("Choose public shop picture", "دکان کی تصویر منتخب کریں")
+                    else appText("Change selected shop picture", "منتخب کردہ تصویر تبدیل کریں"),
                     icon = Icons.Rounded.Image,
                     onClick = { shopImagePicker.launch("image/*") },
                     modifier = Modifier.fillMaxWidth()
@@ -1334,34 +1346,34 @@ fun VendorCenterScreen(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                       Text(
-                        text = "Verification documents",
+                        text = appText("Verification documents", "تصدیقی دستاویزات"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = VendorColors.TextPrimary
                       )
                       Text(
-                        text = "Stored privately for JTBazar admin review only.",
+                        text = appText("Stored privately for JTBazar admin review only.", "صرف جے ٹی بازار ایڈمن کے جائزے کے لیے نجی طور پر محفوظ۔"),
                         style = MaterialTheme.typography.bodySmall,
                         color = VendorColors.TextSecondary
                       )
                     }
                   }
                   DocumentButton(
-                    label = "Identity / business verification document",
+                    label = appText("Identity / business verification document", "شناخت / کاروباری تصدیقی دستاویز"),
                     uploaded = verificationPath != null
                   ) {
                     pendingDoc = "verification"
                     documentPicker.launch("*/*")
                   }
                   DocumentButton(
-                    label = "CNIC front image",
+                    label = appText("CNIC front image", "شناختی کارڈ کا سامنے کا عکس"),
                     uploaded = frontPath != null
                   ) {
                     pendingDoc = "cnic-front"
                     documentPicker.launch("image/*")
                   }
                   DocumentButton(
-                    label = "CNIC back image",
+                    label = appText("CNIC back image", "شناختی کارڈ کا پیچھے کا عکس"),
                     uploaded = backPath != null
                   ) {
                     pendingDoc = "cnic-back"
@@ -1371,7 +1383,7 @@ fun VendorCenterScreen(
               }
 
               PrimaryButton(
-                text = if (saving) "Submitting..." else "Submit vendor application",
+                text = if (saving) appText("Submitting...", "جمع کرایا جا رہا ہے...") else appText("Submit vendor application", "فروش درخواست جمع کرائیں"),
                 icon = Icons.Rounded.Send,
                 loading = saving,
                 enabled = !saving,
@@ -1381,46 +1393,51 @@ fun VendorCenterScreen(
                     actionErrorMessage = ""
                     info = ""
                     try {
-                      val u = user ?: error("Please sign in again.")
+                      val u = user ?: error(AppLanguageManager.tr("Please sign in again.", "براہ کرم دوبارہ سائن ان کریں۔"))
                       val normalizedPhone = normalizePakistaniPhone(phone)
                       require(shopName.trim().length in 2..160) {
-                        "Shop name must be between 2 and 160 characters."
+                        AppLanguageManager.tr("Shop name must be between 2 and 160 characters.", "دکان کا نام 2 سے 160 حروف کے درمیان ہونا چاہیے۔")
                       }
                       require(description.trim().length in 10..2000) {
-                        "Shop description must be between 10 and 2,000 characters."
+                        AppLanguageManager.tr("Shop description must be between 10 and 2,000 characters.", "دکان کی تفصیل 10 سے 2,000 حروف کے درمیان ہونی چاہیے۔")
                       }
-                      require(ownerName.trim().length >= 3) { "Enter the owner's full legal name." }
+                      require(ownerName.trim().length >= 3) {
+                        AppLanguageManager.tr("Enter the owner's full legal name.", "مالک کا پورا قانونی نام درج کریں۔")
+                      }
                       require(cnic.matches(Regex("^[0-9]{13}$"))) {
-                        "Enter a 13-digit CNIC number without dashes."
+                        AppLanguageManager.tr("Enter a 13-digit CNIC number without dashes.", "بغیر ڈیش کے 13 ہندسوں کا شناختی کارڈ نمبر درج کریں۔")
                       }
                       require(normalizedPhone.matches(Regex("^(03[0-9]{9}|\\+923[0-9]{9})$"))) {
-                        "Enter a valid Pakistani phone number, e.g. 03001234567."
+                        AppLanguageManager.tr("Enter a valid Pakistani phone number, e.g. 03001234567.", "درست پاکستانی فون نمبر درج کریں، مثلاً 03001234567۔")
                       }
                       require(
                         currentAddress.trim().length >= 3 &&
                           fullAddress.trim().length >= 10 &&
                           shopLocation.trim().length >= 10
                       ) {
-                        "Complete your current address, full address and shop landmark (at least 10 characters)."
+                        AppLanguageManager.tr(
+                          "Complete your current address, full address and shop landmark (at least 10 characters).",
+                          "اپنا موجودہ پتہ، مکمل پتہ اور دکان کی نشانی مکمل کریں (کم از کم 10 حروف)۔"
+                        )
                       }
-                      val lat = latitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
-                      val lng = longitude.toDoubleOrNull() ?: error("Choose your shop location on the map.")
+                      val lat = latitude.toDoubleOrNull() ?: error(AppLanguageManager.tr("Choose your shop location on the map.", "نقشے پر اپنی دکان کا مقام منتخب کریں۔"))
+                      val lng = longitude.toDoubleOrNull() ?: error(AppLanguageManager.tr("Choose your shop location on the map.", "نقشے پر اپنی دکان کا مقام منتخب کریں۔"))
                       require(
                         lat in -90.0..90.0 &&
                           lng in -180.0..180.0 &&
                           !(lat == 0.0 && lng == 0.0)
                       ) {
-                        "Map coordinates are invalid. Select your actual shop location."
+                        AppLanguageManager.tr("Map coordinates are invalid. Select your actual shop location.", "نقشے کے نقاط درست نہیں ہیں۔ اپنی دکان کا اصل مقام منتخب کریں۔")
                       }
                       require(
                         !verificationPath.isNullOrBlank() &&
                           !frontPath.isNullOrBlank() &&
                           !backPath.isNullOrBlank()
                       ) {
-                        "Upload all three verification documents before submitting."
+                        AppLanguageManager.tr("Upload all three verification documents before submitting.", "جمع کرانے سے پہلے تینوں تصدیقی دستاویزات اپ لوڈ کریں۔")
                       }
                       require(u.email?.isNotBlank() == true) {
-                        "Your account email is missing. Sign in again."
+                        AppLanguageManager.tr("Your account email is missing. Sign in again.", "آپ کے اکاؤنٹ کا ای میل موجود نہیں۔ دوبارہ سائن ان کریں۔")
                       }
                       val slugBase = shopName.lowercase(Locale.ROOT)
                         .replace(Regex("[^a-z0-9]+"), "-")
@@ -1432,7 +1449,7 @@ fun VendorCenterScreen(
                       val uploadedShopImage = shopImageUri?.let { uri ->
                         val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
                         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                          ?: error("Shop picture could not be read.")
+                          ?: error(AppLanguageManager.tr("Shop picture could not be read.", "دکان کی تصویر پڑھی نہیں جا سکی۔"))
                         VendorService.uploadShopImage(bytes, mime)
                       }
                       val body = JSONObject()
@@ -1457,9 +1474,12 @@ fun VendorCenterScreen(
                         .put("shop_lng", lng)
                         .put("show_shop_on_map", true)
                       application = VendorService.submitApplication(body)
-                      info = "Application submitted successfully. JTBazar admin review is pending."
+                      info = AppLanguageManager.tr(
+                        "Application submitted successfully. JTBazar admin review is pending.",
+                        "درخواست کامیابی سے جمع ہو گئی۔ جے ٹی بازار ایڈمن کا جائزہ زیر التواء ہے۔"
+                      )
                     } catch (e: Exception) {
-                      actionErrorMessage = e.message ?: "Application could not be submitted."
+                      actionErrorMessage = e.message ?: AppLanguageManager.tr("Application could not be submitted.", "درخواست جمع نہیں ہو سکی۔")
                     } finally {
                       saving = false
                     }
@@ -1469,7 +1489,10 @@ fun VendorCenterScreen(
               )
 
               Text(
-                text = "Your application will remain pending until JTBazar admin approves it.",
+                text = appText(
+                  "Your application will remain pending until JTBazar admin approves it.",
+                  "جے ٹی بازار ایڈمن کی منظوری تک آپ کی درخواست زیر التواء رہے گی۔"
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = VendorColors.TextSecondary,
                 textAlign = TextAlign.Center,
@@ -1503,7 +1526,7 @@ fun VendorCenterScreen(
       shape = VendorShapes.card,
       title = {
         Text(
-          text = "Request product deletion",
+          text = appText("Request product deletion", "پروڈکٹ حذف کرنے کی درخواست"),
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Bold,
           color = VendorColors.TextPrimary
@@ -1512,12 +1535,15 @@ fun VendorCenterScreen(
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
           Text(
-            text = "This sends a request to JTBazar for review. The product will not be deleted immediately.",
+            text = appText(
+              "This sends a request to JTBazar for review. The product will not be deleted immediately.",
+              "یہ درخواست جے ٹی بازار کو جائزے کے لیے بھیجی جاتی ہے۔ پروڈکٹ فوری طور پر حذف نہیں ہوگی۔"
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = VendorColors.TextSecondary
           )
           Text(
-            text = target.optString("name", "Product"),
+            text = target.optString("name", appText("Product", "پروڈکٹ")),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = VendorColors.TextPrimary
@@ -1525,7 +1551,7 @@ fun VendorCenterScreen(
           VendorOutlinedTextField(
             value = deletionReason,
             onValueChange = { deletionReason = it },
-            label = "Reason for deletion *",
+            label = appText("Reason for deletion *", "حذف کرنے کی وجہ *"),
             leadingIcon = Icons.Rounded.Description,
             minLines = 3,
             enabled = !saving
@@ -1534,7 +1560,7 @@ fun VendorCenterScreen(
       },
       confirmButton = {
         PrimaryButton(
-          text = if (saving) "Submitting..." else "Submit request",
+          text = if (saving) appText("Submitting...", "جمع کرایا جا رہا ہے...") else appText("Submit request", "درخواست جمع کرائیں"),
           loading = saving,
           enabled = !saving && deletionReason.trim().length >= 3,
           containerColor = VendorColors.DangerRed,
@@ -1545,11 +1571,11 @@ fun VendorCenterScreen(
               try {
                 VendorService.requestProductDeletion(target.optString("id"), deletionReason.trim())
                 productDeletionRequests = VendorService.listProductDeletionRequests()
-                info = "Product deletion request submitted for JTBazar review."
+                info = AppLanguageManager.tr("Product deletion request submitted for JTBazar review.", "پروڈکٹ حذف کرنے کی درخواست جے ٹی بازار کے جائزے کے لیے جمع کرا دی گئی۔")
                 deletionTarget = null
                 deletionReason = ""
               } catch (e: Exception) {
-                actionErrorMessage = e.message ?: "Deletion request could not be submitted."
+                actionErrorMessage = e.message ?: AppLanguageManager.tr("Deletion request could not be submitted.", "حذف کرنے کی درخواست جمع نہیں ہو سکی۔")
               } finally {
                 saving = false
               }
@@ -1563,7 +1589,7 @@ fun VendorCenterScreen(
           enabled = !saving,
           modifier = Modifier.height(VendorSpacing.touchMin)
         ) {
-          Text("Cancel", color = VendorColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+          Text(appText("Cancel", "منسوخ کریں"), color = VendorColors.TextSecondary, fontWeight = FontWeight.SemiBold)
         }
       }
     )
@@ -1594,7 +1620,12 @@ fun ShopLocationPickerDialog(
   }
   var mapView by remember { mutableStateOf<MapView?>(null) }
   var locationMessage by remember {
-    mutableStateOf("Move the map and tap your shop location to place the pin.")
+    mutableStateOf(
+      AppLanguageManager.tr(
+        "Move the map and tap your shop location to place the pin.",
+        "نقشہ حرکت دیں اور پن لگانے کے لیے اپنی دکان کے مقام پر ٹیپ کریں۔"
+      )
+    )
   }
 
   fun placePin(point: GeoPoint) {
@@ -1606,7 +1637,7 @@ fun ShopLocationPickerDialog(
       map.overlays.filterIsInstance<Marker>().forEach { map.overlays.remove(it) }
       val marker = Marker(map).apply {
         position = point
-        title = "Shop location"
+        title = AppLanguageManager.tr("Shop location", "دکان کا مقام")
         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
       }
       map.overlays.add(marker)
@@ -1629,19 +1660,28 @@ fun ShopLocationPickerDialog(
           .addOnSuccessListener { location: Location? ->
             if (location != null) {
               placePin(GeoPoint(location.latitude, location.longitude))
-              locationMessage = "Current device location selected. Adjust the pin if needed."
+              locationMessage = AppLanguageManager.tr(
+                "Current device location selected. Adjust the pin if needed.",
+                "موجودہ ڈیوائس لوکیشن منتخب ہو گئی۔ ضرورت ہو تو پن ایڈجسٹ کریں۔"
+              )
             } else {
-              locationMessage = "Current location unavailable. Move the map and tap your shop location."
+              locationMessage = AppLanguageManager.tr(
+                "Current location unavailable. Move the map and tap your shop location.",
+                "موجودہ مقام دستیاب نہیں۔ نقشہ حرکت دیں اور اپنی دکان کے مقام پر ٹیپ کریں۔"
+              )
             }
           }
           .addOnFailureListener {
-            locationMessage = it.message ?: "Could not get current location."
+            locationMessage = it.message ?: AppLanguageManager.tr("Could not get current location.", "موجودہ مقام حاصل نہیں ہو سکا۔")
           }
       } catch (_: SecurityException) {
-        locationMessage = "Location permission is required to use current location."
+        locationMessage = AppLanguageManager.tr("Location permission is required to use current location.", "موجودہ مقام استعمال کرنے کے لیے لوکیشن کی اجازت درکار ہے۔")
       }
     } else {
-      locationMessage = "Location permission denied. You can still select a location manually on the map."
+      locationMessage = AppLanguageManager.tr(
+        "Location permission denied. You can still select a location manually on the map.",
+        "لوکیشن کی اجازت مسترد ہو گئی۔ آپ اب بھی نقشے پر دستی طور پر مقام منتخب کر سکتے ہیں۔"
+      )
     }
   }
 
@@ -1658,13 +1698,16 @@ fun ShopLocationPickerDialog(
         verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
       ) {
         Text(
-          text = "Choose shop location",
+          text = appText("Choose shop location", "دکان کا مقام منتخب کریں"),
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Bold,
           color = VendorColors.TextPrimary
         )
         Text(
-          text = "Drag the map and tap the exact shop location. The pin will be saved automatically.",
+          text = appText(
+            "Drag the map and tap the exact shop location. The pin will be saved automatically.",
+            "نقشے کو گھسیٹیں اور دکان کے درست مقام پر ٹیپ کریں۔ پن خود بخود محفوظ ہو جائے گا۔"
+          ),
           color = VendorColors.TextSecondary,
           style = MaterialTheme.typography.bodySmall
         )
@@ -1684,7 +1727,7 @@ fun ShopLocationPickerDialog(
               val receiver = object : MapEventsReceiver {
                 override fun singleTapConfirmedHelper(point: GeoPoint): Boolean {
                   placePin(point)
-                  locationMessage = "Location pin selected."
+                  locationMessage = AppLanguageManager.tr("Location pin selected.", "مقام کا پن منتخب ہو گیا۔")
                   return true
                 }
 
@@ -1703,7 +1746,7 @@ fun ShopLocationPickerDialog(
           style = MaterialTheme.typography.bodySmall
         )
         SecondaryButton(
-          text = "Use my current location",
+          text = appText("Use my current location", "میرا موجودہ مقام استعمال کریں"),
           icon = Icons.Rounded.MyLocation,
           onClick = {
             val fine = ContextCompat.checkSelfPermission(
@@ -1723,16 +1766,22 @@ fun ShopLocationPickerDialog(
                   .addOnSuccessListener { location ->
                     if (location != null) {
                       placePin(GeoPoint(location.latitude, location.longitude))
-                      locationMessage = "Current device location selected. Adjust the pin if needed."
+                      locationMessage = AppLanguageManager.tr(
+                        "Current device location selected. Adjust the pin if needed.",
+                        "موجودہ ڈیوائس لوکیشن منتخب ہو گئی۔ ضرورت ہو تو پن ایڈجسٹ کریں۔"
+                      )
                     } else {
-                      locationMessage = "Current location unavailable. Move the map and tap your shop location."
+                      locationMessage = AppLanguageManager.tr(
+                        "Current location unavailable. Move the map and tap your shop location.",
+                        "موجودہ مقام دستیاب نہیں۔ نقشہ حرکت دیں اور اپنی دکان کے مقام پر ٹیپ کریں۔"
+                      )
                     }
                   }
                   .addOnFailureListener {
-                    locationMessage = it.message ?: "Could not get current location."
+                    locationMessage = it.message ?: AppLanguageManager.tr("Could not get current location.", "موجودہ مقام حاصل نہیں ہو سکا۔")
                   }
               } catch (_: SecurityException) {
-                locationMessage = "Location permission is required."
+                locationMessage = AppLanguageManager.tr("Location permission is required.", "لوکیشن کی اجازت درکار ہے۔")
               }
             } else {
               locationPermission.launch(
@@ -1750,12 +1799,12 @@ fun ShopLocationPickerDialog(
           horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
         ) {
           SecondaryButton(
-            text = "Cancel",
+            text = appText("Cancel", "منسوخ کریں"),
             onClick = onDismiss,
             modifier = Modifier.weight(1f)
           )
           PrimaryButton(
-            text = "Use location",
+            text = appText("Use location", "مقام استعمال کریں"),
             enabled = hasSelectedPoint,
             onClick = { onConfirm(selectedPoint) },
             modifier = Modifier.weight(1f)
@@ -1780,7 +1829,7 @@ private fun DocumentButton(label: String, uploaded: Boolean, onClick: () -> Unit
     horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
   ) {
     SecondaryButton(
-      text = if (uploaded) "$label uploaded" else "Upload $label",
+      text = if (uploaded) appText("$label uploaded", "$label اپ لوڈ ہو گئی") else appText("Upload $label", "$label اپ لوڈ کریں"),
       icon = if (uploaded) Icons.Rounded.CheckCircle else Icons.Rounded.UploadFile,
       contentColor = if (uploaded) VendorColors.SuccessGreen else VendorColors.TextPrimary,
       borderColor = if (uploaded) VendorColors.SuccessGreen.copy(alpha = 0.35f) else VendorColors.BorderSubtle,
@@ -1802,7 +1851,7 @@ private fun PendingVendorApplicationScreen(
         .atZone(java.time.ZoneId.systemDefault())
         .toLocalDate()
         .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH))
-    }.getOrElse { "Recently" }
+    }.getOrElse { AppLanguageManager.tr("Recently", "حال ہی میں") }
   }
 
   Column(
@@ -1815,7 +1864,7 @@ private fun PendingVendorApplicationScreen(
     ) {
       Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
         StatusBadge(
-          text = "Pending review",
+          text = appText("Pending review", "جائزہ زیر التواء"),
           tone = StatusTone.WARNING,
           icon = Icons.Rounded.Schedule
         )
@@ -1826,7 +1875,10 @@ private fun PendingVendorApplicationScreen(
           color = Color.White
         )
         Text(
-          text = "Your application is under verification by the JTBazar marketplace team.",
+          text = appText(
+            "Your application is under verification by the JTBazar marketplace team.",
+            "آپ کی درخواست جے ٹی بازار ٹیم کی تصدیق کے مراحل میں ہے۔"
+          ),
           style = MaterialTheme.typography.bodySmall,
           color = VendorColors.NavyHeaderSubtitle
         )
@@ -1857,13 +1909,16 @@ private fun PendingVendorApplicationScreen(
           )
         }
         Text(
-          text = "Application Under Review",
+          text = appText("Application Under Review", "درخواست زیر غور ہے"),
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
           color = VendorColors.TextPrimary
         )
         Text(
-          text = "Thank you for applying to become a JTBazar seller. We are currently reviewing your documents.",
+          text = appText(
+            "Thank you for applying to become a JTBazar seller. We are currently reviewing your documents.",
+            "جے ٹی بازار فروش بننے کے لیے درخواست دینے کا شکریہ۔ ہم اس وقت آپ کی دستاویزات کا جائزہ لے رہے ہیں۔"
+          ),
           style = MaterialTheme.typography.bodySmall,
           color = VendorColors.TextSecondary,
           textAlign = TextAlign.Center
@@ -1874,31 +1929,31 @@ private fun PendingVendorApplicationScreen(
     AppCard {
       Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
         Text(
-          text = "Application progress",
+          text = appText("Application progress", "درخواست کی پیشرفت"),
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
           color = VendorColors.TextPrimary
         )
         VendorProgressStep(
           icon = Icons.Rounded.CheckCircle,
-          title = "Application received",
-          description = "Your shop details have been submitted successfully.",
+          title = appText("Application received", "درخواست موصول ہو گئی"),
+          description = appText("Your shop details have been submitted successfully.", "آپ کی دکان کی تفصیلات کامیابی سے جمع ہو گئی ہیں۔"),
           active = true,
           iconTint = VendorColors.SuccessGreen,
           iconBg = VendorColors.SuccessGreenBg
         )
         VendorProgressStep(
           icon = Icons.Rounded.Schedule,
-          title = "Verification in progress",
-          description = "Our marketplace team is reviewing your shop information.",
+          title = appText("Verification in progress", "تصدیق جاری ہے"),
+          description = appText("Our marketplace team is reviewing your shop information.", "ہماری ٹیم آپ کی دکان کی معلومات کا جائزہ لے رہی ہے۔"),
           active = true,
           iconTint = VendorColors.PrimaryOrange,
           iconBg = VendorColors.PrimaryOrangeTint
         )
         VendorProgressStep(
           icon = Icons.Rounded.VerifiedUser,
-          title = "Seller access",
-          description = "We'll notify you by email when your seller dashboard is ready.",
+          title = appText("Seller access", "فروش تک رسائی"),
+          description = appText("We'll notify you by email when your seller dashboard is ready.", "جب آپ کا فروش ڈیش بورڈ تیار ہوگا تو ہم آپ کو ای میل کے ذریعے مطلع کریں گے۔"),
           active = false,
           iconTint = VendorColors.TextSecondary,
           iconBg = VendorColors.NeutralBadgeBg
@@ -1919,7 +1974,10 @@ private fun PendingVendorApplicationScreen(
           modifier = Modifier.size(20.dp)
         )
         Text(
-          text = "If we need any additional information or your application is not approved, we will notify you by email.",
+          text = appText(
+            "If we need any additional information or your application is not approved, we will notify you by email.",
+            "اگر ہمیں مزید معلومات درکار ہوں یا آپ کی درخواست منظور نہ ہو تو ہم آپ کو ای میل کے ذریعے آگاہ کریں گے۔"
+          ),
           style = MaterialTheme.typography.bodySmall,
           color = VendorColors.TextSecondary,
           modifier = Modifier.weight(1f)
@@ -1934,7 +1992,7 @@ private fun PendingVendorApplicationScreen(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = "Submitted",
+          text = appText("Submitted", "جمع کرانے کی تاریخ"),
           style = MaterialTheme.typography.bodySmall,
           color = VendorColors.TextSecondary
         )
@@ -1948,7 +2006,7 @@ private fun PendingVendorApplicationScreen(
     }
 
     PrimaryButton(
-      text = "Refresh application status",
+      text = appText("Refresh application status", "درخواست کی حیثیت ریفریش کریں"),
       icon = Icons.Rounded.Refresh,
       loading = refreshing,
       enabled = !refreshing,
@@ -1956,7 +2014,10 @@ private fun PendingVendorApplicationScreen(
       modifier = Modifier.fillMaxWidth()
     )
     Text(
-      text = "Your seller tools will become available here once your application is approved.",
+      text = appText(
+        "Your seller tools will become available here once your application is approved.",
+        "درخواست منظور ہونے کے بعد آپ کے فروش ٹولز یہاں دستیاب ہوں گے۔"
+      ),
       style = MaterialTheme.typography.bodySmall,
       color = VendorColors.TextSecondary,
       textAlign = TextAlign.Center,
@@ -2019,6 +2080,12 @@ private fun StatusPanel(app: VendorApplication) {
     "rejected" -> StatusTone.DANGER to Icons.Rounded.ErrorOutline
     else -> StatusTone.WARNING to Icons.Rounded.Schedule
   }
+  val localizedAppStatus = when (app.status.lowercase()) {
+    "approved" -> appText("APPROVED", "منظور شدہ")
+    "rejected" -> appText("REJECTED", "مسترد")
+    "pending" -> appText("PENDING", "زیر التواء")
+    else -> app.status.uppercase()
+  }
   AppCard {
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -2033,13 +2100,13 @@ private fun StatusPanel(app: VendorApplication) {
           color = VendorColors.TextPrimary
         )
         Text(
-          text = "Application status",
+          text = appText("Application status", "درخواست کی حیثیت"),
           style = MaterialTheme.typography.bodySmall,
           color = VendorColors.TextSecondary
         )
       }
       StatusBadge(
-        text = app.status.uppercase(),
+        text = localizedAppStatus,
         tone = tone,
         icon = icon
       )
@@ -2065,12 +2132,24 @@ private fun vendorLoadErrorMessage(error: Throwable): String {
     details.contains("unable to resolve host") ||
       details.contains("unknownhostexception") ||
       details.contains("no address associated with hostname") ->
-      "JTBazar server ka address abhi resolve nahi ho raha. Ye DNS ya internet network ka masla ho sakta hai. Wi-Fi/mobile data check karein aur dobara koshish karein."
+      AppLanguageManager.tr(
+        "Unable to resolve the JTBazar server address. Please check your Wi-Fi or mobile data connection and try again.",
+        "جے ٹی بازار سرور کا پتہ فی الحال حل نہیں ہو رہا۔ براہ کرم اپنا وائی فائی یا موبائل ڈیٹا چیک کر کے دوبارہ کوشش کریں۔"
+      )
     details.contains("timeout") || details.contains("timed out") ->
-      "JTBazar server se response nahi mila. Internet connection check karke dobara koshish karein."
+      AppLanguageManager.tr(
+        "No response received from the JTBazar server. Please check your internet connection and try again.",
+        "جے ٹی بازار سرور سے جواب موصول نہیں ہوا۔ براہ کرم انٹرنیٹ کنکشن چیک کر کے دوبارہ کوشش کریں۔"
+      )
     details.contains("failed to connect") || details.contains("network is unreachable") ->
-      "Internet connection available nahi lag raha. Network check karke dobara koshish karein."
-    else -> "Vendor information load nahi ho saki. Dobara koshish karein."
+      AppLanguageManager.tr(
+        "Internet connection appears unavailable. Please check your network and try again.",
+        "انٹرنیٹ کنکشن دستیاب نہیں لگ رہا۔ براہ کرم اپنا نیٹ ورک چیک کر کے دوبارہ کوشش کریں۔"
+      )
+    else -> AppLanguageManager.tr(
+      "Could not load vendor information. Please try again.",
+      "فروش کی معلومات لوڈ نہیں ہو سکیں۔ براہ کرم دوبارہ کوشش کریں۔"
+    )
   }
 }
 
@@ -2088,15 +2167,24 @@ private fun printVendorPackingSlip(context: android.content.Context, items: List
     } ?: "—"
     "<tr><td>${esc(item.optString("product_name_snapshot", item.optString("product_name", "Product")))}</td><td>${esc(item.optString("sku_snapshot", "—"))}</td><td>${esc(variant)}</td><td>${esc(item.optString("quantity", "1"))}</td></tr>"
   }
+  val titleLabel = esc(AppLanguageManager.tr("Product packing slip", "پروڈکٹ پیکنگ سلپ"))
+  val productCol = esc(AppLanguageManager.tr("Product", "پروڈکٹ"))
+  val skuCol = esc(AppLanguageManager.tr("SKU", "ایس کے یو"))
+  val variantCol = esc(AppLanguageManager.tr("Variant", "قسم"))
+  val qtyCol = esc(AppLanguageManager.tr("Qty", "تعداد"))
+  val footerNote = esc(AppLanguageManager.tr(
+    "Product and quantity summary only. Customer contact and delivery details are managed by the marketplace team.",
+    "صرف پروڈکٹ اور تعداد کا خلاصہ۔ صارف سے رابطہ اور ڈیلیوری کی تفصیلات مارکیٹ پلیس ٹیم سنبھالتی ہے۔"
+  ))
   val html = """<!doctype html><html><head><meta charset="utf-8"><style>
     body{font-family:Arial,sans-serif;padding:24px;color:#222}header{display:flex;justify-content:space-between;border-bottom:2px solid #222;padding-bottom:14px}
     h1{margin:6px 0;font-size:24px}small{color:#555}table{width:100%;border-collapse:collapse;margin-top:24px}
     th,td{text-align:left;border:1px solid #bbb;padding:10px;font-size:13px}th{background:#f1f1f1}
     footer{margin-top:28px;font-size:11px;color:#555}
-  </style></head><body><header><div><small>Product packing slip</small><h1>JTBazar</h1></div>
+  </style></head><body><header><div><small>$titleLabel</small><h1>JTBazar</h1></div>
   <div><strong>${esc(first.optString("order_number", ""))}</strong><br><small>${esc(first.optString("order_created_at", first.optString("created_at", "")))}</small></div></header>
-  <table><thead><tr><th>Product</th><th>SKU</th><th>Variant</th><th>Qty</th></tr></thead><tbody>$rows</tbody></table>
-  <footer>Product and quantity summary only. Customer contact and delivery details are managed by the marketplace team.</footer></body></html>"""
+  <table><thead><tr><th>$productCol</th><th>$skuCol</th><th>$variantCol</th><th>$qtyCol</th></tr></thead><tbody>$rows</tbody></table>
+  <footer>$footerNote</footer></body></html>"""
   val printManager = context.getSystemService(android.content.Context.PRINT_SERVICE) as PrintManager
   val webView = WebView(context)
   webView.settings.javaScriptEnabled = false
@@ -2105,7 +2193,7 @@ private fun printVendorPackingSlip(context: android.content.Context, items: List
       val adapter = view.createPrintDocumentAdapter(
         "JTBazar-Packing-Slip-${first.optString("order_number", "order")}"
       )
-      printManager.print("JTBazar product packing slip", adapter, PrintAttributes.Builder().build())
+      printManager.print(AppLanguageManager.tr("JTBazar product packing slip", "جے ٹی بازار پروڈکٹ پیکنگ سلپ"), adapter, PrintAttributes.Builder().build())
     }
   }
   webView.loadDataWithBaseURL(null, html, "text/HTML", "UTF-8", null)

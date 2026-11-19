@@ -42,6 +42,8 @@ import com.example.data.supabase.ErrorContext
 import com.example.data.supabase.SupabaseClient
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.theme.*
 
@@ -87,7 +89,7 @@ fun OrderTrackingScreen(
     containerColor = Color.White,
     topBar = {
       JTBazarTopBar(
-        title = "Order Status & Live Tracking",
+        title = appText("Order Status & Live Tracking", "آرڈر اسٹیٹس اور لائیو ٹریکنگ"),
         showBack = true,
         onBackClick = onBackClick,
         onCartClick = { /* cart */ },
@@ -125,14 +127,17 @@ fun OrderTrackingScreen(
           }
           Spacer(modifier = Modifier.height(16.dp))
           Text(
-            text = "No Active Orders",
+            text = appText("No Active Orders", "کوئی فعال آرڈر نہیں"),
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
             color = JTTextPrimary
           )
           Spacer(modifier = Modifier.height(6.dp))
           Text(
-            text = "You don't have any orders to track yet. Once you place an order with Cash on Delivery, you can track its live timeline, rider dispatch, and invoice here.",
+            text = appText(
+              "You don't have any orders to track yet. Once you place an order with Cash on Delivery, you can track its live timeline, rider dispatch, and invoice here.",
+              "آپ کے پاس ابھی ٹریک کرنے کے لیے کوئی آرڈر نہیں ہے۔ کیش آن ڈلیوری آرڈر دینے کے بعد آپ یہاں اس کی لائیو تفصیلات، رائیڈر ڈسپیچ اور انوائس دیکھ سکتے ہیں۔"
+            ),
             fontSize = 12.sp,
             color = JTTextSecondary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -145,7 +150,7 @@ fun OrderTrackingScreen(
           ) {
             Icon(Icons.Filled.ShoppingBag, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Start Shopping", fontWeight = FontWeight.Bold)
+            Text(appText("Start Shopping", "خریداری شروع کریں"), fontWeight = FontWeight.Bold)
           }
         }
       }
@@ -189,14 +194,14 @@ fun OrderTrackingScreen(
               Spacer(modifier = Modifier.width(8.dp))
               Column {
                 Text(
-                  text = "VERIFIED TRANSACTION",
+                  text = appText("VERIFIED TRANSACTION", "تصدیق شدہ لین دین"),
                   fontSize = 9.sp,
                   fontWeight = FontWeight.ExtraBold,
                   color = JTPurplePrimary,
                   letterSpacing = 0.5.sp
                 )
                 Text(
-                  text = "Order Status & Live Tracking",
+                  text = appText("Order Status & Live Tracking", "آرڈر اسٹیٹس اور لائیو ٹریکنگ"),
                   fontSize = 11.sp,
                   fontWeight = FontWeight.Bold,
                   color = JTTextPrimary
@@ -210,7 +215,7 @@ fun OrderTrackingScreen(
             ) {
               Icon(
                 imageVector = Icons.Filled.Close,
-                contentDescription = "Close",
+                contentDescription = appText("Close", "بند کریں"),
                 tint = JTTextSecondary,
                 modifier = Modifier.size(16.dp)
               )
@@ -219,7 +224,7 @@ fun OrderTrackingScreen(
         }
       }
 
-      // 2. Hero Success: Icon + Shukriya + Order Number + Due Amount
+      // 2. Hero Success: Icon + Thank you + Order Number + Due Amount
       item {
         Spacer(modifier = Modifier.height(10.dp))
         Column(
@@ -247,7 +252,7 @@ fun OrderTrackingScreen(
           Spacer(modifier = Modifier.height(14.dp))
 
           Text(
-            text = "Order Placed Successfully!",
+            text = appText("Order Placed Successfully!", "آرڈر کامیابی سے موصول ہو گیا!"),
             fontWeight = FontWeight.ExtraBold,
             fontSize = 18.sp,
             color = JTTextPrimary
@@ -256,7 +261,10 @@ fun OrderTrackingScreen(
           Spacer(modifier = Modifier.height(4.dp))
 
           Text(
-            text = "Shukriya! Your order has been received and\nsent directly to the partner vendors.",
+            text = appText(
+              "Thank you! Your order has been received and\nsent directly to the partner vendors.",
+              "شکریہ! آپ کا آرڈر موصول ہو گیا ہے اور\nبراہ راست متعلقہ فروخت کنندگان کو بھیج دیا گیا ہے۔"
+            ),
             fontSize = 12.sp,
             color = JTTextSecondary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -286,7 +294,7 @@ fun OrderTrackingScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Order #" + activeOrder.orderNumber,
+                  text = appText("Order #" + activeOrder.orderNumber, "آرڈر #" + activeOrder.orderNumber),
                   fontWeight = FontWeight.Bold,
                   fontSize = 12.sp,
                   color = JTTextPrimary
@@ -301,7 +309,11 @@ fun OrderTrackingScreen(
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val clip = ClipData.newPlainText("Order Number", activeOrder.orderNumber)
                     clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Copied Order Number: #" + activeOrder.orderNumber, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                      context,
+                      AppLanguageManager.tr("Copied Order Number: #", "آرڈر نمبر کاپی ہو گیا: #") + activeOrder.orderNumber,
+                      Toast.LENGTH_SHORT
+                    ).show()
                   }
                   .testTag("copy_order_id_button")
               ) {
@@ -317,7 +329,7 @@ fun OrderTrackingScreen(
                   )
                   Spacer(modifier = Modifier.width(4.dp))
                   Text(
-                    text = "Copy",
+                    text = appText("Copy", "کاپی"),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = JTPurplePrimary
@@ -350,7 +362,7 @@ fun OrderTrackingScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Cash on Delivery (COD)",
+                  text = appText("Cash on Delivery (COD)", "کیش آن ڈلیوری (COD)"),
                   fontWeight = FontWeight.Bold,
                   fontSize = 12.sp,
                   color = JTTextPrimary
@@ -358,7 +370,10 @@ fun OrderTrackingScreen(
               }
 
               Text(
-                text = "Rs. ${String.format("%,d", activeOrder.grandTotal)} Due",
+                text = appText(
+                  "Rs. ${String.format("%,d", activeOrder.grandTotal)} Due",
+                  "${String.format("%,d", activeOrder.grandTotal)} روپے واجب الادا"
+                ),
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 13.sp,
                 color = JTAmberDark
@@ -395,7 +410,7 @@ fun OrderTrackingScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Order Progress",
+                  text = appText("Order Progress", "آرڈر کی پیش رفت"),
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp,
                   color = JTTextPrimary
@@ -446,7 +461,10 @@ fun OrderTrackingScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                  text = "Fresh & Kitchen Items: Delivery time slot will be verified directly via WhatsApp/Call prior to rider kitchen dispatch.",
+                  text = appText(
+                    "Fresh & Kitchen Items: Delivery time slot will be verified directly via WhatsApp/Call prior to rider kitchen dispatch.",
+                    "تازہ اور کچن اشیاء: رائیڈر کی روانگی سے قبل واٹس ایپ یا کال کے ذریعے ڈلیوری کے وقت کی تصدیق کی جائے گی۔"
+                  ),
                   fontSize = 10.sp,
                   color = JTTextSecondary,
                   lineHeight = 14.sp
@@ -479,10 +497,13 @@ fun OrderTrackingScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
               Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = JTPurplePrimary)
               Spacer(Modifier.width(8.dp))
-              Text("Secure delivery OTP", fontWeight = FontWeight.Bold, color = JTTextPrimary)
+              Text(appText("Secure delivery OTP", "محفوظ ڈلیوری او ٹی پی"), fontWeight = FontWeight.Bold, color = JTTextPrimary)
             }
             Text(
-              "Once your JTBazar driver picks up the parcel, tap below to send a 6-digit verification OTP to your registered email. Share that email code only with the driver at your door.",
+              appText(
+                "Once your JTBazar driver picks up the parcel, tap below to send a 6-digit verification OTP to your registered email. Share that email code only with the driver at your door.",
+                "جب جے ٹی بازار کا ڈرائیور آپ کا پارسل پک اپ کر لے تو نیچے دیے گئے بٹن سے اپنی رجسٹرڈ ای میل پر 6 ہندسوں کا تصدیقی کوڈ حاصل کریں۔ یہ کوڈ صرف اپنے دروازے پر ڈرائیور کو بتائیں۔"
+              ),
               fontSize = 11.sp,
               color = JTTextSecondary
             )
@@ -499,19 +520,28 @@ fun OrderTrackingScreen(
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                   Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Filled.MarkEmailRead, contentDescription = null, tint = Color(0xFF047857), modifier = Modifier.size(16.dp))
-                    Text("OTP Sent to Registered Email", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF065F46))
+                    Text(appText("OTP Sent to Registered Email", "او ٹی پی رجسٹرڈ ای میل پر بھیج دیا گیا"), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF065F46))
                   }
                   Text(
                     text = if (!dispatched.maskedEmail.isNullOrBlank()) {
-                      "A 6-digit verification code was sent to ${dispatched.maskedEmail}. Check your inbox or spam folder."
+                      appText(
+                        "A 6-digit verification code was sent to ${dispatched.maskedEmail}. Check your inbox or spam folder.",
+                        "6 ہندسوں کا تصدیقی کوڈ ${dispatched.maskedEmail} پر بھیجا گیا ہے۔ اپنا ان باکس یا اسپیم فولڈر چیک کریں۔"
+                      )
                     } else {
-                      "A 6-digit verification code was sent to your registered email address."
+                      appText(
+                        "A 6-digit verification code was sent to your registered email address.",
+                        "6 ہندسوں کا تصدیقی کوڈ آپ کی رجسٹرڈ ای میل پر بھیجا گیا ہے۔"
+                      )
                     },
                     fontSize = 11.sp,
                     color = Color(0xFF065F46)
                   )
                   Text(
-                    text = "Valid for ${dispatched.expiresInMinutes} minutes. Do not share this code before the rider arrives.",
+                    text = appText(
+                      "Valid for ${dispatched.expiresInMinutes} minutes. Do not share this code before the rider arrives.",
+                      "${dispatched.expiresInMinutes} منٹ کے لیے کارآمد ہے۔ رائیڈر کے پہنچنے سے پہلے یہ کوڈ شیئر نہ کریں۔"
+                    ),
                     fontSize = 10.sp,
                     color = Color(0xFF047857)
                   )
@@ -571,7 +601,10 @@ fun OrderTrackingScreen(
                     otpDispatchResult = dispatched
                     otpError = null
                   }.onFailure { err ->
-                    otpError = err.message ?: "Delivery OTP is available once the driver picks up your parcel."
+                    otpError = err.message ?: AppLanguageManager.tr(
+                      "Delivery OTP is available once the driver picks up your parcel.",
+                      "ڈلیوری او ٹی پی اس وقت دستیاب ہوگا جب ڈرائیور آپ کا پارسل پک اپ کر لے۔"
+                    )
                   }
                   otpLoading = false
                 }
@@ -584,9 +617,9 @@ fun OrderTrackingScreen(
             ) {
               Text(
                 when {
-                  otpLoading -> "Sending OTP to email…"
-                  otpDispatchResult == null -> "Send Delivery OTP to Email"
-                  else -> "Resend Delivery OTP to Email"
+                  otpLoading -> appText("Sending OTP to email…", "ای میل پر او ٹی پی بھیجا جا رہا ہے…")
+                  otpDispatchResult == null -> appText("Send Delivery OTP to Email", "ای میل پر ڈلیوری او ٹی پی بھیجیں")
+                  else -> appText("Resend Delivery OTP to Email", "ای میل پر ڈلیوری او ٹی پی دوبارہ بھیجیں")
                 }
               )
             }
@@ -612,14 +645,16 @@ fun OrderTrackingScreen(
               verticalAlignment = Alignment.CenterVertically
             ) {
               Text(
-                text = "DESTINATION DETAILS",
+                text = appText("DESTINATION DETAILS", "منزل کی تفصیلات"),
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 11.sp,
                 color = JTTextPrimary,
                 letterSpacing = 0.5.sp
               )
+              val deliveredCount = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && !it.deliveryStatus.equals("cancelled", true) && (it.deliveryStatus.equals("delivered", true) || activeOrder.orderStatus.equals("DELIVERED", true)) }
+              val totalActiveItems = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && !it.deliveryStatus.equals("cancelled", true) }
               Text(
-                text = activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && !it.deliveryStatus.equals("cancelled", true) && (it.deliveryStatus.equals("delivered", true) || activeOrder.orderStatus.equals("DELIVERED", true)) }.toString() + " of " + activeOrder.items.count { !it.vendorFulfillmentStatus.equals("cancelled", true) && !it.deliveryStatus.equals("cancelled", true) }.toString() + " items delivered",
+                text = appText("$deliveredCount of $totalActiveItems items delivered", "$totalActiveItems میں سے $deliveredCount اشیاء پہنچا دی گئیں"),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTPurplePrimary
@@ -698,13 +733,21 @@ fun OrderTrackingScreen(
                 ) {
                   Column(modifier = Modifier.weight(1f)) {
                     Text(item.product.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = if (itemCancelled) JTTextSecondary else JTTextPrimary, textDecoration = if (itemCancelled) TextDecoration.LineThrough else TextDecoration.None)
-                    Text(if (itemCancelled) "Cancelled by admin" else if (itemDelivered) "Delivered" else if (itemReady) "Ready" else "Pending", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (itemCancelled) JTTextSecondary else if (itemDelivered) JTEmerald else JTPurplePrimary)
-                    Text("Qty: " + item.quantity.toString(), fontSize = 10.sp, color = JTTextSecondary)
+                    Text(
+                      if (itemCancelled) appText("Cancelled by admin", "ایڈمن کی طرف سے منسوخ")
+                      else if (itemDelivered) appText("Delivered", "پہنچا دیا گیا")
+                      else if (itemReady) appText("Ready", "تیار")
+                      else appText("Pending", "زیر التواء"),
+                      fontSize = 10.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = if (itemCancelled) JTTextSecondary else if (itemDelivered) JTEmerald else JTPurplePrimary
+                    )
+                    Text(appText("Qty: " + item.quantity.toString(), "تعداد: " + item.quantity.toString()), fontSize = 10.sp, color = JTTextSecondary)
                   }
                   Text("PKR " + String.format("%,d", item.totalPrice), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTPurplePrimary)
                 }
               }
-              if (activeOrder.items.isEmpty()) Text("Order items are not available yet.", fontSize = 11.sp, color = JTTextSecondary)
+              if (activeOrder.items.isEmpty()) Text(appText("Order items are not available yet.", "آرڈر کی اشیاء ابھی دستیاب نہیں ہیں۔"), fontSize = 11.sp, color = JTTextSecondary)
             }
           }
         }
@@ -738,7 +781,7 @@ fun OrderTrackingScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "View Order Details & Invoice",
+              text = appText("View Order Details & Invoice", "آرڈر کی تفصیلات اور انوائس دیکھیں"),
               fontSize = 13.sp,
               fontWeight = FontWeight.Bold
             )
@@ -752,7 +795,10 @@ fun OrderTrackingScreen(
                 val started = MarketplaceRepository.cancelOrder(activeOrder.orderId) { success ->
                   isCancelling = false
                   val message = if (success) {
-                    "Order #" + activeOrder.orderNumber + " cancelled"
+                    AppLanguageManager.tr(
+                      "Order #" + activeOrder.orderNumber + " cancelled",
+                      "آرڈر #" + activeOrder.orderNumber + " منسوخ کر دیا گیا"
+                    )
                   } else {
                     AppErrorMapper.defaultMessageFor(ErrorContext.ORDER_CANCEL)
                   }
@@ -781,7 +827,7 @@ fun OrderTrackingScreen(
               }
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = if (isCancelling) "Cancelling..." else "Cancel Order",
+                text = if (isCancelling) appText("Cancelling...", "منسوخ ہو رہا ہے...") else appText("Cancel Order", "آرڈر منسوخ کریں"),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
               )
@@ -807,7 +853,7 @@ fun OrderTrackingScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "Continue Shopping on JTBazar",
+              text = appText("Continue Shopping on JTBazar", "جے ٹی بازار پر خریداری جاری رکھیں"),
               fontSize = 13.sp,
               fontWeight = FontWeight.Bold
             )
@@ -849,13 +895,13 @@ fun OrderTrackingScreen(
               Spacer(modifier = Modifier.width(10.dp))
               Column {
                 Text(
-                  text = "Need help with this order?",
+                  text = appText("Need help with this order?", "اس آرڈر کے لیے مدد چاہیے؟"),
                   fontWeight = FontWeight.Bold,
                   fontSize = 12.sp,
                   color = JTTextPrimary
                 )
                 Text(
-                  text = "JTBazar central delivery team",
+                  text = appText("JTBazar central delivery team", "جے ٹی بازار مرکزی ڈلیوری ٹیم"),
                   fontSize = 10.sp,
                   color = JTTextSecondary
                 )
@@ -864,7 +910,11 @@ fun OrderTrackingScreen(
 
             OutlinedButton(
               onClick = {
-                Toast.makeText(context, "Opening WhatsApp Support: +92 300 4821902", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                  context,
+                  AppLanguageManager.tr("Opening WhatsApp Support: +92 300 4821902", "واٹس ایپ سپورٹ کھل رہی ہے: +92 300 4821902"),
+                  Toast.LENGTH_SHORT
+                ).show()
               },
               shape = RoundedCornerShape(10.dp),
               contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
@@ -878,7 +928,7 @@ fun OrderTrackingScreen(
               )
               Spacer(modifier = Modifier.width(4.dp))
               Text(
-                text = "WhatsApp",
+                text = appText("WhatsApp", "واٹس ایپ"),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTTextPrimary
@@ -1097,14 +1147,14 @@ private fun InvoiceDialog(
         onClick = onDismiss,
         colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary)
       ) {
-        Text("Done")
+        Text(appText("Done", "مکمل"))
       }
     },
     title = {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null, tint = JTPurplePrimary)
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Order Invoice #" + order.orderNumber, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(appText("Order Invoice #" + order.orderNumber, "آرڈر انوائس #" + order.orderNumber), fontSize = 16.sp, fontWeight = FontWeight.Bold)
       }
     },
     text = {
@@ -1112,9 +1162,9 @@ private fun InvoiceDialog(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        Text("Placed: ${order.date}", fontSize = 11.sp, color = JTTextSecondary)
-        Text("Payment: Cash on Delivery (COD)", fontSize = 11.sp, color = JTTextSecondary)
-        Text("Deliver To: ${order.address.addressLine}, ${order.address.area}", fontSize = 11.sp, color = JTTextSecondary)
+        Text(appText("Placed: ${order.date}", "تاریخ: ${order.date}"), fontSize = 11.sp, color = JTTextSecondary)
+        Text(appText("Payment: Cash on Delivery (COD)", "ادائیگی: کیش آن ڈلیوری (COD)"), fontSize = 11.sp, color = JTTextSecondary)
+        Text(appText("Deliver To: ${order.address.addressLine}, ${order.address.area}", "پتہ: ${order.address.addressLine}, ${order.address.area}"), fontSize = 11.sp, color = JTTextSecondary)
 
         HorizontalDivider(color = JTBorder)
 
@@ -1144,28 +1194,28 @@ private fun InvoiceDialog(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Subtotal", fontSize = 11.sp, color = JTTextSecondary)
+          Text(appText("Subtotal", "ذیلی کل"), fontSize = 11.sp, color = JTTextSecondary)
           Text("Rs. ${String.format("%,d", order.subtotal)}", fontSize = 11.sp)
         }
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Discount", fontSize = 11.sp, color = JTAmberDark)
+          Text(appText("Discount", "رعایت"), fontSize = 11.sp, color = JTAmberDark)
           Text("- Rs. ${order.discount}", fontSize = 11.sp, color = JTEmerald)
         }
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Courier Delivery", fontSize = 11.sp, color = JTTextSecondary)
+          Text(appText("Courier Delivery", "کوریئر ڈلیوری"), fontSize = 11.sp, color = JTTextSecondary)
           Text("Rs. ${order.deliveryFee}", fontSize = 11.sp)
         }
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Grand Total", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+          Text(appText("Grand Total", "کل رقم"), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
           Text("Rs. ${String.format("%,d", order.grandTotal)}", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = JTPurplePrimary)
         }
       }

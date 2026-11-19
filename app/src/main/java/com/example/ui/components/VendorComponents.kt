@@ -89,42 +89,42 @@ data class VendorOrderBadgeSpec(
 
 fun vendorOrderStatusBadgeSpec(status: VendorOrderStatus): VendorOrderBadgeSpec = when (status) {
   VendorOrderStatus.PENDING -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.WARNING,
     icon = Icons.Rounded.Schedule
   )
   VendorOrderStatus.CONFIRMED -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.PRIMARY,
     icon = Icons.Rounded.Verified
   )
   VendorOrderStatus.PROCESSING -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.PRIMARY,
     icon = Icons.Rounded.Autorenew
   )
   VendorOrderStatus.READY_FOR_PICKUP -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.SUCCESS,
     icon = Icons.Rounded.Inventory2
   )
   VendorOrderStatus.SHIPPED -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.PRIMARY,
     icon = Icons.Rounded.LocalShipping
   )
   VendorOrderStatus.DELIVERED -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.SUCCESS,
     icon = Icons.Rounded.CheckCircle
   )
   VendorOrderStatus.NOT_DELIVERED -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.DANGER,
     icon = Icons.Rounded.ErrorOutline
   )
   VendorOrderStatus.CANCELLED -> VendorOrderBadgeSpec(
-    label = status.label,
+    label = status.localizedLabel(),
     tone = StatusTone.DANGER,
     icon = Icons.Rounded.Cancel
   )
@@ -133,20 +133,15 @@ fun vendorOrderStatusBadgeSpec(status: VendorOrderStatus): VendorOrderBadgeSpec 
 fun vendorGenericStatusBadgeSpec(rawStatus: String?): VendorOrderBadgeSpec {
   val normalized = rawStatus?.trim()?.lowercase().orEmpty()
   return when (normalized) {
-    "open", "pending" -> VendorOrderBadgeSpec("Open", StatusTone.WARNING, Icons.Rounded.Schedule)
-    "in_progress", "under_review" -> VendorOrderBadgeSpec("In Review", StatusTone.PRIMARY, Icons.Rounded.Autorenew)
-    "seller_responded", "responded" -> VendorOrderBadgeSpec("Responded", StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
-    "resolved", "closed", "approved" -> VendorOrderBadgeSpec(
-      normalized.replaceFirstChar { it.uppercase() },
-      StatusTone.SUCCESS,
-      Icons.Rounded.CheckCircle
-    )
-    "rejected", "cancelled" -> VendorOrderBadgeSpec(
-      normalized.replaceFirstChar { it.uppercase() },
-      StatusTone.DANGER,
-      Icons.Rounded.ErrorOutline
-    )
-    else -> VendorOrderBadgeSpec("Open", StatusTone.NEUTRAL, Icons.Rounded.Schedule)
+    "open", "pending" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Open", "کھلا"), StatusTone.WARNING, Icons.Rounded.Schedule)
+    "in_progress", "under_review" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("In Review", "جائزے میں"), StatusTone.PRIMARY, Icons.Rounded.Autorenew)
+    "seller_responded", "responded" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Responded", "جواب دیا گیا"), StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
+    "resolved" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Resolved", "حل ہو گیا"), StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
+    "closed" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Closed", "بند"), StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
+    "approved" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Approved", "منظور شدہ"), StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
+    "rejected" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Rejected", "مسترد"), StatusTone.DANGER, Icons.Rounded.ErrorOutline)
+    "cancelled" -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Cancelled", "منسوخ"), StatusTone.DANGER, Icons.Rounded.ErrorOutline)
+    else -> VendorOrderBadgeSpec(com.example.localization.AppLanguageManager.tr("Open", "کھلا"), StatusTone.NEUTRAL, Icons.Rounded.Schedule)
   }
 }
 
@@ -554,9 +549,9 @@ fun ErrorState(
   message: String,
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
-  title: String = "Unable to load data",
+  title: String = com.example.localization.appText("Unable to load data", "ڈیٹا لوڈ نہیں ہو سکا"),
   icon: ImageVector = Icons.Rounded.CloudOff,
-  retryLabel: String = "Retry"
+  retryLabel: String = com.example.localization.appText("Retry", "دوبارہ کوشش کریں")
 ) {
   AppCard(
     modifier = modifier,
@@ -648,7 +643,7 @@ fun VendorAlertBanner(
         ) {
           Icon(
             imageVector = Icons.Rounded.Close,
-            contentDescription = "Dismiss message",
+            contentDescription = com.example.localization.appText("Dismiss message", "پیغام بند کریں"),
             tint = fg,
             modifier = Modifier.size(18.dp)
           )

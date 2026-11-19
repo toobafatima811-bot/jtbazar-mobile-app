@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.data.supabase.VendorService
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecondaryButton
@@ -68,13 +69,14 @@ fun VendorProductDetailsScreen(
     loading = false
   }
 
-  val name = product.optString("name", "Product").takeUnless { it == "null" } ?: "Product"
+  val name = product.optString("name", "").takeUnless { it == "null" }?.ifBlank { null } ?: appText("Product", "پروڈکٹ")
   val moderation = product.optString("moderation_status", product.optString("status", "pending"))
     .takeUnless { it == "null" }?.lowercase() ?: "pending"
 
   val (badgeLabel, badgeTone, badgeIcon) = when (moderation) {
-    "approved" -> Triple("Approved", StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
-    "rejected" -> Triple("Rejected", StatusTone.DANGER, Icons.Rounded.ErrorOutline)
+    "approved" -> Triple(appText("Approved", "منظور شدہ"), StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
+    "rejected" -> Triple(appText("Rejected", "مسترد شدہ"), StatusTone.DANGER, Icons.Rounded.ErrorOutline)
+    "pending" -> Triple(appText("Pending", "زیر التوا"), StatusTone.WARNING, Icons.Rounded.Schedule)
     else -> Triple(moderation.replace('_', ' ').replaceFirstChar { it.uppercase() }, StatusTone.WARNING, Icons.Rounded.Schedule)
   }
 
@@ -92,13 +94,13 @@ fun VendorProductDetailsScreen(
         horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
       ) {
         SecondaryButton(
-          text = "Products",
+          text = appText("Products", "مصنوعات"),
           icon = Icons.AutoMirrored.Rounded.ArrowBack,
           onClick = onBack,
           modifier = Modifier.weight(1f)
         )
         PrimaryButton(
-          text = "Edit product",
+          text = appText("Edit product", "پروڈکٹ میں ترمیم"),
           icon = Icons.Rounded.Edit,
           onClick = onEdit,
           modifier = Modifier.weight(1f)
@@ -108,7 +110,7 @@ fun VendorProductDetailsScreen(
 
     item {
       Text(
-        text = "Product details",
+        text = appText("Product details", "پروڈکٹ کی تفصیلات"),
         style = MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.Bold,
         color = VendorColors.TextPrimary
@@ -137,7 +139,7 @@ fun VendorProductDetailsScreen(
             images.forEachIndexed { index, url ->
               AsyncImage(
                 model = url,
-                contentDescription = "Product image ${index + 1}",
+                contentDescription = appText("Product image ${index + 1}", "پروڈکٹ تصویر ${index + 1}"),
                 modifier = Modifier
                   .size(168.dp)
                   .clip(VendorShapes.card),
@@ -168,7 +170,7 @@ fun VendorProductDetailsScreen(
                   modifier = Modifier.size(40.dp)
                 )
                 Text(
-                  text = "No product images saved yet",
+                  text = appText("No product images saved yet", "ابھی کوئی پروڈکٹ تصویر محفوظ نہیں"),
                   style = MaterialTheme.typography.bodySmall,
                   color = VendorColors.TextSecondary
                 )
@@ -209,32 +211,44 @@ fun VendorProductDetailsScreen(
 
           HorizontalDivider(color = VendorColors.Divider)
 
-          DetailRow("SKU", product.optString("sku").takeUnless { it == "null" }.orEmpty().ifBlank { "—" })
-          DetailRow("Category", product.optString("category_name").takeUnless { it == "null" }.orEmpty().ifBlank { "—" })
-          DetailRow("Discount", "${product.optString("discount_percent", "0").takeUnless { it == "null" } ?: "0"}%")
-          DetailRow("Shipping weight", "${product.optString("weight_grams").takeUnless { it == "null" }.orEmpty().ifBlank { "—" }} g")
+          DetailRow(appText("SKU", "ایس کے یو (SKU)"), product.optString("sku").takeUnless { it == "null" }.orEmpty().ifBlank { "—" })
+          DetailRow(appText("Category", "کیٹیگری"), product.optString("category_name").takeUnless { it == "null" }.orEmpty().ifBlank { "—" })
+          DetailRow(appText("Discount", "رعایت"), "${product.optString("discount_percent", "0").takeUnless { it == "null" } ?: "0"}%")
+          DetailRow(appText("Shipping weight", "شپنگ وزن"), "${product.optString("weight_grams").takeUnless { it == "null" }.orEmpty().ifBlank { "—" }} g")
         }
       }
     }
 
     item {
-      DetailSection("Short description", product.optString("short_description").takeUnless { it == "null" }.orEmpty())
+      DetailSection(
+        appText("Short description", "مختصر تفصیل"),
+        product.optString("short_description").takeUnless { it == "null" }.orEmpty()
+      )
     }
     item {
-      DetailSection("Full description", product.optString("description").takeUnless { it == "null" }.orEmpty())
+      DetailSection(
+        appText("Full description", "مکمل تفصیل"),
+        product.optString("description").takeUnless { it == "null" }.orEmpty()
+      )
     }
     item {
-      DetailSection("Specifications", (product.optJSONArray("specifications") ?: JSONArray()).toString(2))
+      DetailSection(
+        appText("Specifications", "خصوصیات"),
+        (product.optJSONArray("specifications") ?: JSONArray()).toString(2)
+      )
     }
     item {
-      DetailSection("Dimensions", (product.optJSONObject("dimensions") ?: JSONObject()).toString(2))
+      DetailSection(
+        appText("Dimensions", "پیمائش"),
+        (product.optJSONObject("dimensions") ?: JSONObject()).toString(2)
+      )
     }
     item {
       val seo = listOf(product.optString("seo_title"), product.optString("seo_description"))
         .filter { it.isNotBlank() && it != "null" }
         .joinToString("\n")
-        .ifBlank { "No SEO details saved." }
-      DetailSection("SEO", seo)
+        .ifBlank { appText("No SEO details saved.", "کوئی ایس ای او تفصیلات محفوظ نہیں۔") }
+      DetailSection(appText("SEO", "ایس ای او"), seo)
     }
   }
 }
@@ -267,7 +281,7 @@ private fun DetailSection(title: String, value: String) {
         fontWeight = FontWeight.Bold
       )
       Text(
-        text = value.ifBlank { "Not provided." },
+        text = value.ifBlank { appText("Not provided.", "فراہم نہیں کیا گیا۔") },
         color = VendorColors.TextPrimary,
         style = MaterialTheme.typography.bodyMedium
       )

@@ -2,15 +2,19 @@ package com.example.ui.screens
 
 import com.example.data.supabase.VendorApplication
 import com.example.data.supabase.VendorOrderStatus
+import com.example.data.supabase.WeeklyShopHours
+import com.example.localization.AppLanguageManager
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class VendorBottomTab(val routeKey: String, val label: String) {
-  OVERVIEW("overview", "Overview"),
-  PRODUCTS("listings", "Products"),
-  INVENTORY("inventory", "Inventory"),
-  ORDERS("fulfilment", "Orders"),
-  MORE("more", "More")
+enum class VendorBottomTab(val routeKey: String, val label: String, val urduLabel: String) {
+  OVERVIEW("overview", "Overview", "جائزہ"),
+  PRODUCTS("listings", "Products", "مصنوعات"),
+  INVENTORY("inventory", "Inventory", "اسٹاک"),
+  ORDERS("fulfilment", "Orders", "آرڈرز"),
+  MORE("more", "More", "مزید");
+
+  fun localizedLabel(): String = AppLanguageManager.tr(label, urduLabel)
 }
 
 enum class VendorMoreSection {
@@ -192,6 +196,8 @@ data class VendorShopSettingsUiState(
   val longitude: String = "",
   val shopImageUrl: String = "",
   val hasLocalShopImage: Boolean = false,
+  val shopIsOpen: Boolean = true,
+  val weeklyHours: WeeklyShopHours = WeeklyShopHours.defaults(),
   val frontPath: String = "",
   val backPath: String = "",
   val documentPath: String = "",
@@ -228,7 +234,7 @@ internal fun mapProductsToUiModels(
 
     VendorProductUiModel(
       id = id,
-      name = p.safeVendorString("name", "Product").ifBlank { "Product" },
+      name = p.safeVendorString("name", AppLanguageManager.tr("Product", "پروڈکٹ")).ifBlank { AppLanguageManager.tr("Product", "پروڈکٹ") },
       priceRaw = p.safeVendorString("price", "0").ifBlank { "0" },
       publicationStatus = p.safeVendorString("publication_status", p.safeVendorString("status", "draft"))
         .ifBlank { "draft" },
@@ -253,19 +259,19 @@ internal fun mapOrdersToUiGroups(orders: JSONArray): List<VendorOrderGroupUiMode
     val canonicalStatus = VendorOrderStatus.resolveGroupStatus(orderItems)
 
     val rawOrderStatus = orderItems.firstNotNullOfOrNull {
-      VendorOrderStatus.extractOrderLevelStatus(it)?.label
+      VendorOrderStatus.extractOrderLevelStatus(it)?.localizedLabel()
     }.orEmpty()
     val rawConfirmationStatus = orderItems.firstNotNullOfOrNull { item ->
       val nested = item.optJSONObject("orders")?.safeVendorString("confirmation_status").orEmpty()
       val value = item.safeVendorString("confirmation_status").ifBlank { nested }
-      VendorOrderStatus.parse(value)?.label
+      VendorOrderStatus.parse(value)?.localizedLabel()
         ?: when (value.trim().lowercase()) {
-          "not_reachable" -> "Not Reachable"
+          "not_reachable" -> AppLanguageManager.tr("Not Reachable", "رابطہ ممکن نہیں")
           else -> null
         }
     }.orEmpty()
     val rawPickupStatus = orderItems.firstNotNullOfOrNull {
-      VendorOrderStatus.extractPickupStatus(it)?.label
+      VendorOrderStatus.extractPickupStatus(it)?.localizedLabel()
     }.orEmpty()
 
     val updatedAt = orderItems.firstNotNullOfOrNull { item ->
@@ -299,7 +305,7 @@ internal fun mapOrdersToUiGroups(orders: JSONArray): List<VendorOrderGroupUiMode
       createdAt = createdAt,
       status = canonicalStatus.key,
       canonicalStatus = canonicalStatus,
-      orderStatusLabel = rawOrderStatus.ifBlank { canonicalStatus.label },
+      orderStatusLabel = rawOrderStatus.ifBlank { canonicalStatus.localizedLabel() },
       confirmationStatusLabel = rawConfirmationStatus,
       pickupStatusLabel = rawPickupStatus,
       updatedAt = updatedAt,
@@ -319,7 +325,7 @@ internal fun mapOrdersToUiGroups(orders: JSONArray): List<VendorOrderGroupUiMode
           id = item.safeVendorString("id", item.safeVendorString("order_item_id")),
           productName = item.safeVendorString(
             "product_name_snapshot",
-            item.safeVendorString("product_name", "Order item")
+            item.safeVendorString("product_name", AppLanguageManager.tr("Order item", "آرڈر آئٹم"))
           ),
           quantity = item.safeVendorString("quantity", "1"),
           sku = item.safeVendorString("sku_snapshot", "—").ifBlank { "—" },
@@ -369,6 +375,7 @@ internal fun filterAndPaginateVendorOrders(
       group.orderNumber.lowercase().contains(query) ||
       group.orderId.lowercase().contains(query) ||
       group.canonicalStatus.label.lowercase().contains(query) ||
+      group.canonicalStatus.urduLabel.lowercase().contains(query) ||
       group.items.any { item ->
         item.productName.lowercase().contains(query) ||
           item.sku.lowercase().contains(query) ||
@@ -412,6 +419,8 @@ internal fun VendorApplication.toShopSettingsDraft(accountEmail: String): Vendor
     latitude = shopLat?.toString().orEmpty(),
     longitude = shopLng?.toString().orEmpty(),
     shopImageUrl = shopImageUrl,
+    shopIsOpen = shopIsOpen,
+    weeklyHours = shopHours,
     frontPath = cnicFrontPath,
     backPath = cnicBackPath,
     documentPath = documentPath

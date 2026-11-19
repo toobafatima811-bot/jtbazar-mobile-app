@@ -51,6 +51,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.data.supabase.VendorService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.EmptyState
 import com.example.ui.components.ErrorState
@@ -101,7 +103,10 @@ fun VendorInventoryPanel() {
         }
         quantities = next
       } catch (e: Exception) {
-        errorMessage = e.message ?: "Inventory could not be loaded."
+        errorMessage = e.message ?: AppLanguageManager.tr(
+          "Inventory could not be loaded.",
+          "انوینٹری لوڈ نہیں ہو سکی۔"
+        )
       } finally {
         loading = false
       }
@@ -119,7 +124,8 @@ fun VendorInventoryPanel() {
   val groupedUiModels = remember(inventoryRows) {
     inventoryRows.groupBy { it.optString("product_id") }.map { (productId, productRows) ->
       val product = productRows.first().optJSONObject("products")
-      val productName = product?.optString("name", "Product")?.takeUnless { it == "null" } ?: "Product"
+      val productName = product?.optString("name", "")?.takeUnless { it == "null" }?.ifBlank { null }
+        ?: AppLanguageManager.tr("Product", "پروڈکٹ")
       VendorInventoryGroupUiModel(
         productId = productId,
         productName = productName,
@@ -131,7 +137,7 @@ fun VendorInventoryPanel() {
           val label = if (variant != null) {
             "${variant.optString("option_label")}: ${variant.optString("option_value")}"
           } else {
-            "Base product stock"
+            AppLanguageManager.tr("Base product stock", "بنیادی پروڈکٹ اسٹاک")
           }
           VendorInventoryRowUiModel(
             key = key,
@@ -187,7 +193,7 @@ fun VendorInventoryPanel() {
       shape = VendorShapes.card,
       title = {
         Text(
-          text = "Edit stock",
+          text = appText("Edit stock", "اسٹاک میں ترمیم"),
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Bold,
           color = VendorColors.TextPrimary
@@ -196,7 +202,10 @@ fun VendorInventoryPanel() {
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
           Text(
-            text = "${editingRow.variantLabel} • Current: ${editingRow.quantity} units • Low-stock alert at ${editingRow.lowStockThreshold} units",
+            text = appText(
+              "${editingRow.variantLabel} • Current: ${editingRow.quantity} units • Low-stock alert at ${editingRow.lowStockThreshold} units",
+              "${editingRow.variantLabel} • موجودہ: ${editingRow.quantity} یونٹس • کم اسٹاک الرٹ: ${editingRow.lowStockThreshold} یونٹس پر"
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = VendorColors.TextSecondary
           )
@@ -208,7 +217,7 @@ fun VendorInventoryPanel() {
                 it[editingRow.key] = value.filter(Char::isDigit).take(9)
               }
             },
-            label = "New quantity *",
+            label = appText("New quantity *", "نئی مقدار *"),
             leadingIcon = Icons.Rounded.Numbers,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             enabled = savingId != editingRow.key
@@ -221,7 +230,7 @@ fun VendorInventoryPanel() {
                 it[editingRow.key] = value.take(240)
               }
             },
-            label = "Adjustment reason / note *",
+            label = appText("Adjustment reason / note *", "تبدیلی کی وجہ / نوٹ *"),
             leadingIcon = Icons.Rounded.Notes,
             minLines = 2,
             enabled = savingId != editingRow.key
@@ -233,17 +242,20 @@ fun VendorInventoryPanel() {
       },
       confirmButton = {
         PrimaryButton(
-          text = if (savingId == editingRow.key) "Saving..." else "Save changes",
+          text = if (savingId == editingRow.key) appText("Saving...", "محفوظ ہو رہا ہے...") else appText("Save changes", "تبدیلیاں محفوظ کریں"),
           loading = savingId == editingRow.key,
           onClick = {
             val quantity = quantities[editingRow.key]?.toIntOrNull()
             if (quantity == null) {
-              dialogError = "Enter a valid stock quantity."
+              dialogError = AppLanguageManager.tr("Enter a valid stock quantity.", "درست اسٹاک مقدار درج کریں۔")
               return@PrimaryButton
             }
             val reason = adjustmentReasons[editingRow.key]?.trim().orEmpty()
             if (reason.length < 3) {
-              dialogError = "Add a reason for this stock adjustment (at least 3 characters)."
+              dialogError = AppLanguageManager.tr(
+                "Add a reason for this stock adjustment (at least 3 characters).",
+                "اسٹاک تبدیلی کی وجہ درج کریں (کم از کم 3 حروف)۔"
+              )
               return@PrimaryButton
             }
             scope.launch {
@@ -260,10 +272,13 @@ fun VendorInventoryPanel() {
                 )
                 adjustmentReasons = adjustmentReasons.toMutableMap().also { it.remove(editingRow.key) }
                 editingKey = null
-                info = "Stock updated for ${editingRow.variantLabel}."
+                info = AppLanguageManager.tr(
+                  "Stock updated for ${editingRow.variantLabel}.",
+                  "${editingRow.variantLabel} کا اسٹاک اپڈیٹ ہو گیا۔"
+                )
                 refresh()
               } catch (e: Exception) {
-                dialogError = e.message ?: "Stock update failed."
+                dialogError = e.message ?: AppLanguageManager.tr("Stock update failed.", "اسٹاک اپڈیٹ نہیں ہو سکا۔")
               } finally {
                 savingId = null
               }
@@ -277,7 +292,11 @@ fun VendorInventoryPanel() {
           onClick = { editingKey = null },
           modifier = Modifier.height(VendorSpacing.touchMin)
         ) {
-          Text("Cancel", color = VendorColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+          Text(
+            appText("Cancel", "منسوخ کریں"),
+            color = VendorColors.TextSecondary,
+            fontWeight = FontWeight.SemiBold
+          )
         }
       }
     )
@@ -303,9 +322,12 @@ fun VendorInventoryContent(
   ) {
     item {
       SectionHeader(
-        title = "Stock & inventory",
-        subtitle = "Manage live product and variant quantities.",
-        actionLabel = "Refresh",
+        title = appText("Stock & inventory", "اسٹاک اور انوینٹری"),
+        subtitle = appText(
+          "Manage live product and variant quantities.",
+          "لائیو پروڈکٹ اور ویرینٹ کی مقداریں منظم کریں۔"
+        ),
+        actionLabel = appText("Refresh", "ریفریش"),
         actionIcon = Icons.Rounded.Refresh,
         onActionClick = onRefresh
       )
@@ -341,8 +363,8 @@ fun VendorInventoryContent(
         StatCard(
           icon = Icons.Rounded.Inventory2,
           value = numberFormatter.format(uiState.stockRecordsCount),
-          label = "Stock records",
-          supportingText = "Tracked SKUs & variants",
+          label = appText("Stock records", "اسٹاک ریکارڈز"),
+          supportingText = appText("Tracked SKUs & variants", "ٹریک شدہ SKU اور ویرینٹس"),
           modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
@@ -350,8 +372,8 @@ fun VendorInventoryContent(
         StatCard(
           icon = Icons.Rounded.Warehouse,
           value = numberFormatter.format(uiState.totalUnitsCount),
-          label = "Total units",
-          supportingText = "Available across shop",
+          label = appText("Total units", "کل یونٹس"),
+          supportingText = appText("Available across shop", "پوری دکان میں دستیاب"),
           iconTint = VendorColors.NavyHeader,
           iconBackground = VendorColors.NavyHeader.copy(alpha = 0.10f),
           modifier = Modifier
@@ -371,7 +393,7 @@ fun VendorInventoryContent(
       is VendorSectionState.Error -> {
         item {
           ErrorState(
-            title = "Inventory could not load",
+            title = appText("Inventory could not load", "انوینٹری لوڈ نہیں ہو سکی"),
             message = state.message,
             onRetry = onRefresh
           )
@@ -382,9 +404,12 @@ fun VendorInventoryContent(
         item {
           EmptyState(
             icon = Icons.Rounded.Inventory2,
-            title = "No inventory records",
-            description = "Create a product listing with inventory tracking enabled to manage unit levels here.",
-            actionLabel = "Refresh inventory",
+            title = appText("No inventory records", "کوئی انوینٹری ریکارڈ نہیں"),
+            description = appText(
+              "Create a product listing with inventory tracking enabled to manage unit levels here.",
+              "یہاں یونٹس کی مقدار منظم کرنے کے لیے انوینٹری ٹریکنگ کے ساتھ پروڈکٹ شامل کریں۔"
+            ),
+            actionLabel = appText("Refresh inventory", "انوینٹری ریفریش کریں"),
             actionIcon = Icons.Rounded.Refresh,
             onAction = onRefresh
           )
@@ -408,7 +433,7 @@ fun VendorInventoryContent(
                     color = VendorColors.TextPrimary
                   )
                   Text(
-                    text = "${group.rows.size} stock option(s)",
+                    text = appText("${group.rows.size} stock option(s)", "${group.rows.size} اسٹاک آپشنز"),
                     style = MaterialTheme.typography.bodySmall,
                     color = VendorColors.TextSecondary
                   )
@@ -448,7 +473,10 @@ fun VendorInventoryContent(
                     )
                     Spacer(modifier = Modifier.width(VendorSpacing.xs))
                     StatusBadge(
-                      text = "${numberFormatter.format(row.quantity)} units",
+                      text = appText(
+                        "${numberFormatter.format(row.quantity)} units",
+                        "${numberFormatter.format(row.quantity)} یونٹس"
+                      ),
                       tone = if (isLowStock) StatusTone.WARNING else StatusTone.SUCCESS,
                       icon = if (isLowStock) Icons.Rounded.WarningAmber else Icons.Rounded.CheckCircle
                     )
@@ -471,7 +499,10 @@ fun VendorInventoryContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                   ) {
                     Text(
-                      text = "Low-stock alert at ${row.lowStockThreshold} units",
+                      text = appText(
+                        "Low-stock alert at ${row.lowStockThreshold} units",
+                        "کم اسٹاک الرٹ ${row.lowStockThreshold} یونٹس پر"
+                      ),
                       style = MaterialTheme.typography.bodySmall,
                       color = if (isLowStock) VendorColors.WarningAmber else VendorColors.TextSecondary,
                       fontWeight = if (isLowStock) FontWeight.SemiBold else FontWeight.Normal,
@@ -479,7 +510,7 @@ fun VendorInventoryContent(
                     )
                     Spacer(modifier = Modifier.width(VendorSpacing.xs))
                     SecondaryButton(
-                      text = "Edit stock",
+                      text = appText("Edit stock", "اسٹاک میں ترمیم"),
                       icon = Icons.Rounded.Edit,
                       enabled = uiState.savingKey != row.key,
                       onClick = { onOpenEditStock(row) }

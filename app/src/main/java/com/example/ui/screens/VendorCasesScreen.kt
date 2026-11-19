@@ -47,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.data.supabase.VendorService
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.AppCard
 import com.example.ui.components.EmptyState
 import com.example.ui.components.ErrorState
@@ -96,7 +98,10 @@ fun VendorCasesScreen() {
       tickets = VendorService.listSupportTickets()
       selectedTicket?.let { messages = VendorService.listSupportMessages(it) }
     } catch (e: Exception) {
-      errorMessage = e.message ?: "Cases and support could not be loaded."
+      errorMessage = e.message ?: AppLanguageManager.tr(
+        "Cases and support could not be loaded.",
+        "کیسز اور سپورٹ لوڈ نہیں ہو سکے۔"
+      )
     } finally {
       loading = false
     }
@@ -110,7 +115,10 @@ fun VendorCasesScreen() {
       try {
         messages = VendorService.listSupportMessages(id)
       } catch (e: Exception) {
-        errorMessage = e.message ?: "Support conversation could not be refreshed."
+        errorMessage = e.message ?: AppLanguageManager.tr(
+          "Support conversation could not be refreshed.",
+          "سپورٹ گفتگو ریفریش نہیں ہو سکی۔"
+        )
       }
       delay(10_000)
     }
@@ -120,9 +128,9 @@ fun VendorCasesScreen() {
     (0 until cases.length()).mapNotNull { cases.optJSONObject(it) }.map { item ->
       VendorCaseItemUiModel(
         id = item.optSafeString("id"),
-        caseType = item.optSafeString("case_type", "Customer case").ifBlank { "Customer case" },
+        caseType = item.optSafeString("case_type", "customer_case").ifBlank { "customer_case" },
         status = item.optSafeString("status", "open").ifBlank { "open" },
-        reason = item.optSafeString("reason", "No reason supplied.").ifBlank { "No reason supplied." },
+        reason = item.optSafeString("reason", ""),
         sellerResponse = item.optSafeString("seller_response")
       )
     }
@@ -132,7 +140,7 @@ fun VendorCasesScreen() {
     (0 until tickets.length()).mapNotNull { tickets.optJSONObject(it) }.map { ticket ->
       VendorSupportTicketUiModel(
         id = ticket.optSafeString("id"),
-        subject = ticket.optSafeString("subject", "Support request"),
+        subject = ticket.optSafeString("subject", ""),
         message = ticket.optSafeString("message"),
         status = ticket.optSafeString("status", "open").ifBlank { "open" },
         adminResponse = ticket.optSafeString("admin_response")
@@ -199,9 +207,12 @@ fun VendorCasesScreen() {
           VendorService.respondToCase(caseId, response)
           caseReplies = caseReplies.toMutableMap().also { it.remove(caseId) }
           cases = VendorService.listCases()
-          info = "Your case response was submitted."
+          info = AppLanguageManager.tr("Your case response was submitted.", "آپ کا کیس جواب جمع کر دیا گیا۔")
         } catch (e: Exception) {
-          errorMessage = e.message ?: "Case response could not be sent."
+          errorMessage = e.message ?: AppLanguageManager.tr(
+            "Case response could not be sent.",
+            "کیس کا جواب بھیجا نہیں جا سکا۔"
+          )
         } finally {
           saving = false
         }
@@ -220,9 +231,12 @@ fun VendorCasesScreen() {
           VendorService.sendSupportMessage(ticketId, reply)
           reply = ""
           messages = VendorService.listSupportMessages(ticketId)
-          info = "Your support message was sent."
+          info = AppLanguageManager.tr("Your support message was sent.", "آپ کا سپورٹ پیغام بھیج دیا گیا۔")
         } catch (e: Exception) {
-          errorMessage = e.message ?: "Message could not be sent."
+          errorMessage = e.message ?: AppLanguageManager.tr(
+            "Message could not be sent.",
+            "پیغام بھیجا نہیں جا سکا۔"
+          )
         } finally {
           saving = false
         }
@@ -245,7 +259,7 @@ fun VendorCasesScreen() {
       shape = VendorShapes.card,
       title = {
         Text(
-          text = "Create support ticket",
+          text = appText("Create support ticket", "سپورٹ ٹکٹ بنائیں"),
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Bold,
           color = VendorColors.TextPrimary
@@ -254,7 +268,10 @@ fun VendorCasesScreen() {
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
           Text(
-            text = "Tell JTBazar Support what you need help with.",
+            text = appText(
+              "Tell JTBazar Support what you need help with.",
+              "جے ٹی بازار سپورٹ کو بتائیں کہ آپ کو کس چیز میں مدد چاہیے۔"
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = VendorColors.TextSecondary
           )
@@ -264,7 +281,7 @@ fun VendorCasesScreen() {
               subject = it.take(160)
               dialogError = ""
             },
-            label = "Subject *",
+            label = appText("Subject *", "موضوع *"),
             leadingIcon = Icons.Rounded.Subject,
             enabled = !saving
           )
@@ -274,7 +291,7 @@ fun VendorCasesScreen() {
               description = it.take(4000)
               dialogError = ""
             },
-            label = "Describe your issue *",
+            label = appText("Describe your issue *", "اپنا مسئلہ بیان کریں *"),
             leadingIcon = Icons.Rounded.Description,
             minLines = 4,
             enabled = !saving
@@ -286,7 +303,7 @@ fun VendorCasesScreen() {
       },
       confirmButton = {
         PrimaryButton(
-          text = if (saving) "Creating..." else "Create ticket",
+          text = if (saving) appText("Creating...", "بنایا جا رہا ہے...") else appText("Create ticket", "ٹکٹ بنائیں"),
           loading = saving,
           enabled = subject.trim().length >= 3 && description.trim().length >= 5,
           onClick = {
@@ -300,9 +317,15 @@ fun VendorCasesScreen() {
                 description = ""
                 showCreateDialog = false
                 tickets = VendorService.listSupportTickets()
-                info = "Support ticket created. Open it below to chat with JTBazar Support."
+                info = AppLanguageManager.tr(
+                  "Support ticket created. Open it below to chat with JTBazar Support.",
+                  "سپورٹ ٹکٹ بن گیا۔ جے ٹی بازار سپورٹ سے بات کرنے کے لیے نیچے کھولیں۔"
+                )
               } catch (e: Exception) {
-                dialogError = e.message ?: "Support request could not be created."
+                dialogError = e.message ?: AppLanguageManager.tr(
+                  "Support request could not be created.",
+                  "سپورٹ درخواست نہیں بن سکی۔"
+                )
               } finally {
                 saving = false
               }
@@ -316,7 +339,11 @@ fun VendorCasesScreen() {
           enabled = !saving,
           modifier = Modifier.height(VendorSpacing.touchMin)
         ) {
-          Text("Cancel", color = VendorColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+          Text(
+            appText("Cancel", "منسوخ کریں"),
+            color = VendorColors.TextSecondary,
+            fontWeight = FontWeight.SemiBold
+          )
         }
       }
     )
@@ -347,9 +374,12 @@ fun VendorCasesContent(
   ) {
     item {
       SectionHeader(
-        title = "Cases & support",
-        subtitle = "Customer cases for your order items and direct JTBazar Support.",
-        actionLabel = "Refresh",
+        title = appText("Cases & support", "کیسز اور سپورٹ"),
+        subtitle = appText(
+          "Customer cases for your order items and direct JTBazar Support.",
+          "آپ کے آرڈرز کے کسٹمر کیسز اور براہ راست جے ٹی بازار سپورٹ۔"
+        ),
+        actionLabel = appText("Refresh", "ریفریش"),
         actionIcon = Icons.Rounded.Refresh,
         onActionClick = onRefresh
       )
@@ -379,8 +409,8 @@ fun VendorCasesContent(
     item {
       val caseCount = (uiState.casesState as? VendorSectionState.Content)?.data?.size ?: 0
       SectionHeader(
-        title = "Customer cases",
-        subtitle = "$caseCount case(s) assigned to your shop"
+        title = appText("Customer cases", "کسٹمر کیسز"),
+        subtitle = appText("$caseCount case(s) assigned to your shop", "آپ کی دکان کے لیے $caseCount کیسز")
       )
     }
 
@@ -392,7 +422,7 @@ fun VendorCasesContent(
       is VendorSectionState.Error -> {
         item {
           ErrorState(
-            title = "Could not load cases & support",
+            title = appText("Could not load cases & support", "کیسز اور سپورٹ لوڈ نہیں ہو سکے"),
             message = state.message,
             onRetry = onRefresh
           )
@@ -403,8 +433,11 @@ fun VendorCasesContent(
         item {
           EmptyState(
             icon = Icons.Rounded.Gavel,
-            title = "No customer cases",
-            description = "No customer cases are currently open for your shop."
+            title = appText("No customer cases", "کوئی کسٹمر کیس نہیں"),
+            description = appText(
+              "No customer cases are currently open for your shop.",
+              "اس وقت آپ کی دکان کے لیے کوئی کسٹمر کیس کھلا نہیں ہے۔"
+            )
           )
         }
       }
@@ -413,15 +446,19 @@ fun VendorCasesContent(
         items(state.data, key = { it.id }) { item ->
           val badgeSpec = vendorGenericStatusBadgeSpec(item.status)
           val draftReply = caseReplies[item.id].orEmpty()
-          val displayCaseType = item.caseType
-            .replace('_', ' ')
-            .trim()
-            .split(Regex("\\s+"))
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { word ->
-              word.lowercase().replaceFirstChar { it.uppercase() }
-            }
-            .ifBlank { "Customer Case" }
+          val displayCaseType = if (item.caseType == "customer_case" || item.caseType.equals("Customer case", true)) {
+            appText("Customer Case", "کسٹمر کیس")
+          } else {
+            item.caseType
+              .replace('_', ' ')
+              .trim()
+              .split(Regex("\\s+"))
+              .filter { it.isNotBlank() }
+              .joinToString(" ") { word ->
+                word.lowercase().replaceFirstChar { it.uppercase() }
+              }
+              .ifBlank { appText("Customer Case", "کسٹمر کیس") }
+          }
 
           AppCard {
             Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
@@ -445,7 +482,7 @@ fun VendorCasesContent(
               }
 
               Text(
-                text = item.reason,
+                text = item.reason.ifBlank { appText("No reason supplied.", "کوئی وجہ فراہم نہیں کی گئی۔") },
                 style = MaterialTheme.typography.bodyMedium,
                 color = VendorColors.TextPrimary
               )
@@ -462,7 +499,7 @@ fun VendorCasesContent(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                   ) {
                     Text(
-                      text = "Your previous response",
+                      text = appText("Your previous response", "آپ کا پچھلا جواب"),
                       style = MaterialTheme.typography.labelSmall,
                       fontWeight = FontWeight.SemiBold,
                       color = VendorColors.TextSecondary
@@ -479,13 +516,13 @@ fun VendorCasesContent(
               VendorOutlinedTextField(
                 value = draftReply,
                 onValueChange = { onCaseReplyChange(item.id, it) },
-                label = "Your response to JTBazar",
+                label = appText("Your response to JTBazar", "جے ٹی بازار کو آپ کا جواب"),
                 leadingIcon = Icons.Rounded.ChatBubbleOutline,
                 minLines = 2
               )
 
               PrimaryButton(
-                text = "Send case response",
+                text = appText("Send case response", "کیس کا جواب بھیجیں"),
                 icon = Icons.Rounded.Send,
                 enabled = !uiState.isSaving && draftReply.trim().length >= 3,
                 loading = uiState.isSaving,
@@ -511,13 +548,16 @@ fun VendorCasesContent(
         ) {
           Column(modifier = Modifier.weight(1f)) {
             Text(
-              text = "JTBazar Support",
+              text = appText("JTBazar Support", "جے ٹی بازار سپورٹ"),
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
               color = VendorColors.TextPrimary
             )
             Text(
-              text = "Get help with listings, payouts or account questions",
+              text = appText(
+                "Get help with listings, payouts or account questions",
+                "لسٹنگز، ادائیگیوں یا اکاؤنٹ کے سوالات میں مدد حاصل کریں"
+              ),
               style = MaterialTheme.typography.bodySmall,
               color = VendorColors.TextSecondary
             )
@@ -525,7 +565,7 @@ fun VendorCasesContent(
         }
         Spacer(modifier = Modifier.height(VendorSpacing.xs))
         PrimaryButton(
-          text = "Create support ticket",
+          text = appText("Create support ticket", "سپورٹ ٹکٹ بنائیں"),
           icon = Icons.Rounded.Add,
           onClick = onOpenCreateTicket,
           modifier = Modifier.fillMaxWidth()
@@ -543,8 +583,11 @@ fun VendorCasesContent(
           item {
             EmptyState(
               icon = Icons.Rounded.SupportAgent,
-              title = "No support tickets yet",
-              description = "Create a support ticket if you need help from the JTBazar marketplace team."
+              title = appText("No support tickets yet", "ابھی کوئی سپورٹ ٹکٹ نہیں"),
+              description = appText(
+                "Create a support ticket if you need help from the JTBazar marketplace team.",
+                "اگر آپ کو جے ٹی بازار ٹیم سے مدد چاہیے تو سپورٹ ٹکٹ بنائیں۔"
+              )
             )
           }
         }
@@ -563,7 +606,7 @@ fun VendorCasesContent(
                   verticalAlignment = Alignment.CenterVertically
                 ) {
                   Text(
-                    text = ticket.subject,
+                    text = ticket.subject.ifBlank { appText("Support request", "سپورٹ درخواست") },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = VendorColors.TextPrimary,
@@ -593,7 +636,7 @@ fun VendorCasesContent(
                       verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                       Text(
-                        text = "Support update",
+                        text = appText("Support update", "سپورٹ اپڈیٹ"),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = VendorColors.SuccessGreen
@@ -608,7 +651,7 @@ fun VendorCasesContent(
                 }
 
                 SecondaryButton(
-                  text = if (isExpanded) "Close conversation" else "Open conversation",
+                  text = if (isExpanded) appText("Close conversation", "گفتگو بند کریں") else appText("Open conversation", "گفتگو کھولیں"),
                   icon = if (isExpanded) Icons.Rounded.Close else Icons.Rounded.Forum,
                   onClick = { onToggleTicketConversation(ticket.id) },
                   modifier = Modifier.fillMaxWidth()
@@ -617,7 +660,7 @@ fun VendorCasesContent(
                 if (isExpanded) {
                   HorizontalDivider(color = VendorColors.Divider)
                   Text(
-                    text = "Conversation",
+                    text = appText("Conversation", "گفتگو"),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = VendorColors.TextPrimary
@@ -625,7 +668,7 @@ fun VendorCasesContent(
 
                   if (uiState.selectedTicketMessages.isEmpty()) {
                     Text(
-                      text = "No messages yet in this thread.",
+                      text = appText("No messages yet in this thread.", "اس گفتگو میں ابھی کوئی پیغام نہیں۔"),
                       style = MaterialTheme.typography.bodySmall,
                       color = VendorColors.TextSecondary
                     )
@@ -647,7 +690,7 @@ fun VendorCasesContent(
                             verticalArrangement = Arrangement.spacedBy(VendorSpacing.xxs)
                           ) {
                             Text(
-                              text = if (isSeller) "You" else "JTBazar Support",
+                              text = if (isSeller) appText("You", "آپ") else appText("JTBazar Support", "جے ٹی بازار سپورٹ"),
                               style = MaterialTheme.typography.labelSmall,
                               fontWeight = FontWeight.Bold,
                               color = if (isSeller) VendorColors.PrimaryOrange else VendorColors.NavyHeader
@@ -672,19 +715,22 @@ fun VendorCasesContent(
 
                   if (isResolved) {
                     VendorAlertBanner(
-                      message = "This ticket is resolved. Create a new support ticket for another issue.",
+                      message = appText(
+                        "This ticket is resolved. Create a new support ticket for another issue.",
+                        "یہ ٹکٹ حل ہو چکا ہے۔ کسی دوسرے مسئلے کے لیے نیا سپورٹ ٹکٹ بنائیں۔"
+                      ),
                       isError = false
                     )
                   } else {
                     VendorOutlinedTextField(
                       value = supportReply,
                       onValueChange = onSupportReplyChange,
-                      label = "Write your message",
+                      label = appText("Write your message", "اپنا پیغام لکھیں"),
                       leadingIcon = Icons.Rounded.ChatBubbleOutline,
                       minLines = 2
                     )
                     PrimaryButton(
-                      text = "Send message",
+                      text = appText("Send message", "پیغام بھیجیں"),
                       icon = Icons.Rounded.Send,
                       enabled = !uiState.isSaving && supportReply.isNotBlank(),
                       loading = uiState.isSaving,

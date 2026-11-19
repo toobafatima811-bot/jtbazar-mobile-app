@@ -66,7 +66,7 @@ fun CampaignLaunchPopupDialog(
       ) {
         AsyncImage(
           model = rememberSizedImageRequest(data = imageUrl, widthPx = 1080, heightPx = 1350),
-          contentDescription = campaign.title.ifBlank { "Special Campaign Offer" },
+          contentDescription = campaign.title.ifBlank { com.example.localization.appText("Special Campaign Offer", "خصوصی مہم کی پیشکش") },
           modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 680.dp)
@@ -81,7 +81,7 @@ fun CampaignLaunchPopupDialog(
             .size(36.dp)
             .background(Color.White.copy(alpha = 0.95f), CircleShape)
         ) {
-          Icon(Icons.Default.Close, contentDescription = "Close promotion", tint = Color.Black)
+          Icon(Icons.Default.Close, contentDescription = com.example.localization.appText("Close promotion", "اشتہار بند کریں"), tint = Color.Black)
         }
       }
     }

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseNotificationDto
+import com.example.localization.appText
 import com.example.ui.theme.*
 
 @Composable
@@ -57,13 +58,13 @@ fun NotificationsScreen(
           ) {
             Icon(
               imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Back",
+              contentDescription = appText("Back", "واپس"),
               tint = JTTextPrimary
             )
           }
           Spacer(modifier = Modifier.width(4.dp))
           Text(
-            text = "Notifications",
+            text = appText("Notifications", "اطلاعات"),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = JTTextPrimary
@@ -77,7 +78,7 @@ fun NotificationsScreen(
           ) {
             Icon(Icons.Filled.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp), tint = JTOrange)
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Mark all read", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTOrange)
+            Text(appText("Mark all read", "سب کو پڑھا ہوا نشان زد کریں"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTOrange)
           }
         }
       }
@@ -104,14 +105,17 @@ fun NotificationsScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-          text = "No Notifications Yet",
+          text = appText("No Notifications Yet", "ابھی تک کوئی اطلاع نہیں"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-          text = "We'll notify you about order updates, fresh arrivals, and seller dispatches.",
+          text = appText(
+            "We'll notify you about order updates, fresh arrivals, and seller dispatches.",
+            "ہم آپ کو آرڈر کی صورتحال، نئی مصنوعات، اور سیلر ڈسپیچ کے بارے میں مطلع کریں گے۔"
+          ),
           fontSize = 13.sp,
           color = JTTextSecondary,
           textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -188,7 +192,7 @@ fun NotificationsScreen(
                         color = JTOrangeContainer
                       ) {
                         Text(
-                          text = "Vendor",
+                          text = appText("Vendor", "فروشندہ"),
                           fontSize = 10.sp,
                           fontWeight = FontWeight.Bold,
                           color = JTOrangeDark,

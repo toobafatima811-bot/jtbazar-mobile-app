@@ -41,8 +41,9 @@ class MainActivity : ComponentActivity() {
     FirebasePushManager.ensureInitialized(this)
     FirebasePushManager.ensureNotificationChannel(applicationContext)
 
-    // Initialize Supabase session persistence and shared Coil image cache before UI composition.
+    // Initialize Supabase session persistence, saved language, and shared Coil image cache before UI composition.
     Coil.setImageLoader { JTBazarImageLoader.get(applicationContext) }
+    com.example.localization.AppLanguageManager.init(applicationContext)
     com.example.data.supabase.SupabaseAuthService.init(applicationContext)
 
     // Generate the FCM installation token immediately on app launch, even before sign-in

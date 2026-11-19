@@ -6,36 +6,93 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
-import android.os.Looper
 import android.net.Uri
+import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.LocationOff
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.data.supabase.SupabaseClient
-import com.example.ui.theme.*
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.LocationRequest
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
+import com.example.ui.theme.JTTextPrimary
+import com.example.ui.theme.JTTextSecondary
 import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,6 +109,17 @@ import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.gestures.RotationGestureOverlay
 import java.util.Locale
 
+private val NavOrange = Color(0xFFEA580C)
+private val NavOrangeDark = Color(0xFFC2410C)
+private val NavOrangeSoft = Color(0xFFFFF7ED)
+private val NavOrangeBorder = Color(0xFFFED7AA)
+private val NavBlue = Color(0xFF2563EB)
+private val NavBlueSoft = Color(0xFFEFF6FF)
+private val NavBlueBorder = Color(0xFFBFDBFE)
+private val NavGreen = Color(0xFF16A34A)
+private val NavInk = Color(0xFF0F172A)
+private val NavBorder = Color(0xFFE2E8F0)
+
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +134,7 @@ fun DriverNavigationScreen(
   assignmentId: String,
   otpVerified: Boolean = false,
   hasDeliveryProof: Boolean = false,
+  isManualOrder: Boolean = false,
   onStatusUpdated: () -> Unit,
   onBack: () -> Unit
 ) {
@@ -77,52 +146,95 @@ fun DriverNavigationScreen(
 
   if (!isAuthenticated || !isActiveDelivery) {
     Scaffold(
+      containerColor = Color(0xFFF6F7FB),
       topBar = {
         TopAppBar(
-          title = { Text("Customer Location", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+          title = {
+            Text(
+              appText("Customer Location", "کسٹمر کا مقام"),
+              fontSize = 16.sp,
+              fontWeight = FontWeight.Bold
+            )
+          },
           navigationIcon = {
-            IconButton(onClick = onBack) {
-              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+              Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = appText("Back", "واپس"))
             }
           },
           colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
         )
       }
     ) { padding ->
-      Column(
+      Box(
         modifier = Modifier
           .fillMaxSize()
           .padding(padding)
           .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        contentAlignment = Alignment.Center
       ) {
-        Icon(Icons.Filled.Lock, contentDescription = null, tint = Color(0xFFEA580C), modifier = Modifier.size(40.dp))
-        Spacer(Modifier.height(12.dp))
-        Text(
-          text = if (!isAuthenticated) "Driver Sign-In Required" else "Customer Location Unavailable",
-          fontSize = 17.sp,
-          fontWeight = FontWeight.Bold,
-          color = JTTextPrimary
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-          text = if (!isAuthenticated) {
-            "Sign in with an approved, enabled driver account to view active customer delivery details."
-          } else {
-            "Customer delivery details and GPS coordinates are hidden once a delivery is completed or cancelled."
-          },
-          fontSize = 12.5.sp,
-          color = JTTextSecondary,
-          textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-        Spacer(Modifier.height(18.dp))
-        Button(
-          onClick = onBack,
-          modifier = Modifier.heightIn(min = 48.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
+        Card(
+          modifier = Modifier
+            .widthIn(max = 520.dp)
+            .fillMaxWidth(),
+          shape = RoundedCornerShape(22.dp),
+          colors = CardDefaults.cardColors(containerColor = Color.White),
+          border = BorderStroke(1.dp, NavBorder)
         ) {
-          Text("Back to Driver Center", fontWeight = FontWeight.Bold)
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+          ) {
+            Surface(
+              color = NavOrangeSoft,
+              shape = CircleShape,
+              modifier = Modifier.size(64.dp)
+            ) {
+              Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Lock, contentDescription = null, tint = NavOrange, modifier = Modifier.size(32.dp))
+              }
+            }
+            Text(
+              text = if (!isAuthenticated) {
+                appText("Driver Sign-In Required", "ڈرائیور سائن ان درکار ہے")
+              } else {
+                appText("Customer Location Unavailable", "کسٹمر کا مقام دستیاب نہیں")
+              },
+              fontSize = 17.sp,
+              fontWeight = FontWeight.Bold,
+              color = JTTextPrimary,
+              textAlign = TextAlign.Center
+            )
+            Text(
+              text = if (!isAuthenticated) {
+                appText(
+                  "Sign in with an approved, enabled driver account to view active customer delivery details.",
+                  "فعال کسٹمر کی ترسیل کی تفصیلات دیکھنے کے لیے منظور شدہ اور فعال ڈرائیور اکاؤنٹ سے سائن ان کریں۔"
+                )
+              } else {
+                appText(
+                  "Customer delivery details and GPS coordinates are hidden once a delivery is completed or cancelled.",
+                  "ترسیل مکمل یا منسوخ ہونے کے بعد کسٹمر کی تفصیلات اور جی پی ایس کوآرڈینیٹس مخفی کر دیے جاتے ہیں۔"
+                )
+              },
+              fontSize = 12.5.sp,
+              color = JTTextSecondary,
+              textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Button(
+              onClick = onBack,
+              modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
+              shape = RoundedCornerShape(12.dp),
+              colors = ButtonDefaults.buttonColors(containerColor = NavOrange)
+            ) {
+              Text(appText("Back to Driver Center", "ڈرائیور سینٹر پر واپس جائیں"), fontWeight = FontWeight.Bold)
+            }
+          }
         }
       }
     }
@@ -242,7 +354,7 @@ fun DriverNavigationScreen(
                   routePoints = pts
                   distanceText = String.format(Locale.US, "%.1f km", meters / 1000.0)
                   val mins = (seconds / 60.0).toInt().coerceAtLeast(1)
-                  durationText = if (mins >= 60) "${mins / 60}h ${mins % 60}m" else "$mins mins"
+                  durationText = if (mins >= 60) "${mins / 60}h ${mins % 60}m" else "$mins min"
                 }
                 return@withContext
               }
@@ -258,38 +370,105 @@ fun DriverNavigationScreen(
         withContext(Dispatchers.Main) {
           routePoints = listOf(GeoPoint(dLat, dLng), GeoPoint(customerLat, customerLng))
           distanceText = String.format(Locale.US, "%.1f km", distKm)
-          durationText = "~$estMins mins"
+          durationText = "~$estMins min"
         }
       }
       isFetchingRoute = false
     }
   }
 
-
+  val statusRpcName = if (isManualOrder) {
+    "driver_update_manual_order_delivery_status"
+  } else {
+    "driver_update_delivery_status"
+  }
 
   Scaffold(
+    containerColor = Color(0xFFF6F7FB),
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
-      TopAppBar(
-        title = {
-          Column {
-            Text("Customer Location", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text("Order #$orderNumber", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-        },
-        navigationIcon = {
-          IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-          }
-        },
-        actions = {
-          if (hasValidCustomerCoords) {
-            IconButton(onClick = { osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng)); osmdroidMap?.controller?.setZoom(16.5) }) {
-              Icon(Icons.Filled.Directions, contentDescription = "Google Maps", tint = Color(0xFFEA580C))
+      // Express Courier Gradient Top Bar
+      Surface(shadowElevation = 6.dp, color = Color.Transparent) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .background(
+              Brush.horizontalGradient(
+                colors = listOf(NavOrange, NavOrangeDark)
+              )
+            )
+            .statusBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+          Row(
+            modifier = Modifier
+              .widthIn(max = 640.dp)
+              .fillMaxWidth()
+              .align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            IconButton(
+              onClick = onBack,
+              modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.2f))
+            ) {
+              Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = appText("Back", "واپس"),
+                tint = Color.White
+              )
+            }
+
+            Column(
+              modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Text(
+                appText("Customer Location", "کسٹمر کا مقام"),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Text(
+                appText("Order #$orderNumber", "آرڈر #$orderNumber"),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFFFFEDD5),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+
+            if (hasValidCustomerCoords) {
+              IconButton(
+                onClick = {
+                  osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng))
+                  osmdroidMap?.controller?.setZoom(16.5)
+                },
+                modifier = Modifier
+                  .size(48.dp)
+                  .clip(CircleShape)
+                  .background(Color.White.copy(alpha = 0.2f))
+              ) {
+                Icon(
+                  Icons.Filled.Directions,
+                  contentDescription = appText("Focus Customer", "کسٹمر پر توجہ مرکوز کریں"),
+                  tint = Color.White
+                )
+              }
+            } else {
+              Spacer(Modifier.size(48.dp))
             }
           }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-      )
+        }
+      }
     }
   ) { padding ->
     Box(
@@ -298,72 +477,131 @@ fun DriverNavigationScreen(
         .padding(padding)
     ) {
       if (!hasValidCustomerCoords) {
-        // Missing coordinates view
-        Column(
+        // Missing coordinates view (with preserved Open Address in Maps fallback)
+        Box(
           modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
-          horizontalAlignment = Alignment.CenterHorizontally,
-          verticalArrangement = Arrangement.Center
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(20.dp),
+          contentAlignment = Alignment.Center
         ) {
-          Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.errorContainer,
-            modifier = Modifier.size(68.dp)
+          Card(
+            modifier = Modifier
+              .widthIn(max = 560.dp)
+              .fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(1.dp, NavBorder)
           ) {
-            Box(contentAlignment = Alignment.Center) {
-              Icon(Icons.Filled.LocationOff, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp))
-            }
-          }
-          Spacer(Modifier.height(16.dp))
-          Text("Customer GPS Pin Unavailable", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-          Spacer(Modifier.height(8.dp))
-          Text(
-            "This order does not have verified map coordinates saved by the customer. Please contact the customer or Admin for delivery location details.",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-          )
-          Spacer(Modifier.height(16.dp))
-          Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-              Text("Customer: $customerName", fontWeight = FontWeight.SemiBold)
-              Text("Address: $deliveryAddress", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-              Text("Phone: $customerPhone", fontSize = 12.sp, color = Color(0xFF2563EB))
-            }
-          }
-          Spacer(Modifier.height(16.dp))
-          if (deliveryAddress.isNotBlank()) {
-            OutlinedButton(
-              onClick = {
-                val mapUri = Uri.parse("geo:0,0?q=${Uri.encode(deliveryAddress)}")
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, mapUri)) }
-              },
-              modifier = Modifier.fillMaxWidth()
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(22.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-              Icon(Icons.Filled.Map, contentDescription = null)
-              Spacer(Modifier.width(8.dp))
-              Text("Open Address in Maps")
+              Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.size(68.dp)
+              ) {
+                Box(contentAlignment = Alignment.Center) {
+                  Icon(
+                    Icons.Filled.LocationOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(34.dp)
+                  )
+                }
+              }
+              Text(
+                appText("Customer GPS Pin Unavailable", "کسٹمر کا جی پی ایس پن دستیاب نہیں"),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+              )
+              Text(
+                appText(
+                  "This order does not have verified map coordinates saved by the customer. Please contact the customer or Admin for delivery location details.",
+                  "اس آرڈر میں کسٹمر کی جانب سے تصدیق شدہ نقشے کے کوآرڈینیٹس محفوظ نہیں ہیں۔ ترسیل کے مقام کے لیے کسٹمر یا ایڈمن سے رابطہ کریں۔"
+                ),
+                fontSize = 12.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+              )
+              Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFF8FAFC),
+                border = BorderStroke(1.dp, NavBorder)
+              ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                  Text(
+                    appText("Customer: $customerName", "کسٹمر: $customerName"),
+                    fontWeight = FontWeight.Bold,
+                    color = NavInk
+                  )
+                  Text(
+                    appText("Address: $deliveryAddress", "پتہ: $deliveryAddress"),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                  if (customerPhone.isNotBlank()) {
+                    Text(
+                      appText("Phone: $customerPhone", "فون: $customerPhone"),
+                      fontSize = 12.sp,
+                      fontWeight = FontWeight.SemiBold,
+                      color = NavBlue
+                    )
+                  }
+                }
+              }
+              if (deliveryAddress.isNotBlank()) {
+                OutlinedButton(
+                  onClick = {
+                    val mapUri = Uri.parse("geo:0,0?q=${Uri.encode(deliveryAddress)}")
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, mapUri)) }
+                  },
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
+                  shape = RoundedCornerShape(12.dp),
+                  border = BorderStroke(1.dp, NavOrangeBorder),
+                  colors = ButtonDefaults.outlinedButtonColors(contentColor = NavOrangeDark)
+                ) {
+                  Icon(Icons.Filled.Map, contentDescription = null)
+                  Spacer(Modifier.width(8.dp))
+                  Text(appText("Open Address in Maps", "نقشے میں پتہ کھولیں"), fontWeight = FontWeight.SemiBold)
+                }
+              }
+              if (customerPhone.isNotBlank()) {
+                Button(
+                  onClick = {
+                    val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$customerPhone"))
+                    context.startActivity(dialIntent)
+                  },
+                  colors = ButtonDefaults.buttonColors(containerColor = NavBlue),
+                  shape = RoundedCornerShape(12.dp),
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                ) {
+                  Icon(Icons.Filled.Phone, contentDescription = null)
+                  Spacer(Modifier.width(8.dp))
+                  Text(appText("Call Customer ($customerPhone)", "کسٹمر کو کال کریں ($customerPhone)"), fontWeight = FontWeight.Bold)
+                }
+              }
+              OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .heightIn(min = 48.dp),
+                shape = RoundedCornerShape(12.dp)
+              ) {
+                Text(appText("Back to Driver Center", "ڈرائیور سینٹر پر واپس جائیں"), fontWeight = FontWeight.SemiBold)
+              }
             }
-          }
-          Spacer(Modifier.height(10.dp))
-          if (customerPhone.isNotBlank()) {
-            Button(
-              onClick = {
-                val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$customerPhone"))
-                context.startActivity(dialIntent)
-              },
-              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Icon(Icons.Filled.Phone, contentDescription = null)
-              Spacer(Modifier.width(8.dp))
-              Text("Call Customer ($customerPhone)")
-            }
-          }
-          Spacer(Modifier.height(10.dp))
-          OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back to Driver Center")
           }
         }
       } else {
@@ -386,12 +624,10 @@ fun DriverNavigationScreen(
             }
           },
           update = { map ->
-            // Keep the rotation gesture overlay installed while refreshing route/markers.
             val rotationOverlay = map.overlays.filterIsInstance<RotationGestureOverlay>().firstOrNull()
             map.overlays.clear()
             rotationOverlay?.let { map.overlays.add(it) }
 
-            // 1. Add route polyline if available
             if (routePoints.isNotEmpty()) {
               val line = Polyline(map).apply {
                 setPoints(routePoints)
@@ -403,28 +639,24 @@ fun DriverNavigationScreen(
               map.overlays.add(line)
             }
 
-            // 2. Customer destination marker
             val customerMarker = Marker(map).apply {
               position = GeoPoint(customerLat, customerLng)
-              title = "Destination: $customerName"
+              title = AppLanguageManager.tr("Destination: $customerName", "منزل: $customerName")
               snippet = deliveryAddress
               setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             }
             map.overlays.add(customerMarker)
 
-            // 3. Driver starting marker
             val dLoc = driverLocation
             if (dLoc != null) {
               val driverMarker = Marker(map).apply {
                 position = GeoPoint(dLoc.latitude, dLoc.longitude)
-                title = "Your Location (Driver)"
-                snippet = "Starting point"
+                title = AppLanguageManager.tr("Your Location (Driver)", "آپ کا مقام (ڈرائیور)")
+                snippet = AppLanguageManager.tr("Starting point", "ابتدائی مقام")
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
               }
               map.overlays.add(driverMarker)
 
-              // Fit both locations only once. Subsequent GPS updates must not fight
-              // the driver's manual pan, zoom, or map rotation gestures.
               if (!mapCameraInitialized) {
                 try {
                   val box = BoundingBox.fromGeoPoints(listOf(GeoPoint(dLoc.latitude, dLoc.longitude), GeoPoint(customerLat, customerLng)))
@@ -441,287 +673,308 @@ fun DriverNavigationScreen(
           }
         )
 
-        // GPS status chip at top
-        Row(
+        // Dark frosted GPS Live Route chip at top
+        Surface(
+          color = NavInk.copy(alpha = 0.88f),
+          shape = RoundedCornerShape(24.dp),
+          border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
           modifier = Modifier
             .align(Alignment.TopCenter)
             .padding(top = 12.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.94f))
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-          verticalAlignment = Alignment.CenterVertically
         ) {
-          Box(
-            modifier = Modifier
-              .size(8.dp)
-              .clip(CircleShape)
-              .background(if (driverLocation != null) Color(0xFF16A34A) else Color(0xFFEA580C))
-          )
-          Spacer(Modifier.width(8.dp))
-          Text(
-            text = if (driverLocation != null) "GPS Live Route" else if (!hasLocationPermission) "Tap location permission" else "Acquiring GPS…",
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = JTTextPrimary
-          )
-          if (isFetchingRoute) {
+          Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Box(
+              modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(if (driverLocation != null) Color(0xFF22C55E) else NavOrange)
+            )
             Spacer(Modifier.width(8.dp))
-            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color(0xFFEA580C))
+            Text(
+              text = when {
+                driverLocation != null -> appText("GPS Live Route", "لائیو جی پی ایس روٹ")
+                !hasLocationPermission -> appText("Tap location permission", "لوکیشن کی اجازت دیں")
+                else -> appText("Acquiring GPS…", "جی پی ایس حاصل کیا جا رہا ہے…")
+              },
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = Color.White
+            )
+            if (isFetchingRoute) {
+              Spacer(Modifier.width(8.dp))
+              CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color(0xFFFDBA74))
+            }
           }
         }
 
-        // Recenter on Driver Floating Button
-        FloatingActionButton(
-          onClick = {
-            val dLoc = driverLocation
-            if (dLoc != null && osmdroidMap != null) {
-              osmdroidMap?.controller?.animateTo(GeoPoint(dLoc.latitude, dLoc.longitude))
-              osmdroidMap?.controller?.setZoom(17.0)
-              osmdroidMap?.mapOrientation = 0f
-            } else if (!hasLocationPermission) {
-              permissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-              )
-            }
-          },
+        // Top-right floating recenter FABs (48.dp touch target, never collides with bottom sheet)
+        Column(
           modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .padding(end = 16.dp, bottom = 240.dp)
-            .size(46.dp),
-          containerColor = Color.White,
-          contentColor = Color(0xFF2563EB),
-          shape = CircleShape
+            .align(Alignment.TopEnd)
+            .padding(top = 12.dp, end = 12.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-          Icon(Icons.Filled.MyLocation, contentDescription = "My location", modifier = Modifier.size(22.dp))
+          FloatingActionButton(
+            onClick = {
+              val dLoc = driverLocation
+              if (dLoc != null && osmdroidMap != null) {
+                osmdroidMap?.controller?.animateTo(GeoPoint(dLoc.latitude, dLoc.longitude))
+                osmdroidMap?.controller?.setZoom(17.0)
+                osmdroidMap?.mapOrientation = 0f
+              } else if (!hasLocationPermission) {
+                permissionLauncher.launch(
+                  arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                )
+              }
+            },
+            modifier = Modifier.size(48.dp),
+            containerColor = Color.White,
+            contentColor = NavBlue,
+            shape = CircleShape
+          ) {
+            Icon(Icons.Filled.MyLocation, contentDescription = appText("My location", "میرا مقام"), modifier = Modifier.size(22.dp))
+          }
+
+          FloatingActionButton(
+            onClick = {
+              osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng))
+              osmdroidMap?.controller?.setZoom(16.5)
+            },
+            modifier = Modifier.size(48.dp),
+            containerColor = Color.White,
+            contentColor = NavOrange,
+            shape = CircleShape
+          ) {
+            Icon(Icons.Filled.Place, contentDescription = appText("Customer location", "کسٹمر کا مقام"), modifier = Modifier.size(22.dp))
+          }
         }
 
-        // Recenter on Customer Floating Button
-        FloatingActionButton(
-          onClick = {
-            osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng))
-            osmdroidMap?.controller?.setZoom(16.5)
-          },
-          modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .padding(end = 16.dp, bottom = 184.dp)
-            .size(46.dp),
-          containerColor = Color.White,
-          contentColor = Color(0xFFEA580C),
-          shape = CircleShape
-        ) {
-          Icon(Icons.Filled.Place, contentDescription = "Customer location", modifier = Modifier.size(22.dp))
-        }
-
-        // Bottom Information & Navigation Panel
-        Card(
+        // Bottom Navigation Sheet (26.dp rounded corners, constrained width on tablets)
+        Box(
           modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
-            .padding(12.dp),
-          shape = RoundedCornerShape(20.dp),
-          colors = CardDefaults.cardColors(containerColor = Color.White),
-          elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            .windowInsetsPadding(WindowInsets.navigationBars),
+          contentAlignment = Alignment.BottomCenter
         ) {
-          Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+          Card(
+            modifier = Modifier
+              .widthIn(max = 600.dp)
+              .fillMaxWidth()
+              .padding(horizontal = 12.dp, vertical = 10.dp),
+            shape = RoundedCornerShape(26.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+            border = BorderStroke(1.dp, NavBorder)
           ) {
-            // Header: Customer name, phone & call button
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
+            Column(
+              modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-              Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                  Surface(
-                    color = Color(0xFFFFF7ED),
-                    shape = RoundedCornerShape(6.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDBA74))
+              // Sheet drag handle
+              Box(
+                modifier = Modifier
+                  .align(Alignment.CenterHorizontally)
+                  .width(38.dp)
+                  .height(4.dp)
+                  .clip(RoundedCornerShape(2.dp))
+                  .background(Color(0xFFCBD5E1))
+              )
+
+              // Header: Customer name, status badge & 48dp call button
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Column(modifier = Modifier.weight(1f)) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                   ) {
+                    Surface(
+                      color = NavOrangeSoft,
+                      shape = RoundedCornerShape(8.dp),
+                      border = BorderStroke(1.dp, NavOrangeBorder)
+                    ) {
+                      Text(
+                        text = appText("ORDER #$orderNumber", "آرڈر #$orderNumber"),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NavOrangeDark
+                      )
+                    }
                     Text(
-                      text = "ORDER #$orderNumber",
-                      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                      fontSize = 10.sp,
+                      text = driverAssignmentStatusLabel(currentStatus),
+                      fontSize = 11.sp,
                       fontWeight = FontWeight.Bold,
-                      color = Color(0xFFC2410C)
+                      color = Color(0xFF64748B)
                     )
                   }
+                  Spacer(Modifier.height(4.dp))
                   Text(
-                    text = currentStatus.replace('_', ' ').uppercase(),
-                    fontSize = 10.sp,
+                    text = customerName.ifBlank { appText("Customer", "کسٹمر") },
+                    fontSize = 15.5.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF64748B)
+                    color = JTTextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                   )
                 }
-                Spacer(Modifier.height(4.dp))
+
+                if (customerPhone.isNotBlank()) {
+                  IconButton(
+                    onClick = {
+                      val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$customerPhone"))
+                      context.startActivity(dial)
+                    },
+                    modifier = Modifier
+                      .size(48.dp)
+                      .clip(CircleShape)
+                      .background(NavBlueSoft)
+                      .border(1.dp, NavBlueBorder, CircleShape)
+                  ) {
+                    Icon(
+                      Icons.Filled.Phone,
+                      contentDescription = appText("Call Customer", "کسٹمر کو کال کریں"),
+                      tint = NavBlue,
+                      modifier = Modifier.size(20.dp)
+                    )
+                  }
+                }
+              }
+
+              // Customer address row
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Icon(Icons.Filled.Place, contentDescription = null, tint = NavOrange, modifier = Modifier.size(18.dp))
                 Text(
-                  text = customerName.ifBlank { "Customer" },
-                  fontSize = 15.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = JTTextPrimary,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
+                  text = deliveryAddress,
+                  fontSize = 12.sp,
+                  color = JTTextSecondary,
+                  maxLines = 2,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.weight(1f)
                 )
               }
 
-              if (customerPhone.isNotBlank()) {
-                IconButton(
-                  onClick = {
-                    val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$customerPhone"))
-                    context.startActivity(dial)
-                  },
-                  modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFEFF6FF))
+              // Tinted Route Statistics (Distance & Travel Time)
+              if (distanceText != null || durationText != null) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                  Icon(Icons.Filled.Phone, contentDescription = "Call", tint = Color(0xFF2563EB), modifier = Modifier.size(20.dp))
+                  Surface(
+                    modifier = Modifier.weight(1f),
+                    color = NavOrangeSoft,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, NavOrangeBorder)
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                      Icon(Icons.Filled.Straighten, contentDescription = null, tint = NavOrange, modifier = Modifier.size(17.dp))
+                      Column {
+                        Text(appText("Distance", "فاصلہ"), fontSize = 10.sp, color = NavOrangeDark)
+                        Text(distanceText ?: "--", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+                      }
+                    }
+                  }
+
+                  Surface(
+                    modifier = Modifier.weight(1f),
+                    color = NavBlueSoft,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, NavBlueBorder)
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                      Icon(Icons.Filled.Timer, contentDescription = null, tint = NavBlue, modifier = Modifier.size(17.dp))
+                      Column {
+                        Text(appText("Est. Travel Time", "متوقع وقت"), fontSize = 10.sp, color = NavBlue)
+                        Text(durationText ?: "--", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
+                      }
+                    }
+                  }
                 }
               }
-            }
 
-            // Customer address row
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              verticalAlignment = Alignment.Top,
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFFEA580C), modifier = Modifier.size(18.dp))
-              Text(
-                text = deliveryAddress,
-                fontSize = 12.sp,
-                color = JTTextSecondary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-              )
-            }
+              actionError?.let { err ->
+                Text(err, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+              }
 
-            // Route statistics (Distance & Travel Time)
-            if (distanceText != null || durationText != null) {
+              // Primary: Continue In-App Navigation
+              Button(
+                onClick = {
+                  osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng))
+                  osmdroidMap?.controller?.setZoom(16.5)
+                },
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .heightIn(min = 48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = NavOrange)
+              ) {
+                Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                  appText("Continue In-App Navigation", "ایپ میں نیویگیشن جاری رکھیں"),
+                  fontSize = 13.sp,
+                  fontWeight = FontWeight.Bold
+                )
+              }
+
+              // Secondary: Delivery Status Actions
+              if (currentStatus == "picked_up" && !(otpVerified && hasDeliveryProof)) {
+                Text(
+                  text = missingCompletionStepsMessage(otpVerified, hasDeliveryProof)
+                    ?: appText(
+                      "Verify customer OTP and upload delivery photo proof in Driver Center before completing delivery.",
+                      "ترسیل مکمل کرنے سے پہلے ڈرائیور سینٹر میں کسٹمر او ٹی پی کی تصدیق کریں اور ترسیل کی تصویر اپ لوڈ کریں۔"
+                    ),
+                  fontSize = 11.sp,
+                  color = Color(0xFF92400E),
+                  fontWeight = FontWeight.Medium
+                )
+              }
+
               Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
               ) {
-                Surface(
-                  modifier = Modifier.weight(1f),
-                  color = Color(0xFFF8FAFC),
-                  shape = RoundedCornerShape(10.dp),
-                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
-                ) {
-                  Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                  ) {
-                    Icon(Icons.Filled.Straighten, contentDescription = null, tint = Color(0xFFEA580C), modifier = Modifier.size(16.dp))
-                    Column {
-                      Text("Distance", fontSize = 9.5.sp, color = JTTextSecondary)
-                      Text(distanceText ?: "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
-                    }
-                  }
-                }
-
-                Surface(
-                  modifier = Modifier.weight(1f),
-                  color = Color(0xFFF8FAFC),
-                  shape = RoundedCornerShape(10.dp),
-                  border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
-                ) {
-                  Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                  ) {
-                    Icon(Icons.Filled.Timer, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
-                    Column {
-                      Text("Est. Travel Time", fontSize = 9.5.sp, color = JTTextSecondary)
-                      Text(durationText ?: "--", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = JTTextPrimary)
-                    }
-                  }
-                }
-              }
-            }
-
-            actionError?.let { err ->
-              Text(err, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
-            }
-
-            // Primary: Start Navigation Button
-            Button(
-              onClick = { osmdroidMap?.controller?.animateTo(GeoPoint(customerLat, customerLng)); osmdroidMap?.controller?.setZoom(16.5) },
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp),
-              shape = RoundedCornerShape(10.dp),
-              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
-            ) {
-              Icon(Icons.Filled.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
-              Spacer(Modifier.width(8.dp))
-              Text("Continue In-App Navigation", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-
-            // Secondary: Delivery Status Buttons
-            if (currentStatus == "picked_up" && !(otpVerified && hasDeliveryProof)) {
-              Text(
-                text = missingCompletionStepsMessage(otpVerified, hasDeliveryProof)
-                  ?: "Verify customer OTP and upload delivery photo proof in Driver Center before completing delivery.",
-                fontSize = 11.sp,
-                color = Color(0xFF92400E),
-                fontWeight = FontWeight.Medium
-              )
-            }
-
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              if (currentStatus == "assigned") {
-                OutlinedButton(
-                  enabled = !isBusy,
-                  onClick = {
-                    if (isBusy) return@OutlinedButton
-                    scope.launch {
-                      isBusy = true
-                      actionError = null
-                      val r = SupabaseClient.rpc(
-                        "driver_update_delivery_status",
-                        JSONObject().put("p_assignment_id", assignmentId).put("p_action", "picked_up").toString()
-                      )
-                      if (r.isSuccess) {
-                        currentStatus = "picked_up"
-                        onStatusUpdated()
-                      } else {
-                        actionError = extractDriverFriendlyError(r.exceptionOrNull(), "Could not update pickup status.")
-                      }
-                      isBusy = false
-                    }
-                  },
-                  modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp),
-                  shape = RoundedCornerShape(8.dp)
-                ) {
-                  Text(if (isBusy) "Updating…" else "Mark Picked Up", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-              } else if (currentStatus == "picked_up") {
-                if (otpVerified && hasDeliveryProof) {
-                  Button(
+                if (currentStatus == "assigned") {
+                  OutlinedButton(
                     enabled = !isBusy,
                     onClick = {
-                      if (isBusy) return@Button
+                      if (isBusy) return@OutlinedButton
                       scope.launch {
                         isBusy = true
                         actionError = null
                         val r = SupabaseClient.rpc(
-                          "driver_update_delivery_status",
-                          JSONObject().put("p_assignment_id", assignmentId).put("p_action", "delivered").toString()
+                          statusRpcName,
+                          JSONObject().put("p_assignment_id", assignmentId).put("p_action", "picked_up").toString(),
+                          requireAuth = true
                         )
                         if (r.isSuccess) {
-                          currentStatus = "delivered"
+                          currentStatus = "picked_up"
                           onStatusUpdated()
                         } else {
-                          actionError = extractDriverFriendlyError(r.exceptionOrNull(), "Could not complete delivery.")
+                          actionError = extractDriverFriendlyError(
+                            r.exceptionOrNull(),
+                            AppLanguageManager.tr("Could not update pickup status.", "پک اپ اسٹیٹس اپ ڈیٹ نہیں ہو سکا۔")
+                          )
                         }
                         isBusy = false
                       }
@@ -729,26 +982,74 @@ fun DriverNavigationScreen(
                     modifier = Modifier
                       .weight(1f)
                       .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                    shape = RoundedCornerShape(12.dp)
                   ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (isBusy) "Completing…" else "Complete Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                      if (isBusy) appText("Updating…", "اپ ڈیٹ ہو رہا ہے…")
+                      else appText("Mark Picked Up", "پارسل اٹھا لیا"),
+                      fontSize = 12.sp,
+                      fontWeight = FontWeight.SemiBold
+                    )
                   }
-                } else {
-                  Button(
-                    enabled = !isBusy,
-                    onClick = onBack,
-                    modifier = Modifier
-                      .weight(1f)
-                      .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
-                  ) {
-                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Verify OTP & Upload Proof", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                } else if (currentStatus == "picked_up") {
+                  if (otpVerified && hasDeliveryProof) {
+                    Button(
+                      enabled = !isBusy,
+                      onClick = {
+                        if (isBusy) return@Button
+                        scope.launch {
+                          isBusy = true
+                          actionError = null
+                          val r = SupabaseClient.rpc(
+                            statusRpcName,
+                            JSONObject().put("p_assignment_id", assignmentId).put("p_action", "delivered").toString(),
+                            requireAuth = true
+                          )
+                          if (r.isSuccess) {
+                            currentStatus = "delivered"
+                            onStatusUpdated()
+                          } else {
+                            actionError = extractDriverFriendlyError(
+                              r.exceptionOrNull(),
+                              AppLanguageManager.tr("Could not complete delivery.", "ترسیل مکمل نہیں ہو سکی۔")
+                            )
+                          }
+                          isBusy = false
+                        }
+                      },
+                      modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
+                      shape = RoundedCornerShape(12.dp),
+                      colors = ButtonDefaults.buttonColors(containerColor = NavGreen)
+                    ) {
+                      Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                      Spacer(Modifier.width(6.dp))
+                      Text(
+                        if (isBusy) appText("Completing…", "مکمل ہو رہا ہے…")
+                        else appText("Complete Delivery", "ترسیل مکمل کریں"),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                      )
+                    }
+                  } else {
+                    Button(
+                      enabled = !isBusy,
+                      onClick = onBack,
+                      modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
+                      shape = RoundedCornerShape(12.dp),
+                      colors = ButtonDefaults.buttonColors(containerColor = NavBlue)
+                    ) {
+                      Icon(Icons.Filled.VerifiedUser, contentDescription = null, modifier = Modifier.size(16.dp))
+                      Spacer(Modifier.width(6.dp))
+                      Text(
+                        appText("Verify OTP & Upload Proof", "او ٹی پی تصدیق و تصویر اپ لوڈ"),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                      )
+                    }
                   }
                 }
               }

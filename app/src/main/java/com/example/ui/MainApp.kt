@@ -50,6 +50,8 @@ import com.example.data.supabase.SupabaseAuthService
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.GlobalLoadingState
 import com.example.data.supabase.NetworkConnectivity
+import com.example.localization.JTBazarLocalizedContainer
+import com.example.localization.appText
 import com.example.ui.components.CampaignLaunchPopupDialog
 import com.example.ui.components.JTBazarImageLoader
 import com.example.ui.components.JTBazarPullRefresh
@@ -100,6 +102,7 @@ enum class AppScreen {
 
 @Composable
 fun MainApp(notificationTap: NotificationNavigation? = null) {
+  JTBazarLocalizedContainer {
   val isCatalogLoading by MarketplaceRepository.isLoading.collectAsState()
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
   val products by MarketplaceRepository.products.collectAsState()
@@ -304,12 +307,12 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.HOME) Icons.Filled.Home else Icons.Outlined.Home,
-                contentDescription = "Home"
+                contentDescription = appText("Home", "ہوم")
               )
             },
             label = {
               Text(
-                text = "Home",
+                text = appText("Home", "ہوم"),
                 fontSize = 10.sp,
                 fontWeight = if (currentScreen == AppScreen.HOME) FontWeight.Bold else FontWeight.Normal
               )
@@ -331,12 +334,12 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.CATEGORIES) Icons.Filled.GridView else Icons.Outlined.GridView,
-                contentDescription = "Categories"
+                contentDescription = appText("Categories", "اقسام")
               )
             },
             label = {
               Text(
-                text = "Categories",
+                text = appText("Categories", "اقسام"),
                 fontSize = 10.sp,
                 fontWeight = if (currentScreen == AppScreen.CATEGORIES) FontWeight.Bold else FontWeight.Normal
               )
@@ -358,12 +361,12 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.DISCOVER) Icons.Filled.Explore else Icons.Outlined.Explore,
-                contentDescription = "Discover"
+                contentDescription = appText("Discover", "دریافت کریں")
               )
             },
             label = {
               Text(
-                text = "Discover",
+                text = appText("Discover", "دریافت کریں"),
                 fontSize = 10.sp,
                 fontWeight = if (currentScreen == AppScreen.DISCOVER) FontWeight.Bold else FontWeight.Normal
               )
@@ -385,12 +388,12 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.WISHLIST) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                contentDescription = "Wishlist"
+                contentDescription = appText("Wishlist", "پسندیدہ")
               )
             },
             label = {
               Text(
-                text = "Wishlist",
+                text = appText("Wishlist", "پسندیدہ"),
                 fontSize = 10.sp,
                 fontWeight = if (currentScreen == AppScreen.WISHLIST) FontWeight.Bold else FontWeight.Normal
               )
@@ -412,12 +415,12 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             icon = {
               Icon(
                 imageVector = if (currentScreen == AppScreen.ACCOUNT) Icons.Filled.Person else Icons.Outlined.Person,
-                contentDescription = "Account"
+                contentDescription = appText("Account", "اکاؤنٹ")
               )
             },
             label = {
               Text(
-                text = "Account",
+                text = appText("Account", "اکاؤنٹ"),
                 fontSize = 10.sp,
                 fontWeight = if (currentScreen == AppScreen.ACCOUNT) FontWeight.Bold else FontWeight.Normal
               )
@@ -455,8 +458,17 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
             ) {
               Icon(Icons.Filled.WifiOff, contentDescription = null, tint = Color(0xFFB42318))
               Column(modifier = Modifier.weight(1f)) {
-                Text("No internet connection", color = Color(0xFF912018), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text("Check your Wi-Fi or mobile data, then retry.", color = Color(0xFF7A271A), fontSize = 11.sp)
+                Text(
+                  appText("No internet connection", "انٹرنیٹ کنکشن دستیاب نہیں"),
+                  color = Color(0xFF912018),
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 13.sp
+                )
+                Text(
+                  appText("Check your Wi-Fi or mobile data, then retry.", "اپنا وائی فائی یا موبائل ڈیٹا چیک کریں اور دوبارہ کوشش کریں۔"),
+                  color = Color(0xFF7A271A),
+                  fontSize = 11.sp
+                )
               }
               TextButton(
                 onClick = {
@@ -466,7 +478,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
                   }
                 }
               ) {
-                Text("Retry", color = Color(0xFFB42318), fontWeight = FontWeight.Bold)
+                Text(appText("Retry", "دوبارہ کوشش"), color = Color(0xFFB42318), fontWeight = FontWeight.Bold)
               }
             }
           }
@@ -941,6 +953,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
               assignmentId = assignmentId,
               otpVerified = isDeliveryOtpVerified(delivery),
               hasDeliveryProof = hasDeliveryProofSaved(delivery),
+              isManualOrder = isManualOrderDelivery(delivery),
               onStatusUpdated = {
                 selectedDeliveryForNavigation = null
                 navigateBack()
@@ -1024,6 +1037,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
       }
     }
   }
+  }
 }
 
 @Composable
@@ -1058,7 +1072,12 @@ private fun GlobalLoadingOverlay() {
         color = JTOrange,
         strokeWidth = 3.dp
       )
-      Text("Please wait, loading...", color = JTTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+      Text(
+        appText("Please wait, loading...", "براہ کرم انتظار کریں، لوڈ ہو رہا ہے..."),
+        color = JTTextSecondary,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium
+      )
     }
   }
 }

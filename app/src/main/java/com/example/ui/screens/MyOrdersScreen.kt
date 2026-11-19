@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.OrderRecord
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.VendorOrderStatus
+import com.example.localization.appText
 import com.example.ui.theme.*
 
 @Composable
@@ -49,13 +50,13 @@ fun MyOrdersScreen(
         ) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = appText("Back", "واپس"),
             tint = JTTextPrimary
           )
         }
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-          text = "My Orders",
+          text = appText("My Orders", "میرے آرڈرز"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
@@ -84,14 +85,17 @@ fun MyOrdersScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-          text = "No Orders Placed Yet",
+          text = appText("No Orders Placed Yet", "ابھی تک کوئی آرڈر نہیں دیا گیا"),
           fontSize = 18.sp,
           fontWeight = FontWeight.Bold,
           color = JTTextPrimary
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-          text = "Your purchases from verified Pakistani artisans and food vendors will appear here.",
+          text = appText(
+            "Your purchases from verified Pakistani artisans and food vendors will appear here.",
+            "تصدیق شدہ پاکستانی کاریگروں اور فوڈ فروشوں سے آپ کی خریداری یہاں نظر آئے گی۔"
+          ),
           fontSize = 13.sp,
           color = JTTextSecondary,
           textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -103,7 +107,7 @@ fun MyOrdersScreen(
           colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
           modifier = Modifier.height(44.dp)
         ) {
-          Text("Start Shopping", fontWeight = FontWeight.Bold)
+          Text(appText("Start Shopping", "خریداری شروع کریں"), fontWeight = FontWeight.Bold)
         }
       }
     } else {
@@ -160,7 +164,7 @@ fun MyOrdersScreen(
                   }
                 ) {
                   Text(
-                    text = canonical.label,
+                    text = canonical.localizedLabel(),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = when (canonical) {
@@ -183,7 +187,10 @@ fun MyOrdersScreen(
               Spacer(modifier = Modifier.height(10.dp))
 
               Text(
-                text = "${deliveredItems} of ${activeItems.size} items delivered • Total: Rs. ${String.format("%,d", order.grandTotal)}",
+                text = appText(
+                  "$deliveredItems of ${activeItems.size} items delivered • Total: Rs. ${String.format("%,d", order.grandTotal)}",
+                  "${activeItems.size} میں سے $deliveredItems آئٹمز پہنچائے گئے • کل: Rs. ${String.format("%,d", order.grandTotal)}"
+                ),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = JTTextPrimary
@@ -191,7 +198,10 @@ fun MyOrdersScreen(
 
               if (order.address.addressLine.isNotBlank()) {
                 Text(
-                  text = "Delivering to: ${order.address.addressLine}, ${order.address.city}",
+                  text = appText(
+                    "Delivering to: ${order.address.addressLine}, ${order.address.city}",
+                    "پتہ: ${order.address.addressLine}، ${order.address.city}"
+                  ),
                   fontSize = 12.sp,
                   color = JTTextSecondary,
                   maxLines = 1,
@@ -207,7 +217,7 @@ fun MyOrdersScreen(
                 verticalAlignment = Alignment.CenterVertically
               ) {
                 Text(
-                  text = "Track Order Details",
+                  text = appText("Track Order Details", "آرڈر کی تفصیلات دیکھیں"),
                   fontSize = 12.sp,
                   fontWeight = FontWeight.Bold,
                   color = JTOrange

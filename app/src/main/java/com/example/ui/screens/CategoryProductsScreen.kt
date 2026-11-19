@@ -45,6 +45,8 @@ import com.example.data.repository.CatalogQuery
 import com.example.data.repository.FoodCategoryResolver
 import com.example.data.repository.MarketplaceRepository
 import com.example.data.repository.ProductSortOption
+import com.example.localization.AppLanguageManager
+import com.example.localization.appText
 import com.example.ui.components.FriendlyEmptyState
 import com.example.ui.components.FriendlyErrorState
 import com.example.ui.components.PaginationFooter
@@ -180,7 +182,7 @@ fun CategoryProductsScreen(
             ) {
               Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = appText("Back", "واپس"),
                 tint = JTTextPrimary
               )
             }
@@ -192,7 +194,7 @@ fun CategoryProductsScreen(
             ) {
               Icon(
                 imageVector = if (searchVisible) Icons.Rounded.Close else Icons.Filled.Search,
-                contentDescription = if (searchVisible) "Close search" else "Search collection",
+                contentDescription = if (searchVisible) appText("Close search", "تلاش بند کریں") else appText("Search collection", "کلیکشن میں تلاش کریں"),
                 tint = JTTextPrimary
               )
             }
@@ -211,7 +213,7 @@ fun CategoryProductsScreen(
               ) {
                 Icon(
                   imageVector = Icons.Filled.ShoppingBag,
-                  contentDescription = "Cart",
+                  contentDescription = appText("Cart", "ٹوکری"),
                   tint = JTTextPrimary
                 )
               }
@@ -223,14 +225,14 @@ fun CategoryProductsScreen(
           OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search in ${category.title}...", fontSize = 13.sp) },
+            placeholder = { Text(appText("Search in ${category.title}...", "${category.title} میں تلاش کریں..."), fontSize = 13.sp) },
             leadingIcon = {
               Icon(Icons.Filled.Search, contentDescription = null, tint = JTOrange)
             },
             trailingIcon = {
               if (searchQuery.isNotEmpty()) {
                 IconButton(onClick = { searchQuery = "" }) {
-                  Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                  Icon(Icons.Rounded.Close, contentDescription = appText("Clear search", "تلاش صاف کریں"))
                 }
               }
             },
@@ -287,7 +289,7 @@ fun CategoryProductsScreen(
               }
               if (category.badge == "Coming soon") {
                 Spacer(Modifier.height(4.dp))
-                Text("Coming soon", color = JTOrangeDark, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(appText("Coming soon", "جلد آ رہا ہے"), color = JTOrangeDark, fontWeight = FontWeight.Bold, fontSize = 12.sp)
               }
             }
           }
@@ -305,7 +307,7 @@ fun CategoryProductsScreen(
               FilterChip(
                 selected = selectedSubcategoryId == null,
                 onClick = { selectedSubcategoryId = null },
-                label = { Text("All", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
+                label = { Text(appText("All", "سب"), fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
                 colors = FilterChipDefaults.filterChipColors(
                   selectedContainerColor = JTOrange,
                   selectedLabelColor = Color.White
@@ -342,7 +344,7 @@ fun CategoryProductsScreen(
               onClick = { selectedSort = option },
               label = {
                 Text(
-                  text = option.label,
+                  text = option.localizedLabel(),
                   fontSize = 12.sp,
                   fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                 )
@@ -366,8 +368,8 @@ fun CategoryProductsScreen(
         feedState.initialError != null && feedState.items.isEmpty() -> {
           item(key = "category_error") {
             FriendlyErrorState(
-              title = "Products load nahi ho sake",
-              message = feedState.initialError ?: "Please check your connection and try again.",
+              title = appText("Could not load products", "مصنوعات لوڈ نہیں ہو سکیں"),
+              message = feedState.initialError ?: appText("Please check your connection and try again.", "براہ کرم اپنا انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔"),
               onRetry = { activePaginator.retry() }
             )
           }
@@ -375,13 +377,13 @@ fun CategoryProductsScreen(
         feedState.items.isEmpty() -> {
           item(key = "category_empty") {
             FriendlyEmptyState(
-              title = if (debouncedSearch.isNotBlank()) "No matching products" else "No products in ${category.title} yet",
+              title = if (debouncedSearch.isNotBlank()) appText("No matching products", "کوئی مماثل مصنوعات نہیں ملیں") else appText("No products in ${category.title} yet", "${category.title} میں ابھی کوئی مصنوعات نہیں ہیں"),
               message = if (debouncedSearch.isNotBlank()) {
-                "Try another search word or clear filters."
+                appText("Try another search word or clear filters.", "کوئی اور لفظ تلاش کریں یا فلٹرز صاف کریں۔")
               } else {
-                "Fresh stock is being updated. Check back soon or explore another category."
+                appText("Fresh stock is being updated. Check back soon or explore another category.", "نیا اسٹاک اپ ڈیٹ کیا جا رہا ہے۔ جلد دوبارہ دیکھیں یا کوئی اور زمرہ دیکھیں۔")
               },
-              actionLabel = if (debouncedSearch.isNotBlank() || selectedSubcategoryId != null) "Show All Items" else null,
+              actionLabel = if (debouncedSearch.isNotBlank() || selectedSubcategoryId != null) appText("Show All Items", "تمام اشیاء دکھائیں") else null,
               onAction = if (debouncedSearch.isNotBlank() || selectedSubcategoryId != null) {
                 {
                   searchQuery = ""
@@ -405,7 +407,7 @@ fun CategoryProductsScreen(
                 onAddToCart = { product ->
                   MarketplaceRepository.addToCart(product)
                   if (MarketplaceRepository.canAddProductToCart(product)) {
-                    Toast.makeText(context, "Added to cart!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, AppLanguageManager.tr("Added to cart!", "ٹوکری میں شامل ہو گیا!"), Toast.LENGTH_SHORT).show()
                   }
                 },
                 onToggleWishlist = { product ->
@@ -465,14 +467,14 @@ private fun FoodHeroBanner(
           verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
           Text(
-            text = "Fresh & Healthy",
+            text = appText("Fresh & Healthy", "تازہ اور صحت بخش"),
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
             color = Color(0xFF224B0C),
             lineHeight = 26.sp
           )
           Text(
-            text = "Food at Your Doorstep",
+            text = appText("Food at Your Doorstep", "خوراک آپ کی دہلیز پر"),
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFF335E18)
@@ -491,7 +493,7 @@ private fun FoodHeroBanner(
               .testTag("food_hero_shop_now")
           ) {
             Text(
-              text = "Shop Now",
+              text = appText("Shop Now", "ابھی خریدیں"),
               fontSize = 12.sp,
               fontWeight = FontWeight.Bold
             )
@@ -515,7 +517,7 @@ private fun FoodHeroBanner(
         ) {
           Image(
             painter = painterResource(id = R.drawable.thumb_dry_fruits),
-            contentDescription = "Fresh and healthy food selection",
+            contentDescription = appText("Fresh and healthy food selection", "تازہ اور صحت بخش خوراک کا انتخاب"),
             contentScale = ContentScale.Crop,
             modifier = Modifier
               .size(92.dp)
@@ -560,13 +562,13 @@ private fun FoodSubcategoryStrip(
       ) {
         Icon(
           imageVector = Icons.Rounded.ShoppingBasket,
-          contentDescription = "All Food",
+          contentDescription = appText("All Food", "تمام خوراک"),
           tint = if (allSelected) Color.White else JTOrangeDark,
           modifier = Modifier.size(30.dp)
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-          text = "All Food",
+          text = appText("All Food", "تمام خوراک"),
           fontSize = 11.sp,
           fontWeight = FontWeight.Bold,
           color = if (allSelected) Color.White else JTTextPrimary,

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.localization.appText
 import com.example.ui.theme.*
 
 @Composable
@@ -147,7 +148,7 @@ fun PaginationFooter(
           )
           Spacer(modifier = Modifier.width(10.dp))
           Text(
-            text = "Loading more products...",
+            text = appText("Loading more products...", "مزید مصنوعات لوڈ ہو رہی ہیں..."),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             color = JTTextSecondary
@@ -186,7 +187,7 @@ fun PaginationFooter(
           ) {
             Icon(Icons.Rounded.Refresh, contentDescription = null, tint = JTOrangeDark, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Retry", color = JTOrangeDark, fontWeight = FontWeight.Bold)
+            Text(appText("Retry", "دوبارہ کوشش"), color = JTOrangeDark, fontWeight = FontWeight.Bold)
           }
         }
       }
@@ -209,7 +210,7 @@ fun PaginationFooter(
             .testTag("pagination_load_more_button")
         ) {
           Text(
-            text = "Load More Products",
+            text = appText("Load More Products", "مزید مصنوعات دیکھیں"),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
           )
@@ -218,7 +219,7 @@ fun PaginationFooter(
     }
     !hasMore && itemCount > 0 -> {
       Text(
-        text = "You have seen all $itemCount products",
+        text = appText("You have seen all $itemCount products", "آپ تمام $itemCount مصنوعات دیکھ چکے ہیں"),
         fontSize = 12.sp,
         color = JTTextSecondary,
         textAlign = TextAlign.Center,
@@ -237,7 +238,7 @@ fun FriendlyErrorState(
   message: String,
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
-  actionLabel: String = "Try Again"
+  actionLabel: String = appText("Try Again", "دوبارہ کوشش کریں")
 ) {
   Surface(
     shape = RoundedCornerShape(16.dp),
