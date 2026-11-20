@@ -27,6 +27,7 @@ import com.example.data.supabase.SupabaseClient
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
 import com.example.ui.theme.*
+import com.example.util.PasswordPolicy
 import kotlinx.coroutines.launch
 
 @Composable
@@ -96,7 +97,7 @@ fun SecurityPasswordScreen(
 
       Text(
         text = appText(
-          "For security, ensure your password is at least 6 characters long and combines letters and numbers.",
+          "For security, use at least 8 characters with uppercase, lowercase, a number and a special symbol.",
           "سیکیورٹی کے لیے یقینی بنائیں کہ آپ کا پاس ورڈ کم از کم 6 حروف پر مشتمل ہو اور اس میں حروف اور اعداد شامل ہوں۔"
         ),
         fontSize = 12.sp,
@@ -164,11 +165,11 @@ fun SecurityPasswordScreen(
       Button(
         onClick = {
           val email = currentUser?.email ?: return@Button
-          if (currentPassword.isBlank() || newPassword.length < 6 || !isPasswordMatch) {
+          if (currentPassword.isBlank() || !PasswordPolicy.isStrong(newPassword) || !isPasswordMatch) {
             Toast.makeText(
               context,
               AppLanguageManager.tr(
-                "Enter your current password and a matching new password (at least 6 characters).",
+                "Enter your current password and a strong matching password (8+ characters with uppercase, lowercase, number and symbol).",
                 "اپنا موجودہ پاس ورڈ اور مطابقت رکھنے والا نیا پاس ورڈ (کم از کم 6 حروف) درج کریں۔"
               ),
               Toast.LENGTH_LONG
@@ -194,7 +195,7 @@ fun SecurityPasswordScreen(
             }
           }
         },
-        enabled = !isUpdating && currentPassword.isNotBlank() && newPassword.length >= 6 && isPasswordMatch,
+        enabled = !isUpdating && currentPassword.isNotBlank() && PasswordPolicy.isStrong(newPassword) && isPasswordMatch,
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
         modifier = Modifier.fillMaxWidth().height(48.dp).testTag("security_update_button")
