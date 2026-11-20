@@ -21,6 +21,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import com.example.notifications.FirebasePushManager
 import com.example.util.PasswordPolicy
+import java.util.UUID
 
 /**
  * Service managing Supabase GoTrue authentication and user profile synchronization.
@@ -43,6 +44,27 @@ object SupabaseAuthService {
 
   private val _userProfile = MutableStateFlow<SupabaseProfile?>(null)
   val userProfile: StateFlow<SupabaseProfile?> = _userProfile.asStateFlow()
+
+  private fun sendSecurityNotification(session: SupabaseSession, event: String, platform: String) {
+    try {
+      val body = JSONObject()
+        .put("event", event)
+        .put("platform", platform)
+        .put("event_id", UUID.randomUUID().toString())
+        .toString().toRequestBody(JSON_MEDIA_TYPE)
+      val request = Request.Builder()
+        .url("${SupabaseConfig.projectUrl}/functions/v1/commerce-email")
+        .header("apikey", SupabaseConfig.publishableKey)
+        .header("Authorization", "Bearer ${session.accessToken}")
+        .post(body)
+        .build()
+      SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) Log.w(TAG, "Security email notification was not accepted (${response.code}).")
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "Security email notification failed: ${e.message}")
+    }
+  }
 
   fun triggerPushRegistration(context: Context?) {
     val ctx = context?.applicationContext ?: SupabaseClient.context ?: return
@@ -216,6 +238,7 @@ object SupabaseAuthService {
           _userProfile.value = profile
           _googleOAuthStatus.value = "success"
           triggerPushRegistration(context)
+          sendSecurityNotification(session, "security_login", "android")
           Result.success(session)
         }
       } catch (e: Exception) {
@@ -475,6 +498,7 @@ object SupabaseAuthService {
         )
         _userProfile.value = profile
         triggerPushRegistration(context)
+        sendSecurityNotification(session, "security_login", "android")
 
         Result.success(session)
       }
@@ -540,6 +564,7 @@ object SupabaseAuthService {
         )
         _userProfile.value = profile
         triggerPushRegistration(context)
+        sendSecurityNotification(session, "security_login", "android")
         Result.success(session)
       }
     } catch (e: Exception) {
@@ -589,8 +614,10 @@ object SupabaseAuthService {
         .build()
       SupabaseClient.okHttpClient.newCall(request).execute().use { response ->
         val responseBody = response.body?.string().orEmpty()
-        if (response.isSuccessful) Result.success(Unit)
-        else Result.failure(IOException(parseErrorMessage(responseBody, "Password update failed")))
+        if (response.isSuccessful) {
+          SupabaseClient.session.value?.let { sendSecurityNotification(it, "security_password_changed", "android") }
+          Result.success(Unit)
+        } else Result.failure(IOException(parseErrorMessage(responseBody, "Password update failed")))
       }
     } catch (e: Exception) {
       Log.e(TAG, "updatePassword error", e)
