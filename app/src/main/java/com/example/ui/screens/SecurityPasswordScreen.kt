@@ -136,6 +136,11 @@ fun SecurityPasswordScreen(
         modifier = Modifier.fillMaxWidth().testTag("security_new_password_input")
       )
 
+      if (newPassword.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(8.dp))
+        PasswordStrengthIndicator(password = newPassword)
+      }
+
       OutlinedTextField(
         value = confirmPassword,
         onValueChange = { confirmPassword = it },
