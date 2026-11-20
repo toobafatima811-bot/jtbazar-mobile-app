@@ -20,6 +20,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import com.example.notifications.FirebasePushManager
+import com.example.util.PasswordPolicy
 
 /**
  * Service managing Supabase GoTrue authentication and user profile synchronization.
@@ -240,6 +241,7 @@ object SupabaseAuthService {
     context: Context? = null
   ): Result<SupabaseSession> = withContext(Dispatchers.IO) {
     try {
+      if (!PasswordPolicy.isStrong(password)) return@withContext Result.failure(IllegalArgumentException(PasswordPolicy.message()))
       val bodyJson = JSONObject().apply {
         put("email", email.trim())
         put("password", password)
@@ -579,7 +581,7 @@ object SupabaseAuthService {
   /** Update the password for the currently authenticated Supabase user. */
   suspend fun updatePassword(newPassword: String): Result<Unit> = withContext(Dispatchers.IO) {
     try {
-      require(newPassword.length >= 6) { "Password must be at least 6 characters." }
+      require(PasswordPolicy.isStrong(newPassword)) { PasswordPolicy.message() }
       val body = JSONObject().put("password", newPassword).toString().toRequestBody(JSON_MEDIA_TYPE)
       val request = Request.Builder()
         .url("${SupabaseConfig.authUrl}/user")
