@@ -38,6 +38,7 @@ import com.example.data.supabase.SupabaseConfig
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
 import com.example.ui.theme.*
+import com.example.util.PasswordPolicy
 import kotlinx.coroutines.launch
 
 @Composable
@@ -70,7 +71,7 @@ fun RegistrationScreen(
 
   val isEmailValid = email.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()
   val isPasswordMatch = password.isNotEmpty() && password == confirmPassword
-  val isFormValid = fullName.isNotBlank() && isEmailValid && password.length >= 6 && isPasswordMatch && termsAgreed
+  val isFormValid = fullName.isNotBlank() && isEmailValid && PasswordPolicy.isStrong(password) && isPasswordMatch && termsAgreed
 
   Scaffold(
     containerColor = Color.White,
@@ -194,7 +195,8 @@ fun RegistrationScreen(
       OutlinedTextField(
         value = password,
         onValueChange = { password = it; errorMessage = null },
-        label = { Text(appText("Password * (min. 6 characters)", "پاس ورڈ * (کم از کم 6 حروف)")) },
+        label = { Text(appText("Password * (8+ chars, upper/lower, number, symbol)", "پاس ورڈ * (8+ حروف، بڑا/چھوٹا حرف، نمبر، علامت)")) },
+        supportingText = { Text(appText("Use uppercase, lowercase, a number and a special symbol.", "بڑا اور چھوٹا حرف، نمبر اور خاص علامت شامل کریں۔"), fontSize = 11.sp) },
         leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = JTPurplePrimary) },
         trailingIcon = {
           IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -278,7 +280,7 @@ fun RegistrationScreen(
             errorMessage = when {
               fullName.isBlank() -> AppLanguageManager.tr("Please enter your full name.", "براہ کرم اپنا پورا نام درج کریں۔")
               !isEmailValid -> AppLanguageManager.tr("Please enter a valid email address.", "براہ کرم درست ای میل پتہ درج کریں۔")
-              password.length < 6 -> AppLanguageManager.tr("Password must be at least 6 characters.", "پاس ورڈ کم از کم 6 حروف کا ہونا ضروری ہے۔")
+              !PasswordPolicy.isStrong(password) -> AppLanguageManager.tr(PasswordPolicy.message(), "پاس ورڈ کم از کم 8 حروف کا ہو اور اس میں بڑا حرف، چھوٹا حرف، نمبر اور خاص علامت شامل ہو۔")
               !isPasswordMatch -> AppLanguageManager.tr("Passwords do not match.", "پاس ورڈ آپس میں مطابقت نہیں رکھتے۔")
               !termsAgreed -> AppLanguageManager.tr("Please agree to the Terms & Conditions.", "براہ کرم شرائط و ضوابط سے اتفاق کریں۔")
               else -> AppLanguageManager.tr("Please fill all required fields correctly.", "براہ کرم تمام ضروری خانے درست طریقے سے پُر کریں۔")
