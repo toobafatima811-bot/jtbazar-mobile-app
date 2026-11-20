@@ -33,6 +33,7 @@ import com.example.data.supabase.SupabaseAuthService
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
 import com.example.ui.theme.*
+import com.example.util.PasswordPolicy
 import kotlinx.coroutines.launch
 
 @Composable
@@ -55,7 +56,7 @@ fun ResetPasswordScreen(
   var errorMessage by remember { mutableStateOf<String?>(null) }
 
   val isPasswordMatch = newPassword.isNotEmpty() && newPassword == confirmPassword
-  val isFormValid = token.isNotBlank() && newPassword.length >= 6 && isPasswordMatch
+  val isFormValid = token.isNotBlank() && PasswordPolicy.isStrong(newPassword) && isPasswordMatch
 
   Scaffold(
     containerColor = Color.White,
@@ -159,7 +160,8 @@ fun ResetPasswordScreen(
       OutlinedTextField(
         value = newPassword,
         onValueChange = { newPassword = it; errorMessage = null },
-        label = { Text(appText("New Password * (min. 6 characters)", "نیا پاس ورڈ * (کم از کم 6 حروف)")) },
+        label = { Text(appText("New Password * (8+ chars, upper/lower, number, symbol)", "نیا پاس ورڈ * (8+ حروف، بڑا/چھوٹا حرف، نمبر، علامت)")) },
+        supportingText = { Text(appText("Use uppercase, lowercase, a number and a special symbol.", "بڑا اور چھوٹا حرف، نمبر اور خاص علامت شامل کریں۔"), fontSize = 11.sp) },
         leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = JTPurplePrimary) },
         trailingIcon = {
           IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -216,7 +218,7 @@ fun ResetPasswordScreen(
           if (!isFormValid) {
             errorMessage = when {
               token.isBlank() -> AppLanguageManager.tr("Please enter the reset code.", "براہ کرم ری سیٹ کوڈ درج کریں۔")
-              newPassword.length < 6 -> AppLanguageManager.tr("Password must be at least 6 characters.", "پاس ورڈ کم از کم 6 حروف کا ہونا ضروری ہے۔")
+              !PasswordPolicy.isStrong(newPassword) -> AppLanguageManager.tr(PasswordPolicy.message(), "پاس ورڈ کم از کم 8 حروف کا ہو اور اس میں بڑا حرف، چھوٹا حرف، نمبر اور خاص علامت شامل ہو۔")
               !isPasswordMatch -> AppLanguageManager.tr("Passwords do not match.", "پاس ورڈ آپس میں مطابقت نہیں رکھتے۔")
               else -> AppLanguageManager.tr("Please verify all fields.", "براہ کرم تمام خانے چیک کریں۔")
             }
