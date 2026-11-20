@@ -183,11 +183,6 @@ fun LoginScreen(
           .testTag("login_password_input")
       )
 
-      if (password.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(8.dp))
-        PasswordStrengthIndicator(password = password)
-      }
-
       Spacer(modifier = Modifier.height(8.dp))
 
       // Forgot Password Link
