@@ -76,7 +76,8 @@ fun VendorProductDetailsScreen(
   val (badgeLabel, badgeTone, badgeIcon) = when (moderation) {
     "approved" -> Triple(appText("Approved", "منظور شدہ"), StatusTone.SUCCESS, Icons.Rounded.CheckCircle)
     "rejected" -> Triple(appText("Rejected", "مسترد شدہ"), StatusTone.DANGER, Icons.Rounded.ErrorOutline)
-    "pending" -> Triple(appText("Pending", "زیر التوا"), StatusTone.WARNING, Icons.Rounded.Schedule)
+    "pending", "pending_review" -> Triple(appText("Pending review", "جائزے کے انتظار میں"), StatusTone.WARNING, Icons.Rounded.Schedule)
+    "suspended" -> Triple(appText("Suspended", "معطل"), StatusTone.DANGER, Icons.Rounded.ErrorOutline)
     else -> Triple(moderation.replace('_', ' ').replaceFirstChar { it.uppercase() }, StatusTone.WARNING, Icons.Rounded.Schedule)
   }
 
@@ -214,7 +215,11 @@ fun VendorProductDetailsScreen(
           DetailRow(appText("SKU", "ایس کے یو (SKU)"), product.optString("sku").takeUnless { it == "null" }.orEmpty().ifBlank { "—" })
           DetailRow(appText("Category", "کیٹیگری"), product.optString("category_name").takeUnless { it == "null" }.orEmpty().ifBlank { "—" })
           DetailRow(appText("Discount", "رعایت"), "${product.optString("discount_percent", "0").takeUnless { it == "null" } ?: "0"}%")
-          DetailRow(appText("Shipping weight", "شپنگ وزن"), "${product.optString("weight_grams").takeUnless { it == "null" }.orEmpty().ifBlank { "—" }} g")
+          val weightRaw = product.optString("weight_grams").takeUnless { it == "null" }.orEmpty()
+          DetailRow(
+            appText("Shipping weight", "شپنگ وزن"),
+            if (weightRaw.isBlank()) "—" else "$weightRaw ${appText("g", "گرام")}"
+          )
         }
       }
     }
@@ -232,16 +237,22 @@ fun VendorProductDetailsScreen(
       )
     }
     item {
-      DetailSection(
-        appText("Specifications", "خصوصیات"),
-        (product.optJSONArray("specifications") ?: JSONArray()).toString(2)
-      )
+      val specsArray = product.optJSONArray("specifications") ?: JSONArray()
+      val specsText = if (specsArray.length() == 0) {
+        appText("None added.", "کوئی شامل نہیں۔")
+      } else {
+        specsArray.toString(2)
+      }
+      DetailSection(appText("Specifications", "خصوصیات"), specsText)
     }
     item {
-      DetailSection(
-        appText("Dimensions", "پیمائش"),
-        (product.optJSONObject("dimensions") ?: JSONObject()).toString(2)
-      )
+      val dimsObj = product.optJSONObject("dimensions") ?: JSONObject()
+      val dimsText = if (dimsObj.length() == 0) {
+        appText("None added.", "کوئی شامل نہیں۔")
+      } else {
+        dimsObj.toString(2)
+      }
+      DetailSection(appText("Dimensions", "پیمائش"), dimsText)
     }
     item {
       val seo = listOf(product.optString("seo_title"), product.optString("seo_description"))

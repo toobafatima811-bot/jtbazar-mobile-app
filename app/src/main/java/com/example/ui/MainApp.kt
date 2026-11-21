@@ -1063,7 +1063,7 @@ private fun GlobalLoadingOverlay() {
       AsyncImage(
         model = R.drawable.jtbazar_mascot_loader,
         imageLoader = gifImageLoader,
-        contentDescription = "JTBazar loading",
+        contentDescription = appText("JTBazar loading", "جے ٹی بازار لوڈ ہو رہا ہے"),
         contentScale = ContentScale.Fit,
         modifier = Modifier.size(160.dp)
       )

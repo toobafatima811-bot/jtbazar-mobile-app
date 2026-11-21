@@ -215,11 +215,6 @@ fun RegistrationScreen(
           .testTag("reg_password_input")
       )
 
-      if (password.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(8.dp))
-        PasswordStrengthIndicator(password = password)
-      }
-
       Spacer(modifier = Modifier.height(12.dp))
 
       // Confirm Password

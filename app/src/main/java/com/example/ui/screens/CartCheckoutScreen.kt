@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Delete
@@ -348,7 +349,7 @@ fun CartCheckoutScreen(
             ) {
               Text(appText("Proceed to Checkout", "چیک آؤٹ پر جائیں"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
               Spacer(modifier = Modifier.width(4.dp))
-              Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
+              Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(16.dp))
             }
           }
         }

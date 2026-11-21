@@ -178,6 +178,7 @@ fun VendorShopSettingsScreen(
     slug = slug,
     accountEmail = resolvedEmail,
     vendorType = vendorType,
+    businessType = application.businessType,
     ownerFullName = ownerName,
     cnicNumber = cnic,
     phone = phone,
@@ -447,6 +448,16 @@ fun VendorShopSettingsContent(
             VendorTypeDropdown(
               selectedType = uiState.vendorType,
               onTypeSelected = onVendorTypeChange
+            )
+            BusinessTypeDropdown(
+              selectedType = uiState.businessType,
+              onTypeSelected = {},
+              enabled = false,
+              supportingText = appText(
+                "Contact marketplace support if your business category needs to change.",
+                "کاروبار کی قسم تبدیل کرنے کے لیے مارکیٹ پلیس سپورٹ سے رابطہ کریں۔"
+              ),
+              modifier = Modifier.testTag("shop_settings_business_type_dropdown")
             )
             VendorOutlinedTextField(
               value = uiState.phone,

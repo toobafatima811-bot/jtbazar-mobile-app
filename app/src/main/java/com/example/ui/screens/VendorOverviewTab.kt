@@ -633,6 +633,10 @@ private fun VendorRecentListingCard(
       when (product.publicationStatus.lowercase()) {
         "published" -> appText("Published", "شائع شدہ")
         "draft" -> appText("Draft", "مسودہ")
+        "archived" -> appText("Archived", "آرکائیو شدہ")
+        "hidden" -> appText("Hidden", "مخفی")
+        "pending_review", "pending" -> appText("Pending", "زیر التواء")
+        "suspended" -> appText("Suspended", "معطل")
         else -> product.publicationStatus.replace('_', ' ').replaceFirstChar { it.uppercase() }
       },
       StatusTone.SUCCESS,

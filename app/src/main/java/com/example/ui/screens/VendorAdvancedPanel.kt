@@ -8,15 +8,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Badge
+import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.data.supabase.VendorApplication
+import com.example.data.supabase.VendorBusinessType
 import com.example.data.supabase.VendorService
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
+import com.example.ui.components.vendorGenericStatusBadgeSpec
 import com.example.ui.theme.JTOrange
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
@@ -442,7 +446,16 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     if (step < 1 || minimum < 1 || dailyQty < 0 || unitPrice < 0) error(AppLanguageManager.tr("Check food unit price and quantity values.", "کھانے کی قیمت اور مقدار کی قدریں چیک کریں۔"))
                     VendorService.updateFoodProductDetails(id, editFoodUnit, unitPrice, step, minimum, editDailyItem, editDailyStatus, dailyQty)
                   }
-                  message = AppLanguageManager.tr("Product details saved. Food selling unit and daily availability updated when applicable.", "پروڈکٹ کی تفصیلات محفوظ ہو گئیں۔ متعلقہ کھانے کی اکائی اور روزانہ دستیابی اپڈیٹ ہو گئی۔")
+                  val outcome = VendorService.finalizeProductSubmission(
+                    productId = id,
+                    allowDirectPublish = application.allowProductPublishingWithoutReview,
+                    isEdit = true
+                  )
+                  if (outcome.finalizationError != null) {
+                    errorMessage = outcome.finalizationError
+                  } else {
+                    message = outcome.message
+                  }
                   editing = false
                   onRefresh()
                 } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Product update failed.", "پروڈکٹ اپڈیٹ ناکام رہا۔") }
@@ -615,16 +628,36 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       val movement = inventoryHistory.optJSONObject(i) ?: continue
       val productName = movement.optJSONObject("products")?.optString("name") ?: appText("Product", "پروڈکٹ")
       val delta = movement.optInt("quantity_delta")
-      Text("$productName • ${if (delta > 0) "+" else ""}$delta • ${movement.optString("movement_type")} • ${movement.optString("note")}", style = MaterialTheme.typography.bodySmall)
+      val movementLabel = when (movement.optString("movement_type").lowercase()) {
+        "restock" -> appText("Restock", "اسٹاک شامل")
+        "adjustment" -> appText("Adjustment", "ترمیم")
+        "sale", "order_deduction" -> appText("Order deduction", "آرڈر کٹوتی")
+        "return" -> appText("Return", "واپسی")
+        "initial" -> appText("Initial stock", "ابتدائی اسٹاک")
+        else -> movement.optString("movement_type")
+      }
+      val note = movement.optString("note").takeUnless { it == "null" }.orEmpty()
+      Text(listOf("$productName", "${if (delta > 0) "+" else ""}$delta", movementLabel, note).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall)
     }
 
     Text(appText("Customer cases and complaints", "کسٹمر کیسز اور شکایات"), style = MaterialTheme.typography.titleMedium)
     if (cases.length() == 0) Text(appText("No marketplace cases found.", "کوئی مارکیٹ پلیس کیس نہیں ملا۔"))
     for (i in 0 until cases.length()) {
       val item = cases.optJSONObject(i) ?: continue
+      val caseTypeRaw = item.optString("case_type", "customer_case")
+      val caseTypeLabel = when (caseTypeRaw.lowercase()) {
+        "return" -> appText("Return", "واپسی")
+        "refund" -> appText("Refund", "رقم واپسی")
+        "complaint" -> appText("Complaint", "شکایت")
+        "damage", "damaged" -> appText("Damaged item", "خراب شے")
+        "missing", "missing_item" -> appText("Missing item", "گمشدہ شے")
+        "customer_case" -> appText("Customer case", "کسٹمر کیس")
+        else -> caseTypeRaw.replace('_', ' ')
+      }
+      val caseStatusLabel = vendorGenericStatusBadgeSpec(item.optString("status", "open")).label
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-          Text("${item.optString("case_type", appText("Case", "کیس"))} • ${item.optString("status", "open")}")
+          Text("$caseTypeLabel • $caseStatusLabel")
           Text(item.optString("reason", appText("No reason supplied.", "کوئی وجہ فراہم نہیں کی گئی۔")))
           if (item.optString("seller_response").isNotBlank()) {
             Text(appText("Your response: ${item.optString("seller_response")}", "آپ کا جواب: ${item.optString("seller_response")}"))
@@ -678,7 +711,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       val ticket = tickets.optJSONObject(i) ?: continue
       Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(10.dp)) {
-          Text("${ticket.optString("subject")} • ${ticket.optString("status", "open")}")
+          Text("${ticket.optString("subject")} • ${vendorGenericStatusBadgeSpec(ticket.optString("status", "open")).label}")
           Text(ticket.optString("message"), style = MaterialTheme.typography.bodySmall)
           if (ticket.optString("admin_response").isNotBlank()) {
             Text(
@@ -796,6 +829,7 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
   var description by remember { mutableStateOf(application.description) }
   var ownerName by remember { mutableStateOf(application.ownerFullName) }
   var vendorType by remember { mutableStateOf(application.vendorType) }
+  var businessType by remember { mutableStateOf(application.businessType) }
   var cnic by remember { mutableStateOf(application.cnicNumber) }
   var phone by remember { mutableStateOf(application.phone) }
   var currentAddress by remember { mutableStateOf(application.currentAddress) }
@@ -810,6 +844,11 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
     VendorAdvancedField(appText("Shop description", "دکان کی تفصیل"), description, 3) { description = it }
     VendorAdvancedField(appText("Owner full legal name", "مالک کا مکمل قانونی نام"), ownerName) { ownerName = it }
     VendorTypeDropdown(selectedType = vendorType, onTypeSelected = { vendorType = it })
+    BusinessTypeDropdown(
+      selectedType = businessType,
+      onTypeSelected = { businessType = it },
+      modifier = Modifier.testTag("resubmit_business_type_dropdown")
+    )
     VendorAdvancedField(appText("CNIC number (13 digits)", "شناختی کارڈ نمبر (13 ہندسے)"), cnic) { cnic = it.filter(Char::isDigit).take(13) }
     VendorAdvancedField(appText("Business phone", "کاروباری فون"), phone) { phone = it }
     VendorAdvancedField(appText("Current address", "موجودہ پتہ"), currentAddress) { currentAddress = it }
@@ -824,6 +863,9 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
           require(shopName.trim().length >= 2 && description.trim().length >= 10 && ownerName.trim().length >= 3) {
             AppLanguageManager.tr("Complete shop and owner details.", "دکان اور مالک کی تفصیلات مکمل کریں۔")
           }
+          require(VendorBusinessType.isValid(businessType)) {
+            AppLanguageManager.tr("Select what type of business you operate.", "آپ کس قسم کا کاروبار کرتے ہیں، یہ منتخب کریں۔")
+          }
           require(slug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) {
             AppLanguageManager.tr("Enter a valid URL slug.", "درست یو آر ایل سلگ درج کریں۔")
           }
@@ -834,7 +876,8 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
             AppLanguageManager.tr("Complete all address fields.", "تمام پتہ کے خانے مکمل کریں۔")
           }
           VendorService.updateOwnShop(JSONObject().put("shop_name", shopName.trim()).put("slug", slug.trim())
-            .put("description", description.trim()).put("owner_full_name", ownerName.trim()).put("vendor_type", vendorType).put("cnic_number", cnic)
+            .put("description", description.trim()).put("owner_full_name", ownerName.trim())
+            .put("vendor_type", vendorType).put("business_type", businessType.trim()).put("cnic_number", cnic)
             .put("phone", phone.trim()).put("current_address", currentAddress.trim())
             .put("complete_address", completeAddress.trim()).put("shop_location_text", locationText.trim()))
           val updated = VendorService.resubmitApplication()
@@ -854,7 +897,11 @@ fun VendorApplicationResubmissionPanel(application: VendorApplication, onResubmi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
+fun VendorTypeDropdown(
+  selectedType: String,
+  onTypeSelected: (String) -> Unit,
+  modifier: Modifier = Modifier
+) {
   val types = listOf(
     "individual_seller" to appText("Individual Seller", "انفرادی فروخت کنندہ"),
     "registered_business" to appText("Registered Business", "رجسٹرڈ کاروبار"),
@@ -864,19 +911,19 @@ fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
   )
   var expanded by remember { mutableStateOf(false) }
   val selectedLabel = types.firstOrNull { it.first == selectedType }?.second
-    ?: appText("Select vendor type", "فروشندہ کی قسم منتخب کریں")
+    ?: appText("Select legal business structure", "کاروبار کی قانونی حیثیت منتخب کریں")
 
   ExposedDropdownMenuBox(
     expanded = expanded,
     onExpandedChange = { expanded = !expanded },
-    modifier = Modifier.fillMaxWidth()
+    modifier = modifier.fillMaxWidth()
   ) {
     OutlinedTextField(
       value = selectedLabel,
       onValueChange = {},
       readOnly = true,
-      label = { Text(appText("Vendor type", "فروشندہ کی قسم")) },
-      placeholder = { Text(appText("Select vendor type", "فروشندہ کی قسم منتخب کریں")) },
+      label = { Text(appText("Legal business structure *", "کاروبار کی قانونی حیثیت *")) },
+      placeholder = { Text(appText("Select legal business structure", "کاروبار کی قانونی حیثیت منتخب کریں")) },
       leadingIcon = {
         Icon(
           imageVector = Icons.Rounded.Badge,
@@ -886,7 +933,7 @@ fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
         )
       },
       trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-      modifier = Modifier.fillMaxWidth().menuAnchor(),
+      modifier = Modifier.fillMaxWidth().menuAnchor().testTag("vendor_type_dropdown"),
       singleLine = true,
       shape = VendorShapes.input,
       colors = OutlinedTextFieldDefaults.colors(
@@ -911,6 +958,88 @@ fun VendorTypeDropdown(selectedType: String, onTypeSelected: (String) -> Unit) {
           },
           contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
         )
+      }
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BusinessTypeDropdown(
+  selectedType: String,
+  onTypeSelected: (String) -> Unit,
+  modifier: Modifier = Modifier,
+  enabled: Boolean = true,
+  supportingText: String? = null
+) {
+  var expanded by remember { mutableStateOf(false) }
+  val selectedOption = VendorBusinessType.fromKey(selectedType)
+  val selectedLabel = selectedOption?.localizedLabel().orEmpty()
+
+  ExposedDropdownMenuBox(
+    expanded = expanded && enabled,
+    onExpandedChange = { if (enabled) expanded = !expanded },
+    modifier = modifier.fillMaxWidth()
+  ) {
+    OutlinedTextField(
+      value = selectedLabel,
+      onValueChange = {},
+      readOnly = true,
+      enabled = enabled,
+      label = { Text(appText("What type of business do you operate? *", "آپ کس قسم کا کاروبار کرتے ہیں؟ *")) },
+      placeholder = { Text(appText("Select business category", "کاروبار کی قسم منتخب کریں")) },
+      leadingIcon = {
+        Icon(
+          imageVector = Icons.Rounded.Storefront,
+          contentDescription = null,
+          tint = VendorColors.TextSecondary,
+          modifier = Modifier.size(20.dp)
+        )
+      },
+      trailingIcon = {
+        if (enabled) {
+          ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+        }
+      },
+      supportingText = supportingText?.takeIf { it.isNotBlank() }?.let { note ->
+        { Text(text = note, color = VendorColors.TextSecondary) }
+      },
+      modifier = Modifier
+        .fillMaxWidth()
+        .menuAnchor()
+        .testTag("vendor_business_type_dropdown"),
+      singleLine = true,
+      shape = VendorShapes.input,
+      colors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = VendorColors.PrimaryOrange,
+        focusedLabelColor = VendorColors.PrimaryOrange,
+        unfocusedBorderColor = VendorColors.BorderSubtle,
+        unfocusedLabelColor = VendorColors.TextSecondary,
+        disabledBorderColor = VendorColors.BorderSubtle,
+        disabledTextColor = VendorColors.TextPrimary,
+        disabledLabelColor = VendorColors.TextSecondary,
+        disabledLeadingIconColor = VendorColors.TextSecondary,
+        disabledContainerColor = VendorColors.Background,
+        focusedContainerColor = VendorColors.CardWhite,
+        unfocusedContainerColor = VendorColors.CardWhite
+      )
+    )
+    if (enabled) {
+      ExposedDropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false }
+      ) {
+        VendorBusinessType.entries.forEach { option ->
+          DropdownMenuItem(
+            text = { Text(option.localizedLabel()) },
+            onClick = {
+              onTypeSelected(option.key)
+              expanded = false
+            },
+            modifier = Modifier.testTag("business_type_option_${option.key}"),
+            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+          )
+        }
       }
     }
   }

@@ -98,7 +98,7 @@ fun SecurityPasswordScreen(
       Text(
         text = appText(
           "For security, use at least 8 characters with uppercase, lowercase, a number and a special symbol.",
-          "سیکیورٹی کے لیے یقینی بنائیں کہ آپ کا پاس ورڈ کم از کم 6 حروف پر مشتمل ہو اور اس میں حروف اور اعداد شامل ہوں۔"
+          "سیکیورٹی کے لیے کم از کم 8 حروف کا پاس ورڈ رکھیں جس میں بڑے حروف، چھوٹے حروف، ایک عدد اور ایک خاص علامت شامل ہو۔"
         ),
         fontSize = 12.sp,
         color = JTTextSecondary,
@@ -136,11 +136,6 @@ fun SecurityPasswordScreen(
         modifier = Modifier.fillMaxWidth().testTag("security_new_password_input")
       )
 
-      if (newPassword.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(8.dp))
-        PasswordStrengthIndicator(password = newPassword)
-      }
-
       OutlinedTextField(
         value = confirmPassword,
         onValueChange = { confirmPassword = it },
@@ -175,7 +170,7 @@ fun SecurityPasswordScreen(
               context,
               AppLanguageManager.tr(
                 "Enter your current password and a strong matching password (8+ characters with uppercase, lowercase, number and symbol).",
-                "اپنا موجودہ پاس ورڈ اور مطابقت رکھنے والا نیا پاس ورڈ (کم از کم 6 حروف) درج کریں۔"
+                "اپنا موجودہ پاس ورڈ اور مضبوط مطابقت رکھنے والا نیا پاس ورڈ درج کریں (کم از کم 8 حروف، بڑے اور چھوٹے حروف، عدد اور علامت کے ساتھ)۔"
               ),
               Toast.LENGTH_LONG
             ).show()

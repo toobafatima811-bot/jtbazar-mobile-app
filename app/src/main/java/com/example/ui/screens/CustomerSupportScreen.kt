@@ -29,6 +29,7 @@ import com.example.localization.appText
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CustomerSupportScreen(
   onBack: () -> Unit,
@@ -105,7 +106,7 @@ fun CustomerSupportScreen(
           Text(
             text = appText(
               "JTBazar customer support is available through our official support email. Please include your order number so we can help you faster:",
-              "JTBazar کسٹمر سپورٹ ہماری سرکاری سپورٹ ای میل کے ذریعے دستیاب ہے۔ براہ کرم اپنا آرڈر نمبر شامل کریں تاکہ ہم آپ کی جلد مدد کر سکیں:"
+              "جے ٹی بازار کسٹمر سپورٹ ہماری سرکاری سپورٹ ای میل کے ذریعے دستیاب ہے۔ براہ کرم اپنا آرڈر نمبر شامل کریں تاکہ ہم آپ کی جلد مدد کر سکیں:"
             ),
             fontSize = 12.sp,
             color = JTTextSecondary,
@@ -141,23 +142,12 @@ fun CustomerSupportScreen(
 
       // Category Selection Chips
       Text(appText("Inquiry Category *", "استفسار کا زمرہ *"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = JTTextPrimary)
-      Row(
+      FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
       ) {
-        categories.take(3).forEach { (catKey, catLabel) ->
-          FilterChip(
-            selected = category == catKey,
-            onClick = { category = catKey },
-            label = { Text(catLabel, fontSize = 11.sp) }
-          )
-        }
-      }
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        categories.drop(3).forEach { (catKey, catLabel) ->
+        categories.forEach { (catKey, catLabel) ->
           FilterChip(
             selected = category == catKey,
             onClick = { category = catKey },

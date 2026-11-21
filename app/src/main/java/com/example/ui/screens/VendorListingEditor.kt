@@ -61,10 +61,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.data.supabase.VendorPublishOutcome
 import com.example.data.supabase.VendorService
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
@@ -94,8 +96,9 @@ private data class ListingVariant(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VendorListingEditor(
+  allowDirectPublish: Boolean = false,
   onCancel: () -> Unit,
-  onSaved: suspend (String) -> Unit
+  onSaved: suspend (VendorPublishOutcome) -> Unit
 ) {
   BackHandler { onCancel() }
   val context = LocalContext.current
@@ -183,6 +186,24 @@ fun VendorListingEditor(
             "Add product information, pricing, images and stock details.",
             "پروڈکٹ کی معلومات، قیمت، تصاویر اور اسٹاک کی تفصیلات شامل کریں۔"
           )
+        )
+      }
+
+      item {
+        VendorAlertBanner(
+          message = if (allowDirectPublish) {
+            appText(
+              "Direct publishing is enabled by admin. Eligible products publish live after submission checks.",
+              "ایڈمن کی جانب سے براہ راست اشاعت فعال ہے۔ اہل مصنوعات جمع کرانے کی جانچ کے بعد فوراً شائع ہو جائیں گی۔"
+            )
+          } else {
+            appText(
+              "New products and edits go through JTBazar admin moderation before going live.",
+              "نئی مصنوعات اور تبدیلیاں لائیو ہونے سے پہلے جے ٹی بازار ایڈمن کی جانچ سے گزرتی ہیں۔"
+            )
+          },
+          isError = false,
+          modifier = Modifier.testTag("listing_publishing_mode_banner")
         )
       }
 
@@ -598,10 +619,17 @@ fun VendorListingEditor(
               }
             }
             Text(
-              text = appText(
-                "Variant changes are sent to JTBazar moderation before publication.",
-                "ویرینٹ کی تبدیلیاں شائع ہونے سے پہلے جے ٹی بازار کی جانچ کے لیے بھیجی جاتی ہیں۔"
-              ),
+              text = if (allowDirectPublish) {
+                appText(
+                  "Eligible products with direct publishing enabled are finalized immediately after saving.",
+                  "براہ راست اشاعت فعال ہونے پر اہل مصنوعات محفوظ ہونے کے بعد فوراً شائع کر دی جاتی ہیں۔"
+                )
+              } else {
+                appText(
+                  "Variant changes are sent to JTBazar moderation before publication.",
+                  "ویرینٹ کی تبدیلیاں شائع ہونے سے پہلے جے ٹی بازار کی جانچ کے لیے بھیجی جاتی ہیں۔"
+                )
+              },
               style = MaterialTheme.typography.bodySmall,
               color = VendorColors.TextSecondary
             )
@@ -864,11 +892,17 @@ fun VendorListingEditor(
                   )
                 }
                 if (variantJson.length() > 0) VendorService.saveVariants(id, variantJson)
-                message = AppLanguageManager.tr(
-                  "Listing submitted for moderation.",
-                  "لسٹنگ جانچ کے لیے جمع کرا دی گئی۔"
+                val outcome = VendorService.finalizeProductSubmission(
+                  productId = id,
+                  allowDirectPublish = allowDirectPublish,
+                  isEdit = false
                 )
-                onSaved(message)
+                if (outcome.finalizationError != null) {
+                  errorMessage = outcome.finalizationError
+                } else {
+                  message = outcome.message
+                }
+                onSaved(outcome)
               } catch (e: Exception) {
                 val details = generateSequence(e as Throwable?) { it.cause }
                   .mapNotNull { it.message }
@@ -876,9 +910,16 @@ fun VendorListingEditor(
                   .lowercase()
                 if (createdProductId != null) {
                   onSaved(
-                    AppLanguageManager.tr(
-                      "Product created as a draft, but variants or images could not all be saved. Do not submit it again. Please contact JTBazar support: ${e.message ?: "Additional product data failed."}",
-                      "پروڈکٹ مسودے کے طور پر بن گئی، لیکن تمام ویرینٹس یا تصاویر محفوظ نہیں ہو سکیں۔ دوبارہ جمع نہ کرائیں۔ براہ کرم جے ٹی بازار سپورٹ سے رابطہ کریں: ${e.message ?: "اضافی معلومات محفوظ نہیں ہو سکیں۔"}"
+                    VendorPublishOutcome(
+                      productId = createdProductId,
+                      moderationStatus = "pending_review",
+                      publicationStatus = "draft",
+                      publishedImmediately = false,
+                      message = AppLanguageManager.tr(
+                        "Product created as a draft, but variants or images could not all be saved. Do not submit it again. Please contact JTBazar support: ${e.message ?: "Additional product data failed."}",
+                        "پروڈکٹ مسودے کے طور پر بن گئی، لیکن تمام ویرینٹس یا تصاویر محفوظ نہیں ہو سکیں۔ دوبارہ جمع نہ کرائیں۔ براہ کرم جے ٹی بازار سپورٹ سے رابطہ کریں: ${e.message ?: "اضافی معلومات محفوظ نہیں ہو سکیں۔"}"
+                      ),
+                      finalizationError = null
                     )
                   )
                 } else {

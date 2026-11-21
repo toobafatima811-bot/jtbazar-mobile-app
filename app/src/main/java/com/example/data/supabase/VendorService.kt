@@ -5,7 +5,45 @@ import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.Locale
 import java.util.UUID
+
+enum class VendorBusinessType(
+  val key: String,
+  val englishLabel: String,
+  val urduLabel: String
+) {
+  INDIVIDUAL_SELLER("individual_seller", "Individual seller", "انفرادی فروخت کنندہ"),
+  RETAIL_STORE("retail_store", "Retail store", "ریٹیل اسٹور"),
+  RESTAURANT("restaurant", "Restaurant / Food", "ریسٹورنٹ / کھانے پینے کا کاروبار"),
+  GROCERY_STORE("grocery_store", "Grocery store", "کریانہ اسٹور"),
+  BAKERY("bakery", "Bakery", "بیکری"),
+  CAFE("cafe", "Cafe", "کیفے");
+
+  fun localizedLabel(): String = com.example.localization.AppLanguageManager.tr(englishLabel, urduLabel)
+
+  companion object {
+    val validKeys: Set<String> = entries.map { it.key }.toSet()
+
+    fun isValid(raw: String?): Boolean =
+      raw?.trim()?.lowercase(Locale.ROOT) in validKeys
+
+    fun fromKey(raw: String?): VendorBusinessType? =
+      entries.firstOrNull { it.key == raw?.trim()?.lowercase(Locale.ROOT) }
+
+    fun localizedLabelFor(raw: String?): String =
+      fromKey(raw)?.localizedLabel().orEmpty()
+  }
+}
+
+data class VendorPublishOutcome(
+  val productId: String,
+  val moderationStatus: String,
+  val publicationStatus: String,
+  val publishedImmediately: Boolean,
+  val message: String,
+  val finalizationError: String? = null
+)
 
 data class VendorApplication(
   val id: String,
@@ -21,6 +59,8 @@ data class VendorApplication(
   val completeAddress: String = "",
   val contactEmail: String = "",
   val vendorType: String = "individual_seller",
+  val businessType: String = "individual_seller",
+  val allowProductPublishingWithoutReview: Boolean = false,
   val ownerFullName: String = "",
   val cnicNumber: String = "",
   val shopLocationText: String = "",
@@ -41,18 +81,53 @@ object VendorService {
   private fun fail(result: Result<String>): String = result.getOrElse { throw it }
   private fun text(o: JSONObject, key: String, fallback: String = "") = o.optString(key, fallback).takeUnless { it == "null" } ?: fallback
 
+  internal fun parseVendorApplication(o: JSONObject): VendorApplication {
+    val parsedShopHours = WeeklyShopHours.parse(if (o.has("shop_hours") && !o.isNull("shop_hours")) o.opt("shop_hours") else null)
+    val rawBusinessType = text(o, "business_type", "individual_seller").trim().lowercase(Locale.ROOT)
+    val safeBusinessType = if (VendorBusinessType.isValid(rawBusinessType)) rawBusinessType else "individual_seller"
+    return VendorApplication(
+      id = text(o, "id"),
+      status = text(o, "status"),
+      shopName = text(o, "shop_name"),
+      rejectionReason = text(o, "rejection_reason").ifBlank { null },
+      vendorLocked = o.optBoolean("vendor_locked", false),
+      lockReason = text(o, "vendor_lock_reason").ifBlank { null },
+      slug = text(o, "slug"),
+      description = text(o, "description"),
+      phone = text(o, "phone"),
+      currentAddress = text(o, "current_address"),
+      completeAddress = text(o, "complete_address"),
+      contactEmail = text(o, "contact_email"),
+      vendorType = text(o, "vendor_type", "individual_seller"),
+      businessType = safeBusinessType,
+      allowProductPublishingWithoutReview = o.optBoolean("allow_product_publishing_without_review", false),
+      ownerFullName = text(o, "owner_full_name"),
+      cnicNumber = text(o, "cnic_number"),
+      shopLocationText = text(o, "shop_location_text"),
+      shopLat = if (o.isNull("shop_lat")) null else o.optDouble("shop_lat"),
+      shopLng = if (o.isNull("shop_lng")) null else o.optDouble("shop_lng"),
+      shopImageUrl = text(o, "shop_image_url"),
+      showShopOnMap = o.optBoolean("show_shop_on_map", false),
+      shopIsOpen = o.optBoolean("shop_is_open", true),
+      shopHours = parsedShopHours,
+      minimumOrderValue = o.optInt("minimum_order_value", 0),
+      createdAt = text(o, "created_at"),
+      documentPath = text(o, "document_path"),
+      cnicFrontPath = text(o, "cnic_front_path"),
+      cnicBackPath = text(o, "cnic_back_path")
+    )
+  }
+
   suspend fun getOwnApplication(): VendorApplication? {
     val user = SupabaseClient.currentUser.value ?: return null
-    val raw = fail(SupabaseClient.get("seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,shop_hours,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason,created_at,document_path,cnic_front_path,cnic_back_path&limit=1"))
+    val raw = fail(
+      SupabaseClient.get(
+        "seller_profiles?user_id=eq.${user.id}&select=id,status,shop_name,slug,description,phone,current_address,complete_address,contact_email,vendor_type,business_type,allow_product_publishing_without_review,owner_full_name,cnic_number,shop_location_text,shop_lat,shop_lng,shop_image_url,show_shop_on_map,shop_is_open,shop_hours,minimum_order_value,rejection_reason,vendor_locked,vendor_lock_reason,created_at,document_path,cnic_front_path,cnic_back_path&limit=1"
+      )
+    )
     val rows = JSONArray(raw)
     if (rows.length() == 0) return null
-    val o = rows.getJSONObject(0)
-    val parsedShopHours = WeeklyShopHours.parse(if (o.has("shop_hours") && !o.isNull("shop_hours")) o.opt("shop_hours") else null)
-    return VendorApplication(text(o,"id"), text(o,"status"), text(o,"shop_name"), text(o,"rejection_reason").ifBlank { null }, o.optBoolean("vendor_locked", false), text(o,"vendor_lock_reason").ifBlank { null },
-      text(o,"slug"), text(o,"description"), text(o,"phone"), text(o,"current_address"), text(o,"complete_address"), text(o,"contact_email"),
-      text(o,"vendor_type","individual_seller"), text(o,"owner_full_name"), text(o,"cnic_number"), text(o,"shop_location_text"),
-      if (o.isNull("shop_lat")) null else o.optDouble("shop_lat"), if (o.isNull("shop_lng")) null else o.optDouble("shop_lng"),
-      text(o,"shop_image_url"), o.optBoolean("show_shop_on_map", false), o.optBoolean("shop_is_open", true), parsedShopHours, o.optInt("minimum_order_value", 0), text(o,"created_at"), text(o,"document_path"), text(o,"cnic_front_path"), text(o,"cnic_back_path"))
+    return parseVendorApplication(rows.getJSONObject(0))
   }
 
   suspend fun isVendor(): Boolean {
@@ -72,11 +147,18 @@ object VendorService {
     val raw = fail(SupabaseClient.post("seller_profiles", data.toString(), preferHeader = "return=representation"))
     val rows = JSONArray(raw)
     if (rows.length() == 0) throw IOException("Application was not returned after submission.")
-    val o = rows.getJSONObject(0)
-    return VendorApplication(text(o,"id"), text(o,"status","pending"), text(o,"shop_name"), createdAt = text(o,"created_at"))
+    val fallback = parseVendorApplication(rows.getJSONObject(0))
+    return runCatching { getOwnApplication() }.getOrNull() ?: fallback
   }
 
   suspend fun listProducts(): JSONArray = JSONArray(fail(SupabaseClient.rpc("vendor_list_products")))
+
+  suspend fun getOwnProductById(productId: String): JSONObject? {
+    val products = listProducts()
+    return (0 until products.length())
+      .mapNotNull { products.optJSONObject(it) }
+      .firstOrNull { text(it, "id") == productId }
+  }
 
   suspend fun listProductImageUrls(productId: String): List<String> {
     val raw = fail(SupabaseClient.get("product_images?product_id=eq.$productId&select=image_url,storage_path&order=sort_order.asc&limit=8"))
@@ -339,10 +421,11 @@ object VendorService {
   }
 
   suspend fun resubmitApplication(): VendorApplication {
-    val raw = fail(SupabaseClient.rpc("seller_resubmit_application"))
+    val raw = fail(SupabaseClient.rpc("seller_resubmit_application", "{}", requireAuth = true))
     val row = if (raw.trim().startsWith("[")) JSONArray(raw).optJSONObject(0) else JSONObject(raw)
     row ?: throw IOException("Application could not be resubmitted.")
-    return VendorApplication(text(row,"id"), text(row,"status","pending"), text(row,"shop_name"), text(row,"rejection_reason").ifBlank { null }, createdAt = text(row,"created_at"))
+    val fallback = parseVendorApplication(row)
+    return runCatching { getOwnApplication() }.getOrNull() ?: fallback
   }
 
   suspend fun saveVariants(productId: String, variants: JSONArray) {
@@ -515,5 +598,153 @@ object VendorService {
       .put("p_dimensions", dimensions).put("p_seo_title", seoTitle ?: JSONObject.NULL)
       .put("p_seo_description", seoDescription ?: JSONObject.NULL).put("p_initial_stock", stock)
     return fail(SupabaseClient.rpc("vendor_create_product", params.toString())).trim('"')
+  }
+
+  private fun parseSingleProductObject(raw: String): JSONObject? {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank() || trimmed == "null") return null
+    return when {
+      trimmed.startsWith("{") -> runCatching { JSONObject(trimmed) }.getOrNull()
+      trimmed.startsWith("[") -> runCatching { JSONArray(trimmed).optJSONObject(0) }.getOrNull()
+      else -> null
+    }
+  }
+
+  suspend fun finalizeProductSubmission(
+    productId: String,
+    allowDirectPublish: Boolean,
+    isEdit: Boolean
+  ): VendorPublishOutcome {
+    if (productId.isBlank()) {
+      val err = com.example.localization.AppLanguageManager.tr(
+        "Product ID is missing; status could not be verified.",
+        "پروڈکٹ آئی ڈی موجود نہیں؛ حیثیت کی تصدیق نہیں ہو سکی۔"
+      )
+      return VendorPublishOutcome(
+        productId = productId,
+        moderationStatus = "pending_review",
+        publicationStatus = "draft",
+        publishedImmediately = false,
+        message = err,
+        finalizationError = err
+      )
+    }
+
+    if (!allowDirectPublish) {
+      val liveRow = runCatching { getOwnProductById(productId) }.getOrNull()
+      val mod = liveRow?.let { text(it, "moderation_status", text(it, "status", "pending_review")) }
+        ?.ifBlank { "pending_review" }
+        ?.lowercase(Locale.ROOT)
+        ?: "pending_review"
+      val pub = liveRow?.let { text(it, "publication_status", "draft") }
+        ?.ifBlank { "draft" }
+        ?.lowercase(Locale.ROOT)
+        ?: "draft"
+      val msg = if (isEdit) {
+        com.example.localization.AppLanguageManager.tr(
+          "Product updated and sent for moderation.",
+          "پروڈکٹ اپڈیٹ ہو گئی اور جائزے کے لیے بھیج دی گئی۔"
+        )
+      } else {
+        com.example.localization.AppLanguageManager.tr(
+          "Listing submitted for moderation.",
+          "لسٹنگ جانچ کے لیے جمع کرا دی گئی۔"
+        )
+      }
+      return VendorPublishOutcome(
+        productId = productId,
+        moderationStatus = mod,
+        publicationStatus = pub,
+        publishedImmediately = false,
+        message = msg
+      )
+    }
+
+    val rpcResult = SupabaseClient.rpc(
+      functionName = "vendor_finalize_product_submission",
+      paramsJson = JSONObject().put("p_product_id", productId).toString(),
+      requireAuth = true
+    )
+
+    if (rpcResult.isFailure) {
+      val rawErr = rpcResult.exceptionOrNull()?.message.orEmpty()
+      val liveRow = runCatching { getOwnProductById(productId) }.getOrNull()
+      val mod = liveRow?.let { text(it, "moderation_status", text(it, "status", "pending_review")) }
+        ?.ifBlank { "pending_review" }
+        ?.lowercase(Locale.ROOT)
+        ?: "pending_review"
+      val pub = liveRow?.let { text(it, "publication_status", "draft") }
+        ?.ifBlank { "draft" }
+        ?.lowercase(Locale.ROOT)
+        ?: "draft"
+      val safeError = when {
+        rawErr.contains("Authentication required", ignoreCase = true) ->
+          com.example.localization.AppLanguageManager.tr(
+            "Please sign in again to finalize publishing. Your changes were saved for moderation review.",
+            "اشاعت مکمل کرنے کے لیے براہ کرم دوبارہ سائن ان کریں۔ آپ کی تبدیلیاں جائزے کے لیے محفوظ کر لی گئی ہیں۔"
+          )
+        rawErr.contains("approved", ignoreCase = true) || rawErr.contains("locked", ignoreCase = true) || rawErr.contains("permission", ignoreCase = true) ->
+          com.example.localization.AppLanguageManager.tr(
+            "Direct publishing permission is unavailable for this account right now. Your product remains in moderation review.",
+            "اس اکاؤنٹ کے لیے فوری اشاعت کی اجازت فی الحال دستیاب نہیں ہے۔ آپ کی پروڈکٹ جائزے کے مراحل میں محفوظ ہے۔"
+          )
+        else ->
+          com.example.localization.AppLanguageManager.tr(
+            "Changes were saved for moderation review, but automatic publishing could not complete. Please verify product status.",
+            "تبدیلیاں جائزے کے لیے محفوظ ہو گئی ہیں، لیکن خودکار اشاعت مکمل نہیں ہو سکی۔ براہ کرم پروڈکٹ کی حیثیت چیک کریں۔"
+          )
+      }
+      return VendorPublishOutcome(
+        productId = productId,
+        moderationStatus = mod,
+        publicationStatus = pub,
+        publishedImmediately = false,
+        message = safeError,
+        finalizationError = safeError
+      )
+    }
+
+    val rpcRow = parseSingleProductObject(rpcResult.getOrNull().orEmpty())
+    val liveRow = runCatching { getOwnProductById(productId) }.getOrNull() ?: rpcRow
+    val mod = liveRow?.let { text(it, "moderation_status", text(it, "status", "pending_review")) }
+      ?.ifBlank { "pending_review" }
+      ?.lowercase(Locale.ROOT)
+      ?: "pending_review"
+    val pub = liveRow?.let { text(it, "publication_status", "draft") }
+      ?.ifBlank { "draft" }
+      ?.lowercase(Locale.ROOT)
+      ?: "draft"
+
+    val publishedImmediately = mod == "approved" && pub == "published"
+    val msg = when {
+      publishedImmediately && isEdit -> com.example.localization.AppLanguageManager.tr(
+        "Product updated and published immediately.",
+        "پروڈکٹ اپڈیٹ ہو گئی اور فوری طور پر شائع ہو گئی۔"
+      )
+      publishedImmediately -> com.example.localization.AppLanguageManager.tr(
+        "Listing published immediately to your shop.",
+        "پروڈکٹ آپ کی دکان پر فوری طور پر شائع ہو گئی۔"
+      )
+      mod in setOf("hidden", "rejected", "archived") -> com.example.localization.AppLanguageManager.tr(
+        "Changes were saved, but this listing stays un-published because its moderation status requires admin review.",
+        "تبدیلیاں محفوظ ہو گئیں، لیکن اس پروڈکٹ کی موجودہ حیثیت کے باعث شائع ہونے سے پہلے ایڈمن کا جائزہ درکار ہے۔"
+      )
+      isEdit -> com.example.localization.AppLanguageManager.tr(
+        "Product updated and sent for moderation.",
+        "پروڈکٹ اپڈیٹ ہو گئی اور جائزے کے لیے بھیج دی گئی۔"
+      )
+      else -> com.example.localization.AppLanguageManager.tr(
+        "Listing submitted for moderation.",
+        "لسٹنگ جانچ کے لیے جمع کرا دی گئی۔"
+      )
+    }
+
+    return VendorPublishOutcome(
+      productId = productId,
+      moderationStatus = mod,
+      publicationStatus = pub,
+      publishedImmediately = publishedImmediately,
+      message = msg
+    )
   }
 }

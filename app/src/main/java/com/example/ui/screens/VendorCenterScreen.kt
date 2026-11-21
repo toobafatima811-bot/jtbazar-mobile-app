@@ -112,6 +112,7 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.data.supabase.SupabaseClient
 import com.example.data.supabase.SupabaseRealtimeClient
 import com.example.data.supabase.VendorApplication
+import com.example.data.supabase.VendorBusinessType
 import com.example.data.supabase.VendorOrderStatus
 import com.example.data.supabase.VendorService
 import com.example.localization.AppLanguageManager
@@ -188,6 +189,7 @@ fun VendorCenterScreen(
   var ownerName by remember { mutableStateOf(user?.fullName.orEmpty()) }
   var cnic by remember { mutableStateOf("") }
   var vendorType by remember { mutableStateOf("individual_seller") }
+  var businessType by remember { mutableStateOf("") }
   var currentAddress by remember { mutableStateOf("") }
   var fullAddress by remember { mutableStateOf("") }
   var shopLocation by remember { mutableStateOf("") }
@@ -727,9 +729,15 @@ fun VendorCenterScreen(
           isApprovedVendor -> {
             when (activeSubScreen) {
               "product_add" -> VendorListingEditor(
+                allowDirectPublish = application?.allowProductPublishingWithoutReview == true,
                 onCancel = { activeSubScreen = null },
-                onSaved = { successMessage ->
-                  info = successMessage
+                onSaved = { outcome ->
+                  if (outcome.finalizationError != null) {
+                    actionErrorMessage = outcome.finalizationError
+                    info = ""
+                  } else {
+                    info = outcome.message
+                  }
                   try {
                     products = VendorService.listProducts()
                     productDeletionRequests = VendorService.listProductDeletionRequests()
@@ -766,17 +774,28 @@ fun VendorCenterScreen(
                 if (selected != null) {
                   VendorProductEditScreen(
                     product = selected,
+                    allowDirectPublish = application?.allowProductPublishingWithoutReview == true,
                     onBack = {
                       editingProduct = null
                       activeSubScreen = if (viewingProduct != null) "product_details" else null
                     },
-                    onSaved = {
-                      products = VendorService.listProducts()
+                    onSaved = { outcome ->
+                      if (outcome.finalizationError != null) {
+                        actionErrorMessage = outcome.finalizationError
+                        info = ""
+                      } else {
+                        info = outcome.message
+                      }
+                      try {
+                        products = VendorService.listProducts()
+                      } catch (e: Exception) {
+                        actionErrorMessage = e.message
+                          ?: AppLanguageManager.tr("Product updated, but the product list could not refresh.", "پروڈکٹ اپڈیٹ ہو گئی، لیکن فہرست ریفریش نہیں ہو سکی۔")
+                      }
                       editingProduct = null
                       viewingProduct = null
                       activeSubScreen = null
                       selectedTab = VendorBottomTab.PRODUCTS
-                      info = AppLanguageManager.tr("Product updated and sent for moderation where required.", "پروڈکٹ اپڈیٹ ہو گئی اور جہاں ضروری ہو جائزے کے لیے بھیج دی گئی۔")
                     }
                   )
                 } else {
@@ -1216,6 +1235,11 @@ fun VendorCenterScreen(
                     selectedType = vendorType,
                     onTypeSelected = { vendorType = it }
                   )
+                  BusinessTypeDropdown(
+                    selectedType = businessType,
+                    onTypeSelected = { businessType = it },
+                    modifier = Modifier.testTag("onboarding_business_type_dropdown")
+                  )
                 }
               }
 
@@ -1401,6 +1425,9 @@ fun VendorCenterScreen(
                       require(description.trim().length in 10..2000) {
                         AppLanguageManager.tr("Shop description must be between 10 and 2,000 characters.", "دکان کی تفصیل 10 سے 2,000 حروف کے درمیان ہونی چاہیے۔")
                       }
+                      require(VendorBusinessType.isValid(businessType)) {
+                        AppLanguageManager.tr("Select what type of business you operate.", "آپ کس قسم کا کاروبار کرتے ہیں، یہ منتخب کریں۔")
+                      }
                       require(ownerName.trim().length >= 3) {
                         AppLanguageManager.tr("Enter the owner's full legal name.", "مالک کا پورا قانونی نام درج کریں۔")
                       }
@@ -1467,6 +1494,7 @@ fun VendorCenterScreen(
                         .put("cnic_front_path", frontPath)
                         .put("cnic_back_path", backPath)
                         .put("vendor_type", vendorType.trim())
+                        .put("business_type", businessType.trim())
                         .put("owner_full_name", ownerName.trim())
                         .put("cnic_number", cnic)
                         .put("shop_location_text", shopLocation.trim())
@@ -2176,12 +2204,14 @@ private fun printVendorPackingSlip(context: android.content.Context, items: List
     "Product and quantity summary only. Customer contact and delivery details are managed by the marketplace team.",
     "صرف پروڈکٹ اور تعداد کا خلاصہ۔ صارف سے رابطہ اور ڈیلیوری کی تفصیلات مارکیٹ پلیس ٹیم سنبھالتی ہے۔"
   ))
-  val html = """<!doctype html><html><head><meta charset="utf-8"><style>
+  val dir = if (AppLanguageManager.isUrdu) "rtl" else "ltr"
+  val brandTitle = esc(AppLanguageManager.tr("JTBazar", "جے ٹی بازار"))
+  val html = """<!doctype html><html dir="$dir"><head><meta charset="utf-8"><style>
     body{font-family:Arial,sans-serif;padding:24px;color:#222}header{display:flex;justify-content:space-between;border-bottom:2px solid #222;padding-bottom:14px}
     h1{margin:6px 0;font-size:24px}small{color:#555}table{width:100%;border-collapse:collapse;margin-top:24px}
-    th,td{text-align:left;border:1px solid #bbb;padding:10px;font-size:13px}th{background:#f1f1f1}
+    th,td{text-align:start;border:1px solid #bbb;padding:10px;font-size:13px}th{background:#f1f1f1}
     footer{margin-top:28px;font-size:11px;color:#555}
-  </style></head><body><header><div><small>$titleLabel</small><h1>JTBazar</h1></div>
+  </style></head><body><header><div><small>$titleLabel</small><h1>$brandTitle</h1></div>
   <div><strong>${esc(first.optString("order_number", ""))}</strong><br><small>${esc(first.optString("order_created_at", first.optString("created_at", "")))}</small></div></header>
   <table><thead><tr><th>$productCol</th><th>$skuCol</th><th>$variantCol</th><th>$qtyCol</th></tr></thead><tbody>$rows</tbody></table>
   <footer>$footerNote</footer></body></html>"""

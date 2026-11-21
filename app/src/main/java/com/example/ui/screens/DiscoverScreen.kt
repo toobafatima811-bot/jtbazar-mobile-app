@@ -33,9 +33,11 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
+import com.example.ui.components.localizedStockBadgeText
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Share
@@ -465,7 +467,10 @@ private fun NearbyShopsMapView(
               Marker(map).apply {
                 position = center
                 title = shop.name
-                snippet = distance?.let { String.format(Locale.US, "%.1f km away", it) } ?: shop.city
+                snippet = distance?.let {
+                  val km = String.format(Locale.US, "%.1f", it)
+                  AppLanguageManager.tr("$km km away", "$km کلومیٹر دور")
+                } ?: shop.city
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 setOnMarkerClickListener { _, _ -> onSelectShop(shop); true }
                 map.overlays.add(this)
@@ -901,7 +906,7 @@ private fun ProductsFeedReelsView(
                 color = JTOrange
               ) {
                 Text(
-                  text = "${product.discountPercent}% OFF",
+                  text = appText("${product.discountPercent}% OFF", "${product.discountPercent}٪ رعایت"),
                   color = Color.White,
                   fontSize = 10.sp,
                   fontWeight = FontWeight.Bold,
@@ -914,7 +919,7 @@ private fun ProductsFeedReelsView(
           Spacer(modifier = Modifier.height(4.dp))
 
           Text(
-            text = product.inStockText,
+            text = localizedStockBadgeText(product.inStockText),
             color = Color.White.copy(alpha = 0.8f),
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium
@@ -932,7 +937,7 @@ private fun ProductsFeedReelsView(
           ) {
             Text(appText("View Full Details", "مکمل تفصیلات دیکھیں"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.width(4.dp))
-            Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(14.dp))
           }
         }
 

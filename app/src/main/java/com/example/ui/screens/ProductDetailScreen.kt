@@ -40,6 +40,7 @@ import com.example.localization.appText
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
+import com.example.ui.components.localizedStockBadgeText
 import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
 
@@ -511,7 +512,7 @@ fun ProductDetailScreen(
                   )
                   Spacer(modifier = Modifier.width(5.dp))
                   Text(
-                    text = product.inStockText,
+                    text = localizedStockBadgeText(product.inStockText),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = JTTextPrimary

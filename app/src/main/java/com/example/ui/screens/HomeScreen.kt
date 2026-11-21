@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.components.localizedCategoryBadge
+import com.example.ui.components.localizedStockBadgeText
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import coil.compose.AsyncImage
@@ -410,7 +412,7 @@ fun HomeScreen(
                     maxLines = 2
                   )
                   if (!category.badge.isNullOrBlank()) {
-                    Text(category.badge, fontSize = 9.sp, color = JTTextSecondary)
+                    Text(localizedCategoryBadge(category.badge), fontSize = 9.sp, color = JTTextSecondary)
                   }
                 }
               }
@@ -1433,7 +1435,7 @@ fun ProductCard(
       ) {
         Column(modifier = Modifier.fillMaxWidth()) {
           // Tag badge slot with fixed 20dp height
-          val tagText = product.inStockText.ifBlank { product.category }
+          val tagText = localizedStockBadgeText(product.inStockText).ifBlank { product.category }
           Box(
             modifier = Modifier
               .fillMaxWidth()
@@ -1722,7 +1724,14 @@ private fun ProductCampaignSection(
     "flash_sale", "seasonal", "custom" -> appText("${campaign.discountPercent.toInt()}% off", "${campaign.discountPercent.toInt()}٪ رعایت")
     else -> appText("Special offer", "خصوصی پیشکش")
   }
-  val campaignTypeLabel = campaign.campaignType.replace('_', ' ').uppercase()
+  val campaignTypeLabel = when (campaign.campaignType.lowercase()) {
+    "flash_sale" -> appText("FLASH SALE", "فلیش سیل")
+    "bogo" -> appText("BUY & GET", "خریدیں اور مفت پائیں")
+    "bundle" -> appText("BUNDLE DEAL", "بنڈل ڈیل")
+    "seasonal" -> appText("SEASONAL DEAL", "موسمی ڈیل")
+    "custom" -> appText("SPECIAL DEAL", "خصوصی ڈیل")
+    else -> campaign.campaignType.replace('_', ' ').uppercase()
+  }
   val isExpiredInitially = remember(campaign.id, campaign.endsAt) {
     val expiry = campaign.endsAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
     expiry != null && expiry <= System.currentTimeMillis()

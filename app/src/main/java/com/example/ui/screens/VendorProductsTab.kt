@@ -197,6 +197,10 @@ private fun VendorProductCard(
     product.publicationStatus.equals("published", true) -> appText("Published", "شائع شدہ")
     product.publicationStatus.equals("draft", true) -> appText("Draft", "مسودہ")
     product.publicationStatus.equals("archived", true) -> appText("Archived", "آرکائیو شدہ")
+    product.publicationStatus.equals("hidden", true) -> appText("Hidden", "پوشیدہ")
+    product.publicationStatus.equals("pending_review", true) ||
+      product.publicationStatus.equals("pending", true) -> appText("Pending review", "جائزے کے انتظار میں")
+    product.publicationStatus.equals("suspended", true) -> appText("Suspended", "معطل")
     else -> product.publicationStatus.replace('_', ' ').replaceFirstChar { it.uppercase() }
   }
   val pubTone = when {

@@ -180,11 +180,6 @@ fun ResetPasswordScreen(
           .testTag("reset_pass_new_password_input")
       )
 
-      if (newPassword.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(8.dp))
-        PasswordStrengthIndicator(password = newPassword)
-      }
-
       Spacer(modifier = Modifier.height(14.dp))
 
       // Confirm Password

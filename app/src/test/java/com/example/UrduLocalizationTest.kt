@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.supabase.AppErrorMapper
 import com.example.data.supabase.ErrorContext
+import com.example.data.supabase.VendorBusinessType
 import com.example.data.supabase.VendorOrderStatus
 import com.example.localization.AppLanguage
 import com.example.localization.AppLanguageManager
@@ -21,7 +22,9 @@ import com.example.localization.JTBazarLocalizedContainer
 import com.example.localization.LocalAppLanguage
 import com.example.localization.appText
 import com.example.ui.screens.AccountSettingsScreen
+import com.example.ui.screens.BusinessTypeDropdown
 import com.example.ui.screens.CustomerDeliveryOtpEligibility
+import com.example.ui.screens.CustomerSupportScreen
 import com.example.ui.screens.DriverDeliveryFilter
 import com.example.ui.screens.NotificationsScreen
 import com.example.ui.screens.ReturnsRefundsScreen
@@ -253,5 +256,38 @@ class UrduLocalizationTest {
 
     assertNotNull("ActivityResultRegistryOwner must remain available in Urdu", ownerInUrdu)
     composeTestRule.onNodeWithText("تیار اردو").assertIsDisplayed()
+  }
+
+  @Test
+  fun customerSupportAndVendorBusinessTypeRenderUrduAndRtl() {
+    AppLanguageManager.setLanguageForTest(AppLanguage.URDU)
+    val showSupport = androidx.compose.runtime.mutableStateOf(true)
+    var observedDirection: LayoutDirection? = null
+
+    composeTestRule.setContent {
+      JTBazarTheme(darkTheme = false) {
+        JTBazarLocalizedContainer {
+          observedDirection = LocalLayoutDirection.current
+          if (showSupport.value) {
+            CustomerSupportScreen(onBack = {})
+          } else {
+            BusinessTypeDropdown(
+              selectedType = VendorBusinessType.GROCERY_STORE.key,
+              onTypeSelected = {}
+            )
+          }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    assertEquals(LayoutDirection.Rtl, observedDirection)
+    composeTestRule.onNodeWithText("کسٹمر سپورٹ اور شکایات").assertIsDisplayed()
+    composeTestRule.onNodeWithText("آرڈر ڈیلیوری").assertIsDisplayed()
+
+    showSupport.value = false
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("آپ کس قسم کا کاروبار کرتے ہیں؟ *").assertIsDisplayed()
+    composeTestRule.onNodeWithText("کریانہ اسٹور").assertIsDisplayed()
   }
 }

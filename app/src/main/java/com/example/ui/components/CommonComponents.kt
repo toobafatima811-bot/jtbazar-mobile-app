@@ -235,7 +235,7 @@ fun UserAvatarView(
     if (validAvatarUrl != null) {
       coil.compose.AsyncImage(
         model = rememberSizedImageRequest(data = validAvatarUrl, widthPx = 128, heightPx = 128),
-        contentDescription = "User Avatar",
+        contentDescription = appText("User Avatar", "صارف کی تصویر"),
         contentScale = ContentScale.Crop,
         modifier = Modifier.fillMaxSize()
       )
@@ -263,7 +263,7 @@ fun UserAvatarView(
       ) {
         Icon(
           imageVector = Icons.Filled.AccountCircle,
-          contentDescription = "Account",
+          contentDescription = appText("Account", "اکاؤنٹ"),
           tint = JTPurplePrimary,
           modifier = Modifier.size((size.value * 0.7f).dp)
         )
@@ -293,7 +293,7 @@ fun QuantityStepper(
     ) {
       Icon(
         imageVector = Icons.Filled.Remove,
-        contentDescription = "Decrease",
+        contentDescription = appText("Decrease", "کم کریں"),
         modifier = Modifier.size(16.dp),
         tint = JTTextPrimary
       )
@@ -315,7 +315,7 @@ fun QuantityStepper(
     ) {
       Icon(
         imageVector = Icons.Filled.Add,
-        contentDescription = "Increase",
+        contentDescription = appText("Increase", "بڑھائیں"),
         modifier = Modifier.size(16.dp),
         tint = JTTextPrimary
       )
@@ -658,7 +658,7 @@ fun AddressSelectionSheet(
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                   Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                      Text(addr.tag, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                      Text(localizedAddressTag(addr.tag), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                       Spacer(Modifier.width(6.dp))
                       if (addr.isDefault) Text(appText("DEFAULT", "بنیادی"), color = JTPurplePrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
@@ -701,3 +701,30 @@ fun AddressSelectionSheet(
     }
   )
 }
+
+fun localizedAddressTag(tag: String): String =
+  when (tag.trim().uppercase(Locale.ROOT)) {
+    "HOME" -> AppLanguageManager.tr("HOME", "گھر")
+    "WORK" -> AppLanguageManager.tr("WORK", "دفتر")
+    "OFFICE" -> AppLanguageManager.tr("OFFICE", "دفتر")
+    "SHOP" -> AppLanguageManager.tr("SHOP", "دکان")
+    "OTHER" -> AppLanguageManager.tr("OTHER", "دیگر")
+    else -> tag
+  }
+
+fun localizedCategoryBadge(badge: String?): String =
+  when (badge?.trim()?.lowercase(Locale.ROOT)) {
+    "coming soon" -> AppLanguageManager.tr("Coming Soon", "جلد آ رہا ہے")
+    "fresh home chefs" -> AppLanguageManager.tr("Fresh Home Chefs", "تازہ ہوم شیفس")
+    "fast delivery" -> AppLanguageManager.tr("Fast Delivery", "تیز ترسیل")
+    else -> badge.orEmpty()
+  }
+
+fun localizedStockBadgeText(raw: String): String =
+  when (raw.trim().lowercase(Locale.ROOT)) {
+    "in stock" -> AppLanguageManager.tr("In Stock", "اسٹاک میں دستیاب")
+    "out of stock" -> AppLanguageManager.tr("Out of Stock", "اسٹاک ختم")
+    "availability not verified" -> AppLanguageManager.tr("Availability not verified", "دستیابی کی تصدیق نہیں ہوئی")
+    else -> raw
+  }
+

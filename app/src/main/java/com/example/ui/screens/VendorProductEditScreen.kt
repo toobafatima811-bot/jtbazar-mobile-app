@@ -67,10 +67,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.data.supabase.VendorPublishOutcome
 import com.example.data.supabase.VendorService
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
@@ -95,8 +97,9 @@ private fun JSONObject.vendorEditCleanString(key: String, fallback: String = "")
 @Composable
 fun VendorProductEditScreen(
   product: JSONObject,
+  allowDirectPublish: Boolean = false,
   onBack: () -> Unit,
-  onSaved: suspend () -> Unit
+  onSaved: suspend (VendorPublishOutcome) -> Unit
 ) {
   BackHandler { onBack() }
   val context = LocalContext.current
@@ -197,13 +200,38 @@ fun VendorProductEditScreen(
       item {
         SectionHeader(
           title = appText("Edit product", "پروڈکٹ میں ترمیم کریں"),
-          subtitle = appText(
-            "Changes are sent through JTBazar moderation. Stock is managed in Inventory.",
-            "تبدیلیاں جے ٹی بازار کی جانچ کے لیے بھیجی جاتی ہیں۔ اسٹاک کا انتظام انوینٹری میں ہوتا ہے۔"
-          ),
+          subtitle = if (allowDirectPublish) {
+            appText(
+              "Direct publishing is enabled for this shop. Stock is managed in Inventory.",
+              "اس دکان کے لیے براہ راست اشاعت فعال ہے۔ اسٹاک کا انتظام انوینٹری میں ہوتا ہے۔"
+            )
+          } else {
+            appText(
+              "Changes are sent through JTBazar moderation. Stock is managed in Inventory.",
+              "تبدیلیاں جے ٹی بازار کی جانچ کے لیے بھیجی جاتی ہیں۔ اسٹاک کا انتظام انوینٹری میں ہوتا ہے۔"
+            )
+          },
           actionLabel = appText("Back", "واپس"),
           actionIcon = Icons.AutoMirrored.Rounded.ArrowBack,
           onActionClick = { if (!saving) onBack() }
+        )
+      }
+
+      item {
+        VendorAlertBanner(
+          message = if (allowDirectPublish) {
+            appText(
+              "Direct publishing is enabled by admin. Eligible updates publish live after verification.",
+              "ایڈمن کی جانب سے براہ راست اشاعت فعال ہے۔ اہل تبدیلیاں تصدیق کے بعد فوراً شائع ہو جائیں گی۔"
+            )
+          } else {
+            appText(
+              "Product updates remain pending until reviewed by JTBazar moderation.",
+              "جے ٹی بازار کی جانچ مکمل ہونے تک پروڈکٹ کی تبدیلیاں زیر التواء رہتی ہیں۔"
+            )
+          },
+          isError = false,
+          modifier = Modifier.testTag("edit_publishing_mode_banner")
         )
       }
 
@@ -777,8 +805,17 @@ fun VendorProductEditScreen(
                 }
                 existingImageUrls = VendorService.listProductImageUrls(id)
                 newImages = emptyList()
-                message = AppLanguageManager.tr("Product details and images saved.", "پروڈکٹ کی تفصیلات اور تصاویر محفوظ ہو گئیں۔")
-                onSaved()
+                val outcome = VendorService.finalizeProductSubmission(
+                  productId = id,
+                  allowDirectPublish = allowDirectPublish,
+                  isEdit = true
+                )
+                if (outcome.finalizationError != null) {
+                  errorMessage = outcome.finalizationError
+                } else {
+                  message = outcome.message
+                }
+                onSaved(outcome)
               } catch (e: Exception) {
                 errorMessage = e.message ?: AppLanguageManager.tr("Product could not be updated.", "پروڈکٹ اپڈیٹ نہیں ہو سکی۔")
               } finally {

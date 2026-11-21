@@ -32,6 +32,7 @@ import com.example.data.repository.MarketplaceRepository
 import com.example.localization.appText
 import com.example.ui.components.AddressSelectionSheet
 import com.example.ui.components.JTBazarTopBar
+import com.example.ui.components.localizedCategoryBadge
 import com.example.ui.theme.*
 import com.example.ui.components.rememberAdaptiveColumnCount
 
@@ -327,7 +328,7 @@ fun CategoryCard(
                 Spacer(modifier = Modifier.width(3.dp))
               }
               Text(
-                text = category.badge,
+                text = localizedCategoryBadge(category.badge),
                 color = Color.White,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
