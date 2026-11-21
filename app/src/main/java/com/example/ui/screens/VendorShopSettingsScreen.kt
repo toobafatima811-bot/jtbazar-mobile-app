@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -533,7 +534,8 @@ fun VendorShopSettingsContent(
               onValueChange = onCnicChange,
               label = appText("CNIC number (13 digits) *", "شناختی کارڈ نمبر (13 ہندسے) *"),
               leadingIcon = Icons.Rounded.CreditCard,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+              visualTransformation = PasswordVisualTransformation()
             )
             VendorOutlinedTextField(
               value = uiState.currentAddress,
