@@ -186,6 +186,7 @@ data class VendorShopSettingsUiState(
   val businessType: String = "individual_seller",
   val ownerFullName: String = "",
   val cnicNumber: String = "",
+  val cnicPrivacyAcknowledged: Boolean = false,
   val phone: String = "",
   val description: String = "",
   val currentAddress: String = "",
