@@ -259,11 +259,19 @@ fun VendorShopSettingsScreen(
               "اپنے سائن ان شدہ جے ٹی بازار اکاؤنٹ والا تصدیق شدہ ای میل استعمال کریں۔"
             )
           }
-          require(cnicPrivacyAcknowledged) {
-            AppLanguageManager.tr(
-              "Read and acknowledge the CNIC privacy notice before saving identity details.",
-              "شناختی تفصیلات محفوظ کرنے سے پہلے شناختی کارڈ کی رازداری کا نوٹس پڑھ کر اس کی تصدیق کریں۔"
-            )
+          val identityDetailsChanged =
+            ownerName != application.ownerFullName ||
+              cnic != application.cnicNumber ||
+              frontPath != application.cnicFrontPath ||
+              backPath != application.cnicBackPath ||
+              documentPath != application.documentPath
+          if (identityDetailsChanged) {
+            require(cnicPrivacyAcknowledged) {
+              AppLanguageManager.tr(
+                "Read and acknowledge the CNIC privacy notice before saving identity details.",
+                "شناختی تفصیلات محفوظ کرنے سے پہلے شناختی کارڈ کی رازداری کا نوٹس پڑھ کر اس کی تصدیق کریں۔"
+              )
+            }
           }
           require(ownerName.trim().length >= 3 && cnic.matches(Regex("[0-9]{13}"))) {
             AppLanguageManager.tr("Enter the owner's legal name and 13-digit CNIC.", "مالک کا قانونی نام اور 13 ہندسوں کا شناختی کارڈ نمبر درج کریں۔")
