@@ -55,8 +55,8 @@ fun VendorCnicPrivacyNotice(
       )
       Text(
         text = appText(
-          "Retention: Rejected applications — CNIC number and images are kept for up to 90 days after the final rejection, then securely deleted. Approved vendors — CNIC data is kept while the vendor relationship is active; after the account is formally closed, it is deleted within 90 days. A documented legal obligation, active dispute, or fraud investigation may require a limited legal hold.",
-          "محفوظ رکھنے کی مدت: مسترد درخواستیں — آخری فیصلے کے بعد شناختی کارڈ نمبر اور تصاویر زیادہ سے زیادہ 90 دن رکھی جائیں گی، پھر محفوظ طریقے سے حذف ہوں گی۔ منظور شدہ فروخت کنندگان — شناختی معلومات فعال کاروباری تعلق کے دوران رکھی جائیں گی؛ اکاؤنٹ باضابطہ بند ہونے کے بعد 90 دن کے اندر حذف ہوں گی۔ قانونی ذمہ داری، جاری تنازع یا دھوکہ دہی کی تفتیش کی صورت میں محدود قانونی روک درکار ہو سکتی ہے۔"
+          "Retention: Rejected applications — CNIC number and images are kept for up to 90 days after the final rejection, then securely deleted. Approved vendors — CNIC data is kept while the vendor relationship is active; after the account is formally closed, it is deleted within 90 days. If a legal requirement, active dispute, or fraud investigation may affect deletion, contact JTBazar support promptly so the case can be reviewed.",
+          "محفوظ رکھنے کی مدت: مسترد درخواستیں — آخری فیصلے کے بعد شناختی کارڈ نمبر اور تصاویر زیادہ سے زیادہ 90 دن رکھی جائیں گی، پھر محفوظ طریقے سے حذف ہوں گی۔ منظور شدہ فروخت کنندگان — شناختی معلومات فعال کاروباری تعلق کے دوران رکھی جائیں گی؛ اکاؤنٹ باضابطہ بند ہونے کے بعد 90 دن کے اندر حذف ہوں گی۔ اگر قانونی تقاضا، جاری تنازع یا دھوکہ دہی کی تفتیش حذف کرنے کے عمل پر اثر انداز ہو سکتی ہو تو فوری طور پر جے ٹی بازار سپورٹ سے رابطہ کریں تاکہ معاملے کا جائزہ لیا جا سکے۔"
         ),
         style = MaterialTheme.typography.bodySmall,
         color = VendorColors.TextSecondary
