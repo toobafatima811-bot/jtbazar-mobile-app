@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -79,6 +80,7 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StatusTone
 import com.example.ui.components.VendorAlertBanner
+import com.example.ui.components.VendorCnicPrivacyNotice
 import com.example.ui.components.VendorOutlinedTextField
 import com.example.ui.theme.VendorCenterTheme
 import com.example.ui.theme.VendorColors
@@ -104,6 +106,7 @@ fun VendorShopSettingsScreen(
   var vendorType by remember(application.id) { mutableStateOf(application.vendorType) }
   var ownerName by remember(application.id) { mutableStateOf(application.ownerFullName) }
   var cnic by remember(application.id) { mutableStateOf(application.cnicNumber) }
+  var cnicPrivacyAcknowledged by remember(application.id) { mutableStateOf(false) }
   var phone by remember(application.id) { mutableStateOf(application.phone) }
   var description by remember(application.id) { mutableStateOf(application.description) }
   var currentAddress by remember(application.id) { mutableStateOf(application.currentAddress) }
@@ -141,22 +144,26 @@ fun VendorShopSettingsScreen(
         }
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
           ?: error(AppLanguageManager.tr("Selected file could not be read.", "منتخب کردہ فائل پڑھی نہیں جا سکی۔"))
-        require(bytes.size <= 10 * 1024 * 1024) {
-          AppLanguageManager.tr("Verification files must be 10 MB or smaller.", "تصدیقی فائلیں 10 MB یا اس سے کم ہونی چاہئیں۔")
-        }
-        val ext = when (mime) {
-          "application/pdf" -> "pdf"
-          "image/jpeg" -> "jpg"
-          "image/png" -> "png"
-          else -> "webp"
-        }
-        val ownerId = currentUser?.id ?: error(AppLanguageManager.tr("Please sign in again.", "براہ کرم دوبارہ سائن ان کریں۔"))
-        val path = "$ownerId/$documentKind-${System.currentTimeMillis()}.$ext"
-        val uploaded = VendorService.uploadPrivateDocument(path, bytes, mime)
-        when (documentKind) {
-          "cnic-front" -> frontPath = uploaded
-          "cnic-back" -> backPath = uploaded
-          else -> documentPath = uploaded
+        try {
+          require(bytes.size <= 10 * 1024 * 1024) {
+            AppLanguageManager.tr("Verification files must be 10 MB or smaller.", "تصدیقی فائلیں 10 MB یا اس سے کم ہونی چاہئیں۔")
+          }
+          val ext = when (mime) {
+            "application/pdf" -> "pdf"
+            "image/jpeg" -> "jpg"
+            "image/png" -> "png"
+            else -> "webp"
+          }
+          val ownerId = currentUser?.id ?: error(AppLanguageManager.tr("Please sign in again.", "براہ کرم دوبارہ سائن ان کریں۔"))
+          val path = "$ownerId/$documentKind-${System.currentTimeMillis()}.$ext"
+          val uploaded = VendorService.uploadPrivateDocument(path, bytes, mime)
+          when (documentKind) {
+            "cnic-front" -> frontPath = uploaded
+            "cnic-back" -> backPath = uploaded
+            else -> documentPath = uploaded
+          }
+        } finally {
+          bytes.fill(0)
         }
         info = AppLanguageManager.tr(
           "Private verification file uploaded securely.",
@@ -181,6 +188,7 @@ fun VendorShopSettingsScreen(
     businessType = application.businessType,
     ownerFullName = ownerName,
     cnicNumber = cnic,
+    cnicPrivacyAcknowledged = cnicPrivacyAcknowledged,
     phone = phone,
     description = description,
     currentAddress = currentAddress,
@@ -212,6 +220,7 @@ fun VendorShopSettingsScreen(
     onVendorTypeChange = { vendorType = it },
     onOwnerNameChange = { ownerName = it },
     onCnicChange = { cnic = it.filter(Char::isDigit).take(13) },
+    onCnicPrivacyAcknowledgedChange = { cnicPrivacyAcknowledged = it },
     onPhoneChange = { phone = it },
     onDescriptionChange = { description = it },
     onCurrentAddressChange = { currentAddress = it },
@@ -249,6 +258,20 @@ fun VendorShopSettingsScreen(
               "Use the same verified email as your signed-in JTBazar account.",
               "اپنے سائن ان شدہ جے ٹی بازار اکاؤنٹ والا تصدیق شدہ ای میل استعمال کریں۔"
             )
+          }
+          val identityDetailsChanged =
+            ownerName != application.ownerFullName ||
+              cnic != application.cnicNumber ||
+              frontPath != application.cnicFrontPath ||
+              backPath != application.cnicBackPath ||
+              documentPath != application.documentPath
+          if (identityDetailsChanged) {
+            require(cnicPrivacyAcknowledged) {
+              AppLanguageManager.tr(
+                "Read and acknowledge the CNIC privacy notice before saving identity details.",
+                "شناختی تفصیلات محفوظ کرنے سے پہلے شناختی کارڈ کی رازداری کا نوٹس پڑھ کر اس کی تصدیق کریں۔"
+              )
+            }
           }
           require(ownerName.trim().length >= 3 && cnic.matches(Regex("[0-9]{13}"))) {
             AppLanguageManager.tr("Enter the owner's legal name and 13-digit CNIC.", "مالک کا قانونی نام اور 13 ہندسوں کا شناختی کارڈ نمبر درج کریں۔")
@@ -356,6 +379,7 @@ fun VendorShopSettingsContent(
   onVendorTypeChange: (String) -> Unit,
   onOwnerNameChange: (String) -> Unit,
   onCnicChange: (String) -> Unit,
+  onCnicPrivacyAcknowledgedChange: (Boolean) -> Unit = {},
   onPhoneChange: (String) -> Unit,
   onDescriptionChange: (String) -> Unit,
   onCurrentAddressChange: (String) -> Unit,
@@ -488,6 +512,14 @@ fun VendorShopSettingsContent(
         )
       }
 
+      item(key = "cnic_privacy_notice") {
+        VendorCnicPrivacyNotice(
+          acknowledged = uiState.cnicPrivacyAcknowledged,
+          onAcknowledgedChange = onCnicPrivacyAcknowledgedChange,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+
       // Section 2: Owner & Address Details
       item {
         AppCard {
@@ -510,7 +542,8 @@ fun VendorShopSettingsContent(
               onValueChange = onCnicChange,
               label = appText("CNIC number (13 digits) *", "شناختی کارڈ نمبر (13 ہندسے) *"),
               leadingIcon = Icons.Rounded.CreditCard,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+              visualTransformation = PasswordVisualTransformation()
             )
             VendorOutlinedTextField(
               value = uiState.currentAddress,
@@ -836,7 +869,7 @@ private fun VendorShopSettingsContentPreview() {
         accountEmail = "seller@jtbazar.pk",
         vendorType = "registered_business",
         ownerFullName = "Muhammad Usman",
-        cnicNumber = "3520212345678",
+        cnicNumber = "",
         phone = "03001234567",
         description = "Authentic hand-glazed Multani blue pottery and artisan kitchenware.",
         currentAddress = "Gulberg III, Lahore",

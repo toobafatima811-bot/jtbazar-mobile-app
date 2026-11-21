@@ -125,6 +125,7 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StatusTone
 import com.example.ui.components.VendorAlertBanner
+import com.example.ui.components.VendorCnicPrivacyNotice
 import com.example.ui.components.VendorOutlinedTextField
 import com.example.ui.components.VendorSkeletonCard
 import com.example.ui.components.VendorStatGridSkeleton
@@ -188,6 +189,7 @@ fun VendorCenterScreen(
   var phone by remember { mutableStateOf(user?.phone.orEmpty()) }
   var ownerName by remember { mutableStateOf(user?.fullName.orEmpty()) }
   var cnic by remember { mutableStateOf("") }
+  var cnicPrivacyAcknowledged by remember(user?.id) { mutableStateOf(false) }
   var vendorType by remember { mutableStateOf("individual_seller") }
   var businessType by remember { mutableStateOf("") }
   var currentAddress by remember { mutableStateOf("") }
@@ -350,20 +352,24 @@ fun VendorCenterScreen(
     val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
       ?: throw IllegalStateException(AppLanguageManager.tr("Selected file could not be read.", "منتخب کردہ فائل پڑھی نہیں جا سکی۔"))
-    require(bytes.size <= 10 * 1024 * 1024) {
-      AppLanguageManager.tr("Each verification file must be 10 MB or smaller.", "ہر تصدیقی فائل 10 ایم بی یا اس سے کم ہونی چاہیے۔")
+    try {
+      require(bytes.size <= 10 * 1024 * 1024) {
+        AppLanguageManager.tr("Each verification file must be 10 MB or smaller.", "ہر تصدیقی فائل 10 ایم بی یا اس سے کم ہونی چاہیے۔")
+      }
+      require(mime in listOf("application/pdf", "image/jpeg", "image/png", "image/webp")) {
+        AppLanguageManager.tr("Use PDF, JPG, PNG or WebP files.", "صرف PDF، JPG، PNG یا WebP فائلیں استعمال کریں۔")
+      }
+      val ext = when (mime) {
+        "image/jpeg" -> "jpg"
+        "image/png" -> "png"
+        "image/webp" -> "webp"
+        else -> "pdf"
+      }
+      val path = "${user?.id}/$side-${System.currentTimeMillis()}.$ext"
+      return VendorService.uploadPrivateDocument(path, bytes, mime)
+    } finally {
+      bytes.fill(0)
     }
-    require(mime in listOf("application/pdf", "image/jpeg", "image/png", "image/webp")) {
-      AppLanguageManager.tr("Use PDF, JPG, PNG or WebP files.", "صرف PDF، JPG، PNG یا WebP فائلیں استعمال کریں۔")
-    }
-    val ext = when (mime) {
-      "image/jpeg" -> "jpg"
-      "image/png" -> "png"
-      "image/webp" -> "webp"
-      else -> "pdf"
-    }
-    val path = "${user?.id}/$side-${System.currentTimeMillis()}.$ext"
-    return VendorService.uploadPrivateDocument(path, bytes, mime)
   }
 
   val shopImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -1243,6 +1249,12 @@ fun VendorCenterScreen(
                 }
               }
 
+              VendorCnicPrivacyNotice(
+                acknowledged = cnicPrivacyAcknowledged,
+                onAcknowledgedChange = { cnicPrivacyAcknowledged = it },
+                modifier = Modifier.fillMaxWidth()
+              )
+
               AppCard {
                 Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
                   SectionHeader(
@@ -1431,6 +1443,12 @@ fun VendorCenterScreen(
                       require(ownerName.trim().length >= 3) {
                         AppLanguageManager.tr("Enter the owner's full legal name.", "مالک کا پورا قانونی نام درج کریں۔")
                       }
+                      require(cnicPrivacyAcknowledged) {
+                        AppLanguageManager.tr(
+                          "Read and acknowledge the CNIC privacy notice before submitting.",
+                          "جمع کرانے سے پہلے شناختی کارڈ کی رازداری کا نوٹس پڑھ کر اس کی تصدیق کریں۔"
+                        )
+                      }
                       require(cnic.matches(Regex("^[0-9]{13}$"))) {
                         AppLanguageManager.tr("Enter a 13-digit CNIC number without dashes.", "بغیر ڈیش کے 13 ہندسوں کا شناختی کارڈ نمبر درج کریں۔")
                       }
@@ -1502,6 +1520,8 @@ fun VendorCenterScreen(
                         .put("shop_lng", lng)
                         .put("show_shop_on_map", true)
                       application = VendorService.submitApplication(body)
+                      cnic = ""
+                      cnicPrivacyAcknowledged = false
                       info = AppLanguageManager.tr(
                         "Application submitted successfully. JTBazar admin review is pending.",
                         "درخواست کامیابی سے جمع ہو گئی۔ جے ٹی بازار ایڈمن کا جائزہ زیر التواء ہے۔"

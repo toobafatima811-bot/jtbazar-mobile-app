@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -668,7 +669,8 @@ fun VendorOutlinedTextField(
   minLines: Int = 1,
   singleLine: Boolean = minLines == 1,
   keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-  keyboardActions: KeyboardActions = KeyboardActions.Default
+  keyboardActions: KeyboardActions = KeyboardActions.Default,
+  visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
   OutlinedTextField(
     value = value,
@@ -693,6 +695,7 @@ fun VendorOutlinedTextField(
     singleLine = singleLine,
     keyboardOptions = keyboardOptions,
     keyboardActions = keyboardActions,
+    visualTransformation = visualTransformation,
     shape = VendorShapes.input,
     textStyle = MaterialTheme.typography.bodyMedium,
     colors = OutlinedTextFieldDefaults.colors(

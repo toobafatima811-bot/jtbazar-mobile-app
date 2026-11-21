@@ -149,7 +149,11 @@ object SupabaseClient {
   val okHttpClient: OkHttpClient by lazy {
     val logging = HttpLoggingInterceptor { message ->
       // Keep logging concise and avoid logging sensitive tokens
-      if (!message.contains("authorization", ignoreCase = true) && !message.contains("apikey", ignoreCase = true)) {
+      if (
+        !message.contains("authorization", ignoreCase = true) &&
+        !message.contains("apikey", ignoreCase = true) &&
+        !message.contains("/object/vendor-documents/", ignoreCase = true)
+      ) {
         Log.d(TAG, message)
       }
     }.apply {
@@ -430,8 +434,18 @@ object SupabaseClient {
       }
 
       val cleanPath = path.trimStart('/')
-      if (cleanPath.isBlank() || cleanPath.contains("..")) {
+      val pathSegments = cleanPath.split("/")
+      if (cleanPath.isBlank() || pathSegments.any { it.isBlank() || it == "." || it == ".." }) {
         return@withContext Result.failure(IllegalArgumentException("Invalid storage object path."))
+      }
+
+      if (bucket == "vendor-documents") {
+        if (pathSegments.size < 2 || pathSegments.first() != userId) {
+          return@withContext Result.failure(IllegalArgumentException("Vendor documents must be uploaded under your own user folder."))
+        }
+        if (bytes.size > 10 * 1024 * 1024 || mimeType !in listOf("application/pdf", "image/jpeg", "image/png", "image/webp")) {
+          return@withContext Result.failure(IllegalArgumentException("Unsupported private vendor document."))
+        }
       }
 
       if (bucket == "driver-documents" || bucket == "delivery-proofs") {
@@ -453,12 +467,24 @@ object SupabaseClient {
         .build()
       okHttpClient.newCall(request).execute().use { response ->
         val body = response.body?.string() ?: ""
-        if (response.isSuccessful) Result.success(cleanPath)
-        else Result.failure(IOException("Private storage upload error ${response.code}: $body"))
+        if (response.isSuccessful) {
+          Result.success(cleanPath)
+        } else if (bucket == "vendor-documents") {
+          // Do not surface a Storage response body: it may contain private object details.
+          Result.failure(IOException("Private vendor document upload failed (HTTP ${response.code})."))
+        } else {
+          Result.failure(IOException("Private storage upload error ${response.code}: $body"))
+        }
       }
     } catch (e: Exception) {
-      Log.e(TAG, "Private storage upload failed for $bucket/$path", e)
-      Result.failure(e)
+      if (bucket == "vendor-documents") {
+        // Never put the CNIC object path or server response into logs/crash messages.
+        Log.w(TAG, "Private vendor document upload failed (${e.javaClass.simpleName}).")
+        Result.failure(IOException("Private vendor document upload failed."))
+      } else {
+        Log.e(TAG, "Private storage upload failed for $bucket/$path", e)
+        Result.failure(e)
+      }
     }
   }
 
