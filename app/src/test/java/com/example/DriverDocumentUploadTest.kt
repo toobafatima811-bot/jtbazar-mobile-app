@@ -211,6 +211,80 @@ class DriverDocumentUploadTest {
   }
 
   @Test
+  fun vendorDocumentUploadRejectsAnotherUsersFolder() = runBlocking {
+    val userId = "11111111-1111-4111-8111-111111111111"
+    val otherUserId = "22222222-2222-4222-8222-222222222222"
+    SupabaseClient.setSession(
+      SupabaseSession(
+        accessToken = createTestJwt(userId),
+        refreshToken = "refresh_tok",
+        user = SupabaseUser(id = userId, email = "vendor@jtbazar.pk")
+      )
+    )
+
+    val result = SupabaseClient.uploadPrivateFile(
+      bucket = "vendor-documents",
+      path = "$otherUserId/cnic-front-1700000000000.jpg",
+      bytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte()),
+      mimeType = "image/jpeg"
+    )
+
+    assertTrue("Vendor CNIC upload must reject another user's folder", result.isFailure)
+  }
+
+  @Test
+  fun vendorDocumentUploadRejectsUnsupportedMimeTypeBeforeNetworkCall() = runBlocking {
+    val userId = "11111111-1111-4111-8111-111111111111"
+    SupabaseClient.setSession(
+      SupabaseSession(
+        accessToken = createTestJwt(userId),
+        refreshToken = "refresh_tok",
+        user = SupabaseUser(id = userId, email = "vendor@jtbazar.pk")
+      )
+    )
+
+    val result = SupabaseClient.uploadPrivateFile(
+      bucket = "vendor-documents",
+      path = "$userId/cnic-front-1700000000000.jpg",
+      bytes = byteArrayOf(1, 2, 3),
+      mimeType = "text/plain"
+    )
+
+    assertTrue("Vendor CNIC upload must reject unsupported file types", result.isFailure)
+  }
+
+  @Test
+  fun vendorDocumentUploadUsesPrivateObjectPathAndAuthenticatedOwnerSession() = runBlocking {
+    val userId = "11111111-1111-4111-8111-111111111111"
+    val jwt = createTestJwt(userId)
+    SupabaseClient.setSession(
+      SupabaseSession(
+        accessToken = jwt,
+        refreshToken = "refresh_tok",
+        user = SupabaseUser(id = userId, email = "vendor@jtbazar.pk")
+      )
+    )
+    val (server, captured) = startStubStorageServer(expectedRequests = 1)
+    try {
+      SupabaseClient.storageUrlOverride = "http://127.0.0.1:${server.localPort}"
+      val path = "$userId/cnic-front-1700000000000.jpg"
+      val bytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte())
+
+      val result = SupabaseClient.uploadPrivateFile("vendor-documents", path, bytes, "image/jpeg")
+
+      assertTrue("Private vendor upload should succeed: ${result.exceptionOrNull()}", result.isSuccess)
+      assertEquals(path, result.getOrNull())
+      assertEquals(1, captured.size)
+      assertEquals("POST", captured.single().method)
+      assertEquals("/object/vendor-documents/$path", captured.single().requestTarget)
+      assertEquals("Bearer $jwt", captured.single().headers["authorization"])
+      assertFalse("Private vendor upload must not use upsert", captured.single().headers.containsKey("x-upsert"))
+    } finally {
+      server.close()
+    }
+  }
+
+  @Test
   fun uploadPrivateFilePostsAuthenticatedJpegWithoutUpsertForAllThreeDriverDocs() = runBlocking {
     val userId = "11111111-1111-4111-8111-111111111111"
     val jwt = createTestJwt(userId)
