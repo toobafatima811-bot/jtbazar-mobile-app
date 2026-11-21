@@ -47,8 +47,8 @@ fun VendorCnicPrivacyNotice(
       )
       Text(
         text = appText(
-          "Who can access it: Only authorised JTBazar administrators may review these documents through the secured admin dashboard. Document views are audited. Files stay in private storage; they are not public, used for advertising, sold, or shared with other vendors.",
-          "رسائی کس کو ہے: صرف جے ٹی بازار کے مجاز منتظمین محفوظ ایڈمن ڈیش بورڈ کے ذریعے یہ دستاویزات دیکھ سکتے ہیں۔ ہر دستاویز ویو کا آڈٹ ریکارڈ رکھا جاتا ہے۔ فائلیں نجی اسٹوریج میں رہتی ہیں؛ انہیں عوامی نہیں کیا جاتا، اشتہارات کے لیے استعمال یا فروخت نہیں کیا جاتا، اور دوسرے فروخت کنندگان سے شیئر نہیں کیا جاتا۔"
+          "Who can access it: Only authorised JTBazar administrators may review these documents through the secured admin dashboard. Vendors may access only their own files where existing permissions allow. Admin document views are audited. Files stay in private storage; they are not public, used for advertising, sold, or shared with other vendors.",
+          "رسائی کس کو ہے: صرف جے ٹی بازار کے مجاز منتظمین محفوظ ایڈمن ڈیش بورڈ کے ذریعے ان دستاویزات کا جائزہ لے سکتے ہیں۔ موجودہ اجازتوں کے مطابق فروخت کنندہ صرف اپنی فائلیں دیکھ سکتا ہے۔ ایڈمن کی جانب سے دستاویز دیکھنے کا آڈٹ ریکارڈ رکھا جاتا ہے۔ فائلیں نجی اسٹوریج میں رہتی ہیں؛ انہیں عوامی نہیں کیا جاتا، اشتہارات کے لیے استعمال یا فروخت نہیں کیا جاتا، اور دوسرے فروخت کنندگان سے شیئر نہیں کیا جاتا۔"
         ),
         style = MaterialTheme.typography.bodySmall,
         color = VendorColors.TextSecondary
