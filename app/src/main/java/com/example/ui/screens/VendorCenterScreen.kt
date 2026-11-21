@@ -189,7 +189,7 @@ fun VendorCenterScreen(
   var phone by remember { mutableStateOf(user?.phone.orEmpty()) }
   var ownerName by remember { mutableStateOf(user?.fullName.orEmpty()) }
   var cnic by remember { mutableStateOf("") }
-  var cnicPrivacyAcknowledged by remember { mutableStateOf(false) }
+  var cnicPrivacyAcknowledged by remember(user?.id) { mutableStateOf(false) }
   var vendorType by remember { mutableStateOf("individual_seller") }
   var businessType by remember { mutableStateOf("") }
   var currentAddress by remember { mutableStateOf("") }
