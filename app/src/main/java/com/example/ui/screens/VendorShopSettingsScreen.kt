@@ -861,7 +861,7 @@ private fun VendorShopSettingsContentPreview() {
         accountEmail = "seller@jtbazar.pk",
         vendorType = "registered_business",
         ownerFullName = "Muhammad Usman",
-        cnicNumber = "3520212345678",
+        cnicNumber = "",
         phone = "03001234567",
         description = "Authentic hand-glazed Multani blue pottery and artisan kitchenware.",
         currentAddress = "Gulberg III, Lahore",
