@@ -62,10 +62,12 @@ fun VendorProductDetailsScreen(
 ) {
   val id = product.optString("id")
   var images by remember(id) { mutableStateOf<List<String>>(emptyList()) }
+  var variants by remember(id) { mutableStateOf(JSONArray()) }
   var loading by remember(id) { mutableStateOf(true) }
 
   LaunchedEffect(id) {
     runCatching { VendorService.listProductImageUrls(id) }.onSuccess { images = it }
+    runCatching { VendorService.listVariants(id) }.onSuccess { variants = it }
     loading = false
   }
 
@@ -220,6 +222,67 @@ fun VendorProductDetailsScreen(
             appText("Shipping weight", "شپنگ وزن"),
             if (weightRaw.isBlank()) "—" else "$weightRaw ${appText("g", "گرام")}"
           )
+        }
+      }
+    }
+
+    if (variants.length() > 0) {
+      item {
+        AppCard {
+          Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)) {
+            Text(
+              text = appText("Variants (${variants.length()})", "ویرینٹس (${variants.length()})"),
+              color = VendorColors.PrimaryOrange,
+              style = MaterialTheme.typography.labelLarge,
+              fontWeight = FontWeight.Bold
+            )
+            for (v in 0 until variants.length()) {
+              val row = variants.optJSONObject(v) ?: continue
+              val optLabel = row.optString("option_label").takeUnless { it == "null" }.orEmpty()
+              val optValue = row.optString("option_value").takeUnless { it == "null" }.orEmpty()
+              val sku = row.optString("sku").takeUnless { it == "null" }.orEmpty()
+              val priceOverride = row.optString("price_override").takeUnless { it == "null" }.orEmpty()
+              val variantImg = row.optString("image_url").takeUnless { it == "null" }.orEmpty()
+              Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+              ) {
+                if (variantImg.isNotBlank()) {
+                  AsyncImage(
+                    model = variantImg,
+                    contentDescription = optValue,
+                    modifier = Modifier.size(44.dp).clip(VendorShapes.badge),
+                    contentScale = ContentScale.Crop
+                  )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = "$optLabel: $optValue",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = VendorColors.TextPrimary
+                  )
+                  if (sku.isNotBlank()) {
+                    Text(
+                      text = "SKU: $sku",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = VendorColors.TextSecondary
+                    )
+                  }
+                }
+                Text(
+                  text = if (priceOverride.isNotBlank()) formatPkrPrice(priceOverride) else appText("Base price", "بنیادی قیمت"),
+                  style = MaterialTheme.typography.bodySmall,
+                  fontWeight = FontWeight.Bold,
+                  color = VendorColors.PrimaryOrange
+                )
+              }
+              if (v < variants.length() - 1) {
+                HorizontalDivider(color = VendorColors.Divider)
+              }
+            }
+          }
         }
       }
     }

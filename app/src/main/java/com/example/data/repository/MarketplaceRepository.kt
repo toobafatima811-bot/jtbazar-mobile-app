@@ -70,6 +70,26 @@ object MarketplaceRepository {
   private val wishlistInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
   private val cancelInFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+sealed interface DeliveryFeeQuoteState {
+  data object Idle : DeliveryFeeQuoteState
+  data object Loading : DeliveryFeeQuoteState
+  data class Quoted(
+    val deliveryFee: Int,
+    val distanceKm: Double? = null,
+    val originLat: Double? = null,
+    val originLng: Double? = null,
+    val maxRadiusKm: Double? = null,
+    val isServiceable: Boolean = true,
+    val message: String? = null
+  ) : DeliveryFeeQuoteState
+  data class Unavailable(
+    val reason: String,
+    val originLat: Double? = null,
+    val originLng: Double? = null,
+    val maxRadiusKm: Double? = null
+  ) : DeliveryFeeQuoteState
+}
+
   private val _deliveryFee = MutableStateFlow(0)
   val deliveryFee: StateFlow<Int> = _deliveryFee.asStateFlow()
   private val _freeDeliveryEnabled = MutableStateFlow(false)
@@ -78,10 +98,74 @@ object MarketplaceRepository {
   val additionalDeliveryFee: StateFlow<Int> = _additionalDeliveryFee.asStateFlow()
   private val _storeSettings = MutableStateFlow<SupabaseStoreSettingsDto?>(null)
   val storeSettings: StateFlow<SupabaseStoreSettingsDto?> = _storeSettings.asStateFlow()
+  private val _deliveryPricingSettings = MutableStateFlow<DeliveryPricingSettingsDto?>(null)
+  val deliveryPricingSettings: StateFlow<DeliveryPricingSettingsDto?> = _deliveryPricingSettings.asStateFlow()
+  private val _deliveryFeeQuoteState = MutableStateFlow<DeliveryFeeQuoteState>(DeliveryFeeQuoteState.Idle)
+  val deliveryFeeQuoteState: StateFlow<DeliveryFeeQuoteState> = _deliveryFeeQuoteState.asStateFlow()
+  @Volatile private var deliveryQuoteJob: Job? = null
   private val _codEnabled = MutableStateFlow(false)
   val codEnabled: StateFlow<Boolean> = _codEnabled.asStateFlow()
   private val _returnWindowDays = MutableStateFlow(0)
   val returnWindowDays: StateFlow<Int> = _returnWindowDays.asStateFlow()
+
+  fun clearDeliveryFeeQuote() {
+    deliveryQuoteJob?.cancel()
+    _deliveryFeeQuoteState.value = DeliveryFeeQuoteState.Idle
+  }
+
+  suspend fun refreshDeliveryFeeQuoteSuspending(latitude: Double, longitude: Double): DeliveryFeeQuoteState {
+    _deliveryFeeQuoteState.value = DeliveryFeeQuoteState.Loading
+    val settings = _deliveryPricingSettings.value
+      ?: SupabaseApiService.fetchDeliveryPricingSettings().getOrNull()?.also { _deliveryPricingSettings.value = it }
+    val quoteRes = SupabaseApiService.fetchDeliveryFeeQuote(latitude, longitude)
+    val nextState = quoteRes.fold(
+      onSuccess = { quote ->
+        DeliveryFeeQuoteState.Quoted(
+          deliveryFee = quote.deliveryFee,
+          distanceKm = quote.distanceKm,
+          originLat = quote.originLat ?: settings?.originLat,
+          originLng = quote.originLng ?: settings?.originLng,
+          maxRadiusKm = quote.maxRadiusKm ?: settings?.maxDeliveryRadiusKm,
+          isServiceable = quote.isServiceable,
+          message = quote.message
+        )
+      },
+      onFailure = { err ->
+        val raw = err.message.orEmpty()
+        val friendly = when {
+          raw.contains("out of", ignoreCase = true) || raw.contains("range", ignoreCase = true) || raw.contains("radius", ignoreCase = true) ->
+            com.example.localization.AppLanguageManager.tr(
+              "Selected location is outside our delivery range. Please move the pin closer.",
+              "منتخب کردہ مقام ہماری ڈیلیوری حدود سے باہر ہے۔ براہ کرم پن کو قریب کریں۔"
+            )
+          raw.contains("origin", ignoreCase = true) || raw.contains("not configured", ignoreCase = true) ->
+            com.example.localization.AppLanguageManager.tr(
+              "Distance delivery pricing is currently unavailable. Please try again later.",
+              "فاصلے کے مطابق ڈیلیوری چارجز فی الحال دستیاب نہیں ہیں۔ براہ کرم بعد میں کوشش کریں۔"
+            )
+          else -> com.example.localization.AppLanguageManager.tr(
+            "Could not calculate distance delivery charges for this location. Please retry.",
+            "اس مقام کے لیے فاصلے کے مطابق ڈیلیوری چارجز معلوم نہیں ہو سکے۔ دوبارہ کوشش کریں۔"
+          )
+        }
+        DeliveryFeeQuoteState.Unavailable(
+          reason = friendly,
+          originLat = settings?.originLat,
+          originLng = settings?.originLng,
+          maxRadiusKm = settings?.maxDeliveryRadiusKm
+        )
+      }
+    )
+    _deliveryFeeQuoteState.value = nextState
+    return nextState
+  }
+
+  fun refreshDeliveryFeeQuote(latitude: Double, longitude: Double) {
+    deliveryQuoteJob?.cancel()
+    deliveryQuoteJob = scope.launch {
+      refreshDeliveryFeeQuoteSuspending(latitude, longitude)
+    }
+  }
 
   // Countdown seconds for daily promotion
   private val _countdownSeconds = MutableStateFlow(0)
@@ -269,6 +353,19 @@ object MarketplaceRepository {
   }
 
   fun mapDtoToProduct(dto: SupabaseProductDto, wishlistedIds: Set<String> = _wishlistedIds.value): Product {
+    val mappedVariants = dto.variants.map { v ->
+      ProductVariant(
+        id = v.id,
+        optionLabel = v.optionLabel,
+        optionValue = v.optionValue,
+        sku = v.sku,
+        priceOverride = v.priceOverride,
+        imageUrl = v.imageUrl,
+        isAvailable = v.isAvailable,
+        stockQuantity = v.stockQuantity,
+        sortOrder = v.sortOrder
+      )
+    }
     return Product(
       id = dto.id,
       sellerId = dto.sellerId,
@@ -284,6 +381,7 @@ object MarketplaceRepository {
       reviewCount = dto.reviewCount,
       drawableRes = resolveDrawable(dto.category, dto.id),
       imageUrl = dto.imageUrl,
+      imageUrls = dto.imageUrls,
       badge = dto.badge,
       inStockText = dto.inStockText,
       savingsText = dto.savingsText,
@@ -297,6 +395,7 @@ object MarketplaceRepository {
       highlights = dto.highlights,
       palettes = dto.palettes.map { PaletteOption(it, 0xFF1E40AF) },
       sizes = dto.sizes.map { SizeOption(it, "Option") },
+      variants = mappedVariants,
       variantIds = dto.variantIds,
       isArtisanCollection = dto.isArtisanCollection,
       isFeatured = dto.isFeatured,
@@ -375,7 +474,19 @@ object MarketplaceRepository {
   private fun persistGuestCart() {
     if (SupabaseClient.currentUserId != null) return
     val rows = JSONArray()
-    _cartItems.value.forEach { item -> rows.put(org.json.JSONObject().apply { put("product_id", item.product.id); put("quantity", item.quantity); put("palette", item.selectedPalette); put("size", item.selectedSize) }) }
+    _cartItems.value.forEach { item ->
+      rows.put(org.json.JSONObject().apply {
+        put("product_id", item.product.id)
+        put("quantity", item.quantity)
+        put("palette", item.selectedPalette)
+        put("size", item.selectedSize)
+        if (!item.variantId.isNullOrBlank()) put("variant_id", item.variantId)
+        item.unitPrice?.let { put("unit_price", it) }
+        if (!item.variantLabel.isNullOrBlank()) put("variant_label", item.variantLabel)
+        if (!item.variantValue.isNullOrBlank()) put("variant_value", item.variantValue)
+        if (!item.variantImageUrl.isNullOrBlank()) put("variant_image_url", item.variantImageUrl)
+      })
+    }
     guestPrefs()?.edit()?.putString(GUEST_CART, rows.toString())?.apply()
   }
   private fun persistGuestWishlist() {
@@ -394,8 +505,25 @@ object MarketplaceRepository {
       val product = _products.value.firstOrNull { it.id == productId } ?: return@mapNotNull null
       val palette = row.optString("palette").takeIf { it.isNotBlank() && it != "null" }
       val size = row.optString("size").takeIf { it.isNotBlank() && it != "null" }
-      val variantId = if (!size.isNullOrBlank()) product.variantIds["size:$size"] else if (!palette.isNullOrBlank()) product.variantIds["color:$palette"] else null
-      CartItem(id="cart_guest_${productId}_${index}", product=product, quantity=row.optInt("quantity", 1), selectedPalette=palette, selectedSize=size, variantId=variantId)
+      val explicitVariantId = row.optString("variant_id").takeIf { it.isNotBlank() && it != "null" }
+      val variantId = explicitVariantId
+        ?: if (!size.isNullOrBlank()) product.variantIds["size:$size"]
+        else if (!palette.isNullOrBlank()) product.variantIds["color:$palette"]
+        else null
+      val matchedVariant = variantId?.let { vid -> product.variants.firstOrNull { it.id == vid } }
+      val savedUnitPrice = if (row.has("unit_price") && !row.isNull("unit_price")) row.optInt("unit_price") else null
+      CartItem(
+        id = "cart_guest_${productId}_${index}",
+        product = product,
+        quantity = row.optInt("quantity", 1),
+        selectedPalette = palette,
+        selectedSize = size,
+        variantId = variantId,
+        unitPrice = matchedVariant?.priceOverride ?: savedUnitPrice ?: product.price,
+        variantLabel = matchedVariant?.optionLabel ?: row.optString("variant_label").takeIf { it.isNotBlank() && it != "null" },
+        variantValue = matchedVariant?.optionValue ?: row.optString("variant_value").takeIf { it.isNotBlank() && it != "null" },
+        variantImageUrl = matchedVariant?.imageUrl ?: row.optString("variant_image_url").takeIf { it.isNotBlank() && it != "null" }
+      )
     }
     if (restored.isNotEmpty()) { _cartItems.value = (restored + _cartItems.value).distinctBy { it.product.id to it.variantId }; updateCartCount() }
     val wishlistRows = JSONArray(prefs.getString(GUEST_WISHLIST, "[]") ?: "[]")
@@ -432,7 +560,11 @@ object MarketplaceRepository {
       if (product == null) { cartMerged = false; continue }
       val palette = row.optString("palette").takeIf { it.isNotBlank() && it != "null" }
       val size = row.optString("size").takeIf { it.isNotBlank() && it != "null" }
-      val variantId = if (!size.isNullOrBlank()) product.variantIds["size:$size"] else if (!palette.isNullOrBlank()) product.variantIds["color:$palette"] else null
+      val explicitVariantId = row.optString("variant_id").takeIf { it.isNotBlank() && it != "null" }
+      val variantId = explicitVariantId
+        ?: if (!size.isNullOrBlank()) product.variantIds["size:$size"]
+        else if (!palette.isNullOrBlank()) product.variantIds["color:$palette"]
+        else null
       if (SupabaseApiService.addToCart(userId, productId, row.optInt("quantity", 1), variantId).isFailure) cartMerged = false
     }
     if (cartMerged) prefs.edit().remove(GUEST_CART).apply()
@@ -450,54 +582,113 @@ object MarketplaceRepository {
     return normalized in setOf("out_of_stock", "unavailable", "not_available", "sold_out", "closed", "paused", "inactive")
   }
 
-  fun canAddProductToCart(product: Product, palette: String? = null, size: String? = null): Boolean {
+  private fun resolveVariantId(
+    product: Product,
+    palette: String? = null,
+    size: String? = null,
+    variantId: String? = null
+  ): String? {
+    val cleanId = variantId?.trim()?.takeIf { it.isNotBlank() }
+    if (cleanId != null) {
+      val known = product.variants.any { it.id == cleanId } || product.variantIds.values.contains(cleanId)
+      if (known) return cleanId
+    }
+    if (!size.isNullOrBlank()) {
+      product.variantIds["size:$size"]?.let { return it }
+      product.variants.firstOrNull { it.optionValue.equals(size, ignoreCase = true) }?.id?.let { return it }
+    }
+    if (!palette.isNullOrBlank()) {
+      product.variantIds["color:$palette"]?.let { return it }
+      product.variants.firstOrNull { it.optionValue.equals(palette, ignoreCase = true) }?.id?.let { return it }
+    }
+    return null
+  }
+
+  fun canAddProductToCart(
+    product: Product,
+    palette: String? = null,
+    size: String? = null,
+    variantId: String? = null
+  ): Boolean {
     val latest = _products.value.firstOrNull { it.id == product.id } ?: product
     // Fail closed when the live availability RPC did not verify this product.
-    // This prevents the detail screen from allowing a purchase when the card showed
-    // unavailable or when stock data could not be loaded.
     if (!latest.availabilityKnown || !latest.isAvailable) return false
     if (latest.foodSellingUnit != null && isUnavailableStatus(latest.dailyStatus)) return false
 
-    val variantKey = if (!size.isNullOrBlank()) "size:$size" else if (!palette.isNullOrBlank()) "color:$palette" else null
-    if (latest.variantIds.isNotEmpty() && variantKey == null) return false
-    if (variantKey != null) {
-      val variantId = latest.variantIds[variantKey] ?: return false
-      if (latest.variantAvailability[variantId] != true) return false
+    val hasVariants = latest.variants.isNotEmpty() || latest.variantIds.isNotEmpty()
+    val resolvedVariantId = resolveVariantId(latest, palette, size, variantId)
+    if (hasVariants && resolvedVariantId == null) return false
+    if (resolvedVariantId != null) {
+      val variantAvailMap = latest.variantAvailability
+      if (variantAvailMap.isNotEmpty()) {
+        if (variantAvailMap[resolvedVariantId] != true) return false
+      } else {
+        val matched = latest.variants.firstOrNull { it.id == resolvedVariantId }
+        if (matched != null && !matched.isAvailable) return false
+        if (matched == null) return false
+      }
     }
     return true
   }
 
-  fun addToCart(product: Product, quantity: Int = 1, palette: String? = null, size: String? = null) {
+  fun addToCart(
+    product: Product,
+    quantity: Int = 1,
+    palette: String? = null,
+    size: String? = null,
+    variantId: String? = null
+  ) {
     val latestProduct = _products.value.firstOrNull { it.id == product.id } ?: product
-    if (!canAddProductToCart(latestProduct, palette, size)) {
+    if (!canAddProductToCart(latestProduct, palette, size, variantId)) {
       _errorMessage.value = "This item is currently out of stock or unavailable."
       return
     }
     val productToAdd = latestProduct
-    val variantId = if (!size.isNullOrBlank()) productToAdd.variantIds["size:" + size]
-      else if (!palette.isNullOrBlank()) productToAdd.variantIds["color:" + palette] else null
-    val opKey = "${productToAdd.id}_${variantId.orEmpty()}"
+    val resolvedVariantId = resolveVariantId(productToAdd, palette, size, variantId)
+    val selectedVariant = resolvedVariantId?.let { vid ->
+      productToAdd.variants.firstOrNull { it.id == vid }
+    }
+    val resolvedPalette = palette?.takeIf { it.isNotBlank() }
+      ?: selectedVariant?.takeIf {
+        it.optionLabel.contains("color", true) || it.optionLabel.contains("colour", true)
+      }?.optionValue
+    val resolvedSize = size?.takeIf { it.isNotBlank() }
+      ?: selectedVariant?.takeIf {
+        !it.optionLabel.contains("color", true) && !it.optionLabel.contains("colour", true)
+      }?.optionValue
+    val resolvedUnitPrice = selectedVariant?.priceOverride ?: productToAdd.price
+    val opKey = "${productToAdd.id}_${resolvedVariantId.orEmpty()}"
     if (!cartAddInFlight.add(opKey)) return
 
     var localId = ""
     _cartItems.update { current ->
       val existingIndex = current.indexOfFirst {
-        it.product.id == productToAdd.id && it.variantId == variantId
+        it.product.id == productToAdd.id && it.variantId == resolvedVariantId
       }
       if (existingIndex >= 0) {
         current.toMutableList().also { list ->
           val item = list[existingIndex]
           localId = item.id
-          list[existingIndex] = item.copy(quantity = item.quantity + quantity)
+          list[existingIndex] = item.copy(
+            quantity = item.quantity + quantity,
+            unitPrice = resolvedUnitPrice,
+            variantLabel = selectedVariant?.optionLabel ?: item.variantLabel,
+            variantValue = selectedVariant?.optionValue ?: item.variantValue,
+            variantImageUrl = selectedVariant?.imageUrl ?: item.variantImageUrl
+          )
         }
       } else {
         val newItem = CartItem(
           id = "cart_" + java.util.UUID.randomUUID().toString(),
           product = productToAdd,
           quantity = quantity,
-          selectedPalette = palette,
-          selectedSize = size,
-          variantId = variantId
+          selectedPalette = resolvedPalette,
+          selectedSize = resolvedSize,
+          variantId = resolvedVariantId,
+          unitPrice = resolvedUnitPrice,
+          variantLabel = selectedVariant?.optionLabel,
+          variantValue = selectedVariant?.optionValue,
+          variantImageUrl = selectedVariant?.imageUrl
         )
         localId = newItem.id
         current + newItem
@@ -511,7 +702,7 @@ object MarketplaceRepository {
     } else {
       scope.launch {
         try {
-          SupabaseApiService.addToCart(userId, productToAdd.id, quantity, variantId)
+          SupabaseApiService.addToCart(userId, productToAdd.id, quantity, resolvedVariantId)
             .onSuccess { remoteId ->
               _cartItems.update { rows -> rows.map { if (it.id == localId) it.copy(id = remoteId) else it } }
             }
@@ -1001,6 +1192,7 @@ object MarketplaceRepository {
     }
     // Launch independent public catalog endpoints concurrently for fast startup.
     val settingsDeferred = async { SupabaseApiService.fetchStoreSettings() }
+    val deliveryPricingDeferred = async { SupabaseApiService.fetchDeliveryPricingSettings() }
     val categoryDeferred = async { SupabaseApiService.fetchCategories(forceRefresh = true) }
     val heroesDeferred = if (!promoSyncAlreadyFresh) async { SupabaseApiService.fetchHomepageHeroes() } else null
     val promosDeferred = if (!promoSyncAlreadyFresh) async { SupabaseApiService.fetchActivePromotions() } else null
@@ -1033,6 +1225,9 @@ object MarketplaceRepository {
         _returnWindowDays.value = it.returnWindowDays
       }
     }.onFailure { _errorMessage.value = AppErrorMapper.toCustomerMessage(it, ErrorContext.STORE_SETTINGS) }
+    deliveryPricingDeferred.await().onSuccess { settings ->
+      _deliveryPricingSettings.value = settings
+    }
 
     val categoryResult = categoryDeferred.await()
     if (categoryResult.isSuccess) {
@@ -1096,7 +1291,23 @@ object MarketplaceRepository {
         if (selectedProductId != null) {
           mappedProducts.firstOrNull { it.id == selectedProductId }?.let { _selectedProduct.value = it }
         }
-        _cartItems.update { cart -> cart.map { item -> mappedProducts.firstOrNull { it.id == item.product.id }?.let { latest -> item.copy(product = latest) } ?: item } }
+        _cartItems.update { cart ->
+          cart.map { item ->
+            val latest = mappedProducts.firstOrNull { it.id == item.product.id }
+            if (latest == null) {
+              item
+            } else {
+              val latestVariant = item.variantId?.let { vid -> latest.variants.firstOrNull { it.id == vid } }
+              item.copy(
+                product = latest,
+                unitPrice = latestVariant?.priceOverride ?: latest.price,
+                variantLabel = latestVariant?.optionLabel ?: item.variantLabel,
+                variantValue = latestVariant?.optionValue ?: item.variantValue,
+                variantImageUrl = latestVariant?.imageUrl ?: item.variantImageUrl
+              )
+            }
+          }
+        }
         updateCartCount()
       }
       if (SupabaseClient.currentUserId == null) restoreGuestShoppingData()
@@ -1199,12 +1410,40 @@ object MarketplaceRepository {
           .associateBy { it.id }
         val unavailable = items.firstOrNull { item ->
           val latest = latestProducts[item.product.id]
+          val requiresVariant = latest != null && (latest.variants.isNotEmpty() || latest.variantIds.isNotEmpty())
+          val variantAvailable = if (item.variantId.isNullOrBlank()) {
+            true
+          } else {
+            val matched = latest?.variants?.firstOrNull { it.id == item.variantId }
+            if (matched != null) matched.isAvailable else (latest?.variantAvailability?.get(item.variantId) == true)
+          }
           latest == null || !latest.availabilityKnown || !latest.inStock ||
             (latest.foodSellingUnit != null && latest.dailyStatus != null && latest.dailyStatus != "available") ||
-            (latest.variantIds.isNotEmpty() && item.variantId.isNullOrBlank()) ||
-            (!item.variantId.isNullOrBlank() && latest.variantAvailability[item.variantId] != true)
+            (requiresVariant && item.variantId.isNullOrBlank()) ||
+            !variantAvailable
         }
         if (unavailable != null) throw IllegalStateException(unavailable.product.title + " is out of stock or unavailable. Remove it from your cart before checkout.")
+        if (deliveryLat != null && deliveryLng != null) {
+          val currentQuote = _deliveryFeeQuoteState.value
+          val verifiedQuote = if (currentQuote is DeliveryFeeQuoteState.Quoted && currentQuote.isServiceable) {
+            currentQuote
+          } else {
+            refreshDeliveryFeeQuoteSuspending(deliveryLat, deliveryLng)
+          }
+          when (verifiedQuote) {
+            is DeliveryFeeQuoteState.Quoted -> {
+              if (!verifiedQuote.isServiceable) {
+                throw IllegalStateException(
+                  verifiedQuote.message?.takeIf { it.isNotBlank() }
+                    ?: "Selected location is outside our delivery range. Please move the pin closer."
+                )
+              }
+            }
+            is DeliveryFeeQuoteState.Unavailable -> throw IllegalStateException(verifiedQuote.reason)
+            DeliveryFeeQuoteState.Idle, DeliveryFeeQuoteState.Loading ->
+              throw IllegalStateException("Please wait for delivery fee calculation to finish.")
+          }
+        }
         if (items.any { latestProducts[it.product.id]?.foodSellingUnit != null } && (deliveryLat == null || deliveryLng == null)) {
           throw IllegalStateException("Add your current location pin to confirm the 5 km food delivery area.")
         }
@@ -1233,14 +1472,27 @@ object MarketplaceRepository {
         ).getOrThrow()
         val saved = SupabaseApiService.fetchOrders(userId).getOrThrow().firstOrNull { it.id == createdId } ?: throw IllegalStateException("Order created but could not be reloaded.")
         val savedItems = SupabaseApiService.fetchOrderItems(saved.id).getOrThrow().map { line ->
-          val sourceProduct = items.firstOrNull { it.product.id == line.productId }?.product
+          val sourceCartItem = items.firstOrNull { it.product.id == line.productId && (line.variantId == null || it.variantId == line.variantId) }
+            ?: items.firstOrNull { it.product.id == line.productId }
+          val sourceProduct = sourceCartItem?.product
           val product = sourceProduct?.copy(
             price = line.unitPrice,
             discountPercent = if (sourceProduct.originalPrice > 0)
               (((sourceProduct.originalPrice - line.unitPrice) * 100) / sourceProduct.originalPrice).coerceIn(0, 100)
             else sourceProduct.discountPercent
           ) ?: Product(id=line.productId, title=line.productTitle, vendor="", category="", price=line.unitPrice, originalPrice=line.unitPrice, discountPercent=0, rating=0.0, reviewCount=0)
-          CartItem(id=line.id, product=product, quantity=line.quantity, selectedPalette=line.selectedPalette, selectedSize=line.selectedSize, variantId=line.variantId)
+          CartItem(
+            id = line.id,
+            product = product,
+            quantity = line.quantity,
+            selectedPalette = line.selectedPalette,
+            selectedSize = line.selectedSize,
+            variantId = line.variantId,
+            unitPrice = line.unitPrice,
+            variantLabel = sourceCartItem?.variantLabel,
+            variantValue = sourceCartItem?.variantValue,
+            variantImageUrl = sourceCartItem?.variantImageUrl
+          )
         }
         val record = OrderRecord(orderId=saved.id, orderNumber=saved.orderNumber, date=saved.createdAt, items=savedItems, subtotal=saved.subtotal, discount=saved.discount, deliveryFee=saved.deliveryFee, grandTotal=saved.grandTotal, address=DeliveryAddress(id="order-address", name=saved.addressName, phone=saved.addressPhone, addressLine=saved.addressLine, area=saved.addressArea, city=saved.addressCity, province=address.province, isDefault=false), deliveryNote=saved.deliveryNote ?: "", statusHeader=saved.orderStatus, orderStatus=saved.orderStatus)
         _activeOrder.value = record
@@ -1426,12 +1678,23 @@ object MarketplaceRepository {
             val product = hydratedById[productId] ?: return@mapNotNull null
             val variantId = row.optString("variant_id")
               .takeIf { !row.isNull("variant_id") && it.isNotBlank() && it != "null" }
+            val matchedVariant = variantId?.let { vid -> product.variants.firstOrNull { it.id == vid } }
             val selectedOption = product.variantIds.entries.firstOrNull { it.value == variantId }?.key
             CartItem(
-              id = row.optString("id"), product = product, quantity = row.optInt("quantity", 1),
-              selectedPalette = selectedOption?.takeIf { it.startsWith("color:") }?.removePrefix("color:"),
-              selectedSize = selectedOption?.takeIf { it.startsWith("size:") }?.removePrefix("size:"),
-              variantId = variantId
+              id = row.optString("id"),
+              product = product,
+              quantity = row.optInt("quantity", 1),
+              selectedPalette = matchedVariant?.takeIf {
+                it.optionLabel.contains("color", true) || it.optionLabel.contains("colour", true)
+              }?.optionValue ?: selectedOption?.takeIf { it.startsWith("color:") }?.removePrefix("color:"),
+              selectedSize = matchedVariant?.takeIf {
+                !it.optionLabel.contains("color", true) && !it.optionLabel.contains("colour", true)
+              }?.optionValue ?: selectedOption?.takeIf { it.startsWith("size:") }?.removePrefix("size:"),
+              variantId = variantId,
+              unitPrice = matchedVariant?.priceOverride ?: product.price,
+              variantLabel = matchedVariant?.optionLabel,
+              variantValue = matchedVariant?.optionValue,
+              variantImageUrl = matchedVariant?.imageUrl
             )
           }
           _cartItems.value = mappedCart

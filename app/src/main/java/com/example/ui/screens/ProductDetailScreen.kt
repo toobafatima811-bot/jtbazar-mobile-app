@@ -33,7 +33,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.data.model.Product
+import com.example.data.model.ProductVariant
 import com.example.data.repository.MarketplaceRepository
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
@@ -43,6 +52,7 @@ import com.example.ui.components.QuantityStepper
 import com.example.ui.components.localizedStockBadgeText
 import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
+import com.example.util.ProductShareHelper
 
 @Composable
 fun ProductDetailScreen(
@@ -77,12 +87,14 @@ fun ProductDetailScreen(
     publicShops.firstOrNull { it.id == liveProduct.sellerId }
   }
 
+  val shareScope = rememberCoroutineScope()
   var showAddressDialog by remember { mutableStateOf(false) }
   var quantity by remember { mutableIntStateOf(1) }
-  var selectedPaletteName by remember {
-    mutableStateOf(product.palettes.firstOrNull()?.name ?: "")
-  }
-  var selectedSizeIndex by remember { mutableIntStateOf(0) }
+  // Never auto-select the first variant; customer must explicitly choose before cart/buy.
+  var selectedVariantId by remember(product.id) { mutableStateOf<String?>(null) }
+  var selectedPaletteName by remember(product.id) { mutableStateOf<String?>(null) }
+  var selectedSizeIndex by remember(product.id) { mutableStateOf<Int?>(null) }
+  var galleryOverrideUrl by remember(product.id) { mutableStateOf<String?>(null) }
 
   // Accordion states
   var craftStoryExpanded by remember { mutableStateOf(true) }
@@ -197,10 +209,43 @@ fun ProductDetailScreen(
     )
   }
 
-  val unitPrice = liveProduct.price
+  val selectedVariant: ProductVariant? = remember(liveProduct.variants, selectedVariantId) {
+    selectedVariantId?.let { vid -> liveProduct.variants.firstOrNull { it.id == vid } }
+  }
+  val legacySelectedSize = remember(liveProduct.sizes, selectedSizeIndex) {
+    selectedSizeIndex?.let { idx -> liveProduct.sizes.getOrNull(idx)?.title }
+  }
+  val resolvedPaletteForCart = remember(selectedVariant, selectedPaletteName) {
+    selectedVariant?.takeIf {
+      it.optionLabel.contains("color", true) || it.optionLabel.contains("colour", true)
+    }?.optionValue ?: selectedPaletteName
+  }
+  val resolvedSizeForCart = remember(selectedVariant, legacySelectedSize) {
+    selectedVariant?.takeIf {
+      !it.optionLabel.contains("color", true) && !it.optionLabel.contains("colour", true)
+    }?.optionValue ?: legacySelectedSize
+  }
+  val unitPrice = selectedVariant?.priceOverride ?: liveProduct.price
   val totalPrice = unitPrice * quantity
-  val selectedSize = product.sizes.getOrNull(selectedSizeIndex)?.title
-  val canPurchase = MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)
+  val activeImageUrl = remember(galleryOverrideUrl, selectedVariant, liveProduct.imageUrl) {
+    galleryOverrideUrl
+      ?: selectedVariant?.imageUrl?.takeIf { it.isNotBlank() }
+      ?: liveProduct.imageUrl?.takeIf { it.isNotBlank() }
+  }
+  val galleryImages = remember(liveProduct.imageUrl, liveProduct.imageUrls, liveProduct.variants) {
+    buildList {
+      liveProduct.imageUrl?.takeIf { it.isNotBlank() }?.let { add(it) }
+      addAll(liveProduct.imageUrls.filter { it.isNotBlank() })
+      addAll(liveProduct.variants.mapNotNull { it.imageUrl?.takeIf(String::isNotBlank) })
+    }.distinct()
+  }
+  val hasVariants = liveProduct.variants.isNotEmpty() || liveProduct.variantIds.isNotEmpty()
+  val canPurchase = MarketplaceRepository.canAddProductToCart(
+    product = liveProduct,
+    palette = resolvedPaletteForCart,
+    size = resolvedSizeForCart,
+    variantId = selectedVariant?.id
+  )
 
   Scaffold(
     containerColor = Color.White,
@@ -221,7 +266,7 @@ fun ProductDetailScreen(
       Surface(
         color = Color.White,
         tonalElevation = 6.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+        border = BorderStroke(1.dp, JTBorder),
         modifier = Modifier.fillMaxWidth().navigationBarsPadding()
       ) {
         Row(
@@ -241,7 +286,8 @@ fun ProductDetailScreen(
               text = "Rs. ${String.format("%,d", totalPrice)}",
               fontWeight = FontWeight.ExtraBold,
               fontSize = 18.sp,
-              color = JTPurplePrimary
+              color = JTPurplePrimary,
+              modifier = Modifier.testTag("product_detail_total_price")
             )
           }
 
@@ -249,26 +295,39 @@ fun ProductDetailScreen(
             val purchaseBlockedReason = when {
               !liveProduct.availabilityKnown -> appText("Availability not verified", "دستیابی کی تصدیق نہیں ہو سکی")
               !liveProduct.isAvailable -> appText("Out of Stock", "اسٹاک ختم")
-              liveProduct.variantIds.isNotEmpty() && selectedSize.isNullOrBlank() && selectedPaletteName.isNullOrBlank() ->
-                appText("Select an option", "ایک آپشن منتخب کریں")
+              hasVariants && selectedVariant == null && resolvedSizeForCart.isNullOrBlank() && resolvedPaletteForCart.isNullOrBlank() ->
+                appText("Select a variant", "ایک ویرینٹ منتخب کریں")
               else -> appText("Selected option unavailable", "منتخب کردہ آپشن دستیاب نہیں")
             }
-            Surface(color = Color(0xFFFFE4E6), shape = RoundedCornerShape(10.dp)) {
-              Text(purchaseBlockedReason, color = Color(0xFFBE123C), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+            Surface(
+              color = Color(0xFFFFE4E6),
+              shape = RoundedCornerShape(10.dp),
+              modifier = Modifier.testTag("purchase_blocked_banner")
+            ) {
+              Text(
+                purchaseBlockedReason,
+                color = Color(0xFFBE123C),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+              )
             }
           } else {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
               Button(
                 onClick = {
-                  MarketplaceRepository.addToCart(liveProduct, quantity, selectedPaletteName, selectedSize)
-                  if (MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)) {
-                    Toast.makeText(context, AppLanguageManager.tr("Added to cart!", "کارٹ میں شامل کر دیا گیا!"), Toast.LENGTH_SHORT).show()
-                  }
+                  MarketplaceRepository.addToCart(
+                    product = liveProduct,
+                    quantity = quantity,
+                    palette = resolvedPaletteForCart,
+                    size = resolvedSizeForCart,
+                    variantId = selectedVariant?.id
+                  )
+                  Toast.makeText(context, AppLanguageManager.tr("Added to cart!", "کارٹ میں شامل کر دیا گیا!"), Toast.LENGTH_SHORT).show()
                 },
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = JTPurpleContainer, contentColor = JTPurplePrimary),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                modifier = Modifier.testTag("add_to_cart_bottom_button")
+                modifier = Modifier.heightIn(min = 48.dp).testTag("add_to_cart_bottom_button")
               ) {
                 Icon(Icons.Outlined.ShoppingBag, contentDescription = null, modifier = Modifier.size(17.dp))
                 Spacer(modifier = Modifier.width(6.dp))
@@ -276,13 +335,19 @@ fun ProductDetailScreen(
               }
               Button(
                 onClick = {
-                  MarketplaceRepository.addToCart(liveProduct, quantity, selectedPaletteName, selectedSize)
-                  if (MarketplaceRepository.canAddProductToCart(liveProduct, selectedPaletteName, selectedSize)) onBuyNowClick()
+                  MarketplaceRepository.addToCart(
+                    product = liveProduct,
+                    quantity = quantity,
+                    palette = resolvedPaletteForCart,
+                    size = resolvedSizeForCart,
+                    variantId = selectedVariant?.id
+                  )
+                  onBuyNowClick()
                 },
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = JTOrange, contentColor = Color.White),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                modifier = Modifier.testTag("buy_now_bottom_button")
+                modifier = Modifier.heightIn(min = 48.dp).testTag("buy_now_bottom_button")
               ) {
                 Icon(Icons.Filled.ElectricBolt, contentDescription = null, tint = JTAmber, modifier = Modifier.size(17.dp))
                 Spacer(modifier = Modifier.width(6.dp))
@@ -298,7 +363,8 @@ fun ProductDetailScreen(
     LazyColumn(
       modifier = Modifier
         .fillMaxSize()
-        .padding(paddingValues),
+        .padding(paddingValues)
+        .testTag("product_detail_lazy_list"),
       contentPadding = PaddingValues(bottom = 24.dp)
     ) {
       // 1. Sub Header with Collection Chip, Share and Wishlist
@@ -315,13 +381,16 @@ fun ProductDetailScreen(
           Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             IconButton(
               onClick = {
-                Toast.makeText(
-                  context,
-                  AppLanguageManager.tr("Sharing link to ${product.title}", "${product.title} کا لنک شیئر کیا جا رہا ہے"),
-                  Toast.LENGTH_SHORT
-                ).show()
+                ProductShareHelper.shareProduct(
+                  context = context,
+                  product = liveProduct,
+                  selectedVariant = selectedVariant,
+                  scope = shareScope
+                )
               },
-              modifier = Modifier.size(36.dp)
+              modifier = Modifier
+                .size(48.dp)
+                .testTag("product_share_button")
             ) {
               Icon(
                 imageVector = Icons.Outlined.Share,
@@ -359,14 +428,15 @@ fun ProductDetailScreen(
             .background(JTSurfaceVariant),
           contentAlignment = Alignment.Center
         ) {
-          val remoteUrl = liveProduct.imageUrl?.takeIf { it.isNotBlank() }
           when {
-            remoteUrl != null -> {
+            activeImageUrl != null -> {
               AsyncImage(
-                model = rememberSizedImageRequest(data = remoteUrl, widthPx = 900, heightPx = 900),
-                contentDescription = liveProduct.title,
+                model = rememberSizedImageRequest(data = activeImageUrl, widthPx = 900, heightPx = 900),
+                contentDescription = selectedVariant?.let { "${liveProduct.title} - ${it.optionValue}" } ?: liveProduct.title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                  .fillMaxSize()
+                  .testTag("product_hero_image")
               )
             }
             liveProduct.drawableRes != 0 -> {
@@ -387,24 +457,56 @@ fun ProductDetailScreen(
             }
           }
 
-          // Discount Tag
-          Column(
-            modifier = Modifier
-              .align(Alignment.TopStart)
-              .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-          ) {
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = JTRed
+          if (liveProduct.discountPercent > 0) {
+            Column(
+              modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp),
+              verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-              Text(
-                text = appText("${liveProduct.discountPercent}% OFF", "${liveProduct.discountPercent}% رعایت"),
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-              )
+              Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = JTRed
+              ) {
+                Text(
+                  text = appText("${liveProduct.discountPercent}% OFF", "${liveProduct.discountPercent}% رعایت"),
+                  color = Color.White,
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+              }
+            }
+          }
+        }
+
+        if (galleryImages.size > 1) {
+          Spacer(modifier = Modifier.height(10.dp))
+          LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            items(galleryImages, key = { it }) { thumbUrl ->
+              val isCurrent = activeImageUrl == thumbUrl
+              Box(
+                modifier = Modifier
+                  .size(60.dp)
+                  .clip(RoundedCornerShape(10.dp))
+                  .border(
+                    width = if (isCurrent) 2.dp else 1.dp,
+                    color = if (isCurrent) JTOrange else JTBorder,
+                    shape = RoundedCornerShape(10.dp)
+                  )
+                  .clickable { galleryOverrideUrl = thumbUrl }
+              ) {
+                AsyncImage(
+                  model = rememberSizedImageRequest(data = thumbUrl, widthPx = 180, heightPx = 180),
+                  contentDescription = liveProduct.title,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
+                )
+              }
             }
           }
         }
@@ -478,41 +580,65 @@ fun ProductDetailScreen(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
-              Row(verticalAlignment = Alignment.Bottom) {
+              Column(modifier = Modifier.weight(1f)) {
                 Text(
-                  text = "Rs. ${String.format("%,d", liveProduct.price)}",
-                  fontSize = 24.sp,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = JTPurplePrimary
+                  text = liveProduct.title,
+                  fontSize = 16.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = JTTextPrimary,
+                  maxLines = 2,
+                  overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = "Rs. ${String.format("%,d", product.originalPrice)}",
-                  fontSize = 14.sp,
-                  color = JTTextTertiary,
-                  textDecoration = TextDecoration.LineThrough,
-                  modifier = Modifier.padding(bottom = 2.dp)
-                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                  Text(
+                    text = "Rs. ${String.format("%,d", unitPrice)}",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = JTPurplePrimary,
+                    modifier = Modifier.testTag("product_detail_unit_price")
+                  )
+                  if (liveProduct.originalPrice > unitPrice) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                      text = "Rs. ${String.format("%,d", liveProduct.originalPrice)}",
+                      fontSize = 14.sp,
+                      color = JTTextTertiary,
+                      textDecoration = TextDecoration.LineThrough,
+                      modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                  }
+                }
               }
 
               Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = Color.White,
-                border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder)
+                border = BorderStroke(1.dp, JTBorder)
               ) {
                 Row(
                   verticalAlignment = Alignment.CenterVertically,
                   modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
+                  val stockDotColor = when {
+                    selectedVariant != null && !selectedVariant.isAvailable -> JTRed
+                    !liveProduct.isAvailable -> JTRed
+                    else -> JTAmber
+                  }
+                  val stockText = when {
+                    selectedVariant != null && !selectedVariant.isAvailable -> appText("Out of Stock", "اسٹاک ختم")
+                    selectedVariant?.stockQuantity != null -> appText("${selectedVariant.stockQuantity} in stock", "${selectedVariant.stockQuantity} دستیاب")
+                    else -> localizedStockBadgeText(liveProduct.inStockText)
+                  }
                   Box(
                     modifier = Modifier
                       .size(7.dp)
                       .clip(CircleShape)
-                      .background(JTAmber)
+                      .background(stockDotColor)
                   )
                   Spacer(modifier = Modifier.width(5.dp))
                   Text(
-                    text = localizedStockBadgeText(product.inStockText),
+                    text = stockText,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = JTTextPrimary
@@ -521,7 +647,7 @@ fun ProductDetailScreen(
               }
             }
 
-            if (product.savingsText != null) {
+            if (liveProduct.savingsText != null && selectedVariant?.priceOverride == null) {
               Spacer(modifier = Modifier.height(8.dp))
               Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -532,7 +658,7 @@ fun ProductDetailScreen(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                  text = product.savingsText,
+                  text = liveProduct.savingsText,
                   fontSize = 11.sp,
                   fontWeight = FontWeight.Medium,
                   color = JTAmberDark
@@ -599,125 +725,255 @@ fun ProductDetailScreen(
         }
       }
 
-      // 8. Select Palette Pattern
-      if (product.palettes.isNotEmpty()) {
-        item {
+      // 8. Product Variants (All option types; starts unselected)
+      if (liveProduct.variants.isNotEmpty()) {
+        item(key = "product_variants_section") {
           Spacer(modifier = Modifier.height(16.dp))
-          Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+          val groupedVariants = remember(liveProduct.variants) {
+            liveProduct.variants.groupBy { it.optionLabel.ifBlank { "Option" } }
+          }
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+          ) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
               Text(
-                text = appText("SELECT PALETTE PATTERN", "رنگ / پیٹرن منتخب کریں"),
+                text = appText("SELECT VARIANT OPTION", "ویرینٹ آپشن منتخب کریں"),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = JTTextPrimary,
                 letterSpacing = 0.5.sp
               )
               Text(
-                text = selectedPaletteName,
+                text = selectedVariant?.let { "${it.optionLabel}: ${it.optionValue}" }
+                  ?: appText("Required before adding to cart", "کارٹ میں شامل کرنے سے پہلے انتخاب ضروری ہے"),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = JTPurplePrimary
+                color = if (selectedVariant != null) JTPurplePrimary else JTOrangeDark
               )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-              product.palettes.forEach { palette ->
-                val isSelected = palette.name == selectedPaletteName
-                Surface(
-                  shape = RoundedCornerShape(10.dp),
-                  color = if (isSelected) JTPurplePrimary else JTSurfaceVariant,
-                  border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-                  modifier = Modifier
-                    .clickable { selectedPaletteName = palette.name }
-                    .testTag("palette_${palette.name}")
+            groupedVariants.forEach { (groupLabel, groupVariants) ->
+              Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                  text = groupLabel,
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = JTTextSecondary
+                )
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                  Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                  ) {
-                    Box(
+                  groupVariants.forEach { variant ->
+                    val isSelected = selectedVariantId == variant.id
+                    val variantPrice = variant.priceOverride ?: liveProduct.price
+                    Surface(
+                      shape = RoundedCornerShape(12.dp),
+                      color = when {
+                        isSelected -> JTOrangeContainer
+                        !variant.isAvailable -> JTSurfaceVariant.copy(alpha = 0.55f)
+                        else -> JTCardBg
+                      },
+                      border = BorderStroke(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = when {
+                          isSelected -> JTOrange
+                          !variant.isAvailable -> JTBorder.copy(alpha = 0.6f)
+                          else -> JTBorder
+                        }
+                      ),
                       modifier = Modifier
-                        .size(14.dp)
-                        .clip(CircleShape)
-                        .background(Color(palette.colorHex))
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                      text = palette.name.replace("Royal ", ""),
-                      fontSize = 12.sp,
-                      fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                      color = if (isSelected) Color.White else JTTextPrimary
-                    )
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                          selectedVariantId = if (isSelected) null else variant.id
+                          galleryOverrideUrl = null
+                        }
+                        .testTag("variant_option_${variant.id}")
+                    ) {
+                      Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                      ) {
+                        if (!variant.imageUrl.isNullOrBlank()) {
+                          AsyncImage(
+                            model = rememberSizedImageRequest(data = variant.imageUrl, widthPx = 120, heightPx = 120),
+                            contentDescription = variant.optionValue,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                              .size(32.dp)
+                              .clip(RoundedCornerShape(8.dp))
+                          )
+                        }
+                        Column {
+                          Text(
+                            text = variant.optionValue,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (!variant.isAvailable) JTTextTertiary else JTTextPrimary
+                          )
+                          Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                          ) {
+                            if (variant.priceOverride != null) {
+                              Text(
+                                text = "Rs. ${String.format("%,d", variantPrice)}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) JTOrangeDark else JTPurplePrimary
+                              )
+                            }
+                            if (!variant.isAvailable) {
+                              Text(
+                                text = appText("Out of stock", "ختم"),
+                                fontSize = 10.sp,
+                                color = JTRed,
+                                fontWeight = FontWeight.SemiBold
+                              )
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
             }
           }
         }
-      }
+      } else {
+        // Legacy fallback selectors when product_variants rows aren't present, still starting unselected
+        if (liveProduct.palettes.isNotEmpty()) {
+          item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text(
+                  text = appText("SELECT COLOUR / PATTERN", "رنگ / پیٹرن منتخب کریں"),
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.ExtraBold,
+                  color = JTTextPrimary,
+                  letterSpacing = 0.5.sp
+                )
+                Text(
+                  text = selectedPaletteName ?: appText("Choose one", "ایک منتخب کریں"),
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = if (selectedPaletteName != null) JTPurplePrimary else JTOrangeDark
+                )
+              }
 
-      // 9. Plate Diameter / Size selector
-      if (product.sizes.isNotEmpty()) {
-        item {
-          Spacer(modifier = Modifier.height(16.dp))
-          Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Text(
-                text = appText("PLATE DIAMETER", "سائز / آپشن منتخب کریں"),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = JTTextPrimary,
-                letterSpacing = 0.5.sp
-              )
-              Text(
-                text = product.sizes.getOrNull(selectedSizeIndex)?.title ?: "",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = JTPurplePrimary
-              )
+              Spacer(modifier = Modifier.height(8.dp))
+
+              Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                liveProduct.palettes.forEach { palette ->
+                  val isSelected = palette.name == selectedPaletteName
+                  Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) JTPurplePrimary else JTSurfaceVariant,
+                    border = if (isSelected) null else BorderStroke(1.dp, JTBorder),
+                    modifier = Modifier
+                      .heightIn(min = 48.dp)
+                      .clickable { selectedPaletteName = if (isSelected) null else palette.name }
+                      .testTag("palette_${palette.name}")
+                  ) {
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                      Box(
+                        modifier = Modifier
+                          .size(14.dp)
+                          .clip(CircleShape)
+                          .background(Color(palette.colorHex))
+                      )
+                      Spacer(modifier = Modifier.width(8.dp))
+                      Text(
+                        text = palette.name.replace("Royal ", ""),
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Color.White else JTTextPrimary
+                      )
+                    }
+                  }
+                }
+              }
             }
+          }
+        }
 
-            Spacer(modifier = Modifier.height(8.dp))
+        if (liveProduct.sizes.isNotEmpty()) {
+          item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text(
+                  text = appText("SELECT OPTION", "آپشن منتخب کریں"),
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.ExtraBold,
+                  color = JTTextPrimary,
+                  letterSpacing = 0.5.sp
+                )
+                Text(
+                  text = legacySelectedSize ?: appText("Choose one", "ایک منتخب کریں"),
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = if (legacySelectedSize != null) JTPurplePrimary else JTOrangeDark
+                )
+              }
 
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-              product.sizes.forEachIndexed { index, size ->
-                val isSelected = index == selectedSizeIndex
-                Surface(
-                  shape = RoundedCornerShape(12.dp),
-                  color = if (isSelected) JTPurpleContainer.copy(alpha = 0.4f) else JTCardBg,
-                  border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, JTPurplePrimary) else androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-                  modifier = Modifier
-                    .weight(1f)
-                    .clickable { selectedSizeIndex = index }
-                    .testTag("size_option_$index")
-                ) {
-                  Column(modifier = Modifier.padding(10.dp)) {
-                    Text(
-                      text = size.title,
-                      fontSize = 12.sp,
-                      fontWeight = FontWeight.Bold,
-                      color = if (isSelected) JTPurplePrimary else JTTextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                      text = size.subtitle,
-                      fontSize = 10.sp,
-                      color = JTTextSecondary,
-                      lineHeight = 12.sp
-                    )
+              Spacer(modifier = Modifier.height(8.dp))
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                liveProduct.sizes.forEachIndexed { index, size ->
+                  val isSelected = index == selectedSizeIndex
+                  Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) JTPurpleContainer.copy(alpha = 0.4f) else JTCardBg,
+                    border = if (isSelected) BorderStroke(1.5.dp, JTPurplePrimary) else BorderStroke(1.dp, JTBorder),
+                    modifier = Modifier
+                      .weight(1f)
+                      .heightIn(min = 48.dp)
+                      .clickable { selectedSizeIndex = if (isSelected) null else index }
+                      .testTag("size_option_$index")
+                  ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                      Text(
+                        text = size.title,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) JTPurplePrimary else JTTextPrimary
+                      )
+                      Spacer(modifier = Modifier.height(2.dp))
+                      Text(
+                        text = size.subtitle,
+                        fontSize = 10.sp,
+                        color = JTTextSecondary,
+                        lineHeight = 12.sp
+                      )
+                    }
                   }
                 }
               }
@@ -760,14 +1016,14 @@ fun ProductDetailScreen(
       }
 
       // 11. Product details and real customer reviews
-      if (product.craftStory.isNotBlank() || product.highlights.isNotEmpty()) item {
+      if (liveProduct.craftStory.isNotBlank() || liveProduct.highlights.isNotEmpty()) item {
         Spacer(modifier = Modifier.height(18.dp))
 
         // Accordion 1: Product Highlights & Craft Story
         Surface(
           shape = RoundedCornerShape(14.dp),
           color = JTCardBg,
-          border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
+          border = BorderStroke(1.dp, JTBorder),
           modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -804,8 +1060,8 @@ fun ProductDetailScreen(
 
             AnimatedVisibility(visible = craftStoryExpanded) {
               Column(modifier = Modifier.padding(top = 12.dp)) {
-                if (product.craftStory.isNotBlank()) Text(
-                  text = product.craftStory,
+                if (liveProduct.craftStory.isNotBlank()) Text(
+                  text = liveProduct.craftStory,
                   fontSize = 11.sp,
                   color = JTTextSecondary,
                   lineHeight = 16.sp
@@ -813,7 +1069,7 @@ fun ProductDetailScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                product.highlights.forEach { highlight ->
+                liveProduct.highlights.forEach { highlight ->
                   Row(
                     modifier = Modifier.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.Top

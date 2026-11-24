@@ -14,6 +14,21 @@ data class SizeOption(
   val isSelected: Boolean = false
 )
 
+data class ProductVariant(
+  val id: String,
+  val optionLabel: String,
+  val optionValue: String,
+  val sku: String? = null,
+  val priceOverride: Int? = null,
+  val imageUrl: String? = null,
+  val isAvailable: Boolean = true,
+  val stockQuantity: Int = 0,
+  val sortOrder: Int = 0
+) {
+  val displayText: String
+    get() = if (optionLabel.isNotBlank()) "$optionLabel: $optionValue" else optionValue
+}
+
 data class Product(
   val sellerId: String? = null,
   val id: String,
@@ -29,6 +44,7 @@ data class Product(
   val reviewCount: Int,
   @param:DrawableRes val drawableRes: Int = 0,
   val imageUrl: String? = null,
+  val imageUrls: List<String> = emptyList(),
   val badge: String? = null,
   val inStockText: String = "Availability not verified",
   val savingsText: String? = null,
@@ -42,6 +58,7 @@ data class Product(
   val highlights: List<String> = emptyList(),
   val palettes: List<PaletteOption> = emptyList(),
   val sizes: List<SizeOption> = emptyList(),
+  val variants: List<ProductVariant> = emptyList(),
   val variantIds: Map<String, String> = emptyMap(),
   val isArtisanCollection: Boolean = false,
   val isFeatured: Boolean = false,
@@ -61,11 +78,40 @@ data class CartItem(
   val selectedPalette: String? = null,
   val selectedSize: String? = null,
   val variantId: String? = null,
+  val unitPrice: Int? = null,
+  val variantLabel: String? = null,
+  val variantValue: String? = null,
+  val variantImageUrl: String? = null,
   val vendorFulfillmentStatus: String = "pending",
   val deliveryStatus: String = "pending"
 ) {
+  val matchedVariant: ProductVariant?
+    get() = variantId?.let { vid -> product.variants.firstOrNull { it.id == vid } }
+
+  val resolvedUnitPrice: Int
+    get() = unitPrice ?: matchedVariant?.priceOverride ?: product.price
+
+  val resolvedImageUrl: String?
+    get() = variantImageUrl?.takeIf { it.isNotBlank() }
+      ?: matchedVariant?.imageUrl?.takeIf { it.isNotBlank() }
+      ?: product.imageUrl
+
+  val variantDisplayText: String?
+    get() {
+      val v = matchedVariant
+      if (v != null) return v.displayText
+      val parts = listOfNotNull(
+        variantLabel?.takeIf { it.isNotBlank() }?.let { lbl ->
+          variantValue?.takeIf { it.isNotBlank() }?.let { "$lbl: $it" }
+        } ?: variantValue?.takeIf { it.isNotBlank() },
+        selectedSize?.takeIf { it.isNotBlank() },
+        selectedPalette?.takeIf { it.isNotBlank() }
+      ).distinct()
+      return parts.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+    }
+
   val totalPrice: Int
-    get() = product.price * quantity
+    get() = resolvedUnitPrice * quantity
 }
 
 data class VendorCartGroup(

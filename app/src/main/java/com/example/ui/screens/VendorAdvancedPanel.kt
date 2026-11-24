@@ -63,8 +63,11 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
   var selectedVariantId by remember { mutableStateOf<String?>(null) }
   var variantLabel by remember { mutableStateOf("Size") }
   var variantValue by remember { mutableStateOf("") }
+  var variantSku by remember { mutableStateOf("") }
   var variantPrice by remember { mutableStateOf("") }
   var variantStock by remember { mutableStateOf("0") }
+  var variantImageUrl by remember { mutableStateOf<String?>(null) }
+  var variantImageUri by remember { mutableStateOf<Uri?>(null) }
   var cases by remember { mutableStateOf(JSONArray()) }
   var tickets by remember { mutableStateOf(JSONArray()) }
   var subject by remember { mutableStateOf("") }
@@ -125,6 +128,10 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
       }
       finally { saving = false; imageProductId = null }
     }
+  }
+
+  val variantImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+    if (uri != null) variantImageUri = uri
   }
 
 
@@ -515,7 +522,8 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             else {
               variantProductId = id
               selectedVariantId = null
-              variantValue = ""; variantPrice = ""; variantStock = "0"
+              variantValue = ""; variantSku = ""; variantPrice = ""; variantStock = "0"
+              variantImageUrl = null; variantImageUri = null
               scope.launch { try { variantRows = VendorService.listVariants(id) } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Variants could not be loaded.", "اقسام لوڈ نہیں ہو سکیں۔") } }
             }
           }) { Text(if (variantProductId == id) appText("Close variant editor", "اقسام ایڈیٹر بند کریں") else appText("Manage variants (add / edit / delete)", "اقسام کا انتظام کریں (شامل / ترمیم / حذف)")) }
@@ -528,7 +536,10 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                   selectedVariantId = row.optString("id")
                   variantLabel = row.optString("option_label")
                   variantValue = row.optString("option_value")
+                  variantSku = if (row.isNull("sku")) "" else row.optString("sku").takeUnless { it == "null" }.orEmpty()
                   variantPrice = if (row.isNull("price_override")) "" else row.optString("price_override")
+                  variantImageUrl = if (row.isNull("image_url")) null else row.optString("image_url").takeUnless { it == "null" }?.ifBlank { null }
+                  variantImageUri = null
                   scope.launch {
                     try {
                       val inventory = VendorService.listInventory()
@@ -558,6 +569,7 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                         keep.put(JSONObject().put("id", candidate.optString("id"))
                           .put("option_label", candidate.optString("option_label")).put("option_value", candidate.optString("option_value"))
                           .put("sku", candidate.opt("sku") ?: JSONObject.NULL).put("price_override", candidate.opt("price_override") ?: JSONObject.NULL)
+                          .put("image_url", candidate.opt("image_url") ?: JSONObject.NULL)
                           .put("attributes", candidate.optJSONObject("attributes") ?: JSONObject()).put("quantity", qty))
                       }
                       VendorService.saveVariants(id, keep)
@@ -571,14 +583,41 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
             }
             VendorAdvancedField(appText("Option name (Size, Colour, etc.)", "آپشن کا نام (سائز، رنگ وغیرہ)"), variantLabel) { variantLabel = it }
             VendorAdvancedField(appText("Option value", "آپشن کی قدر"), variantValue) { variantValue = it }
-            VendorAdvancedField(appText("Price override (optional PKR)", "متبادل قیمت (اختیاری PKR)"), variantPrice) { variantPrice = it }
+            VendorAdvancedField(appText("Variant SKU (optional)", "قسم کا SKU (اختیاری)"), variantSku) { variantSku = it }
+            VendorAdvancedField(appText("Price override (optional PKR)", "متبادل قیمت (اختیاری PKR)"), variantPrice) { variantPrice = it.filter { ch -> ch.isDigit() || ch == '.' } }
             VendorAdvancedField(appText("Variant stock", "قسم کا اسٹاک"), variantStock) { variantStock = it.filter(Char::isDigit) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              OutlinedButton(enabled = !saving, onClick = { variantImagePicker.launch("image/*") }) {
+                Text(
+                  if (variantImageUri != null || !variantImageUrl.isNullOrBlank()) {
+                    appText("Change variant image", "قسم کی تصویر تبدیل کریں")
+                  } else {
+                    appText("Pick variant image", "قسم کی تصویر منتخب کریں")
+                  }
+                )
+              }
+              if (variantImageUri != null || !variantImageUrl.isNullOrBlank()) {
+                TextButton(enabled = !saving, onClick = { variantImageUri = null; variantImageUrl = null }) {
+                  Text(appText("Clear image", "تصویر ہٹائیں"))
+                }
+              }
+            }
             Button(enabled = !saving, onClick = {
               scope.launch {
                 saving = true; errorMessage = ""
                 try {
                   require(variantLabel.isNotBlank() && variantValue.isNotBlank()) { AppLanguageManager.tr("Enter a variant option and value.", "قسم کا آپشن اور قدر درج کریں۔") }
                   val qty = variantStock.toIntOrNull() ?: error(AppLanguageManager.tr("Enter valid variant stock.", "قسم کا درست اسٹاک درج کریں۔"))
+                  val parsedPrice: Any = if (variantPrice.isBlank()) JSONObject.NULL else {
+                    variantPrice.toDoubleOrNull()?.takeIf { it > 0.0 }
+                      ?: error(AppLanguageManager.tr("Enter a valid variant price.", "قسم کی درست قیمت درج کریں۔"))
+                  }
+                  val resolvedImgUrl = variantImageUri?.let { uri ->
+                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                      ?: error(AppLanguageManager.tr("Variant image could not be read.", "قسم کی تصویر پڑھی نہیں جا سکی۔"))
+                    VendorService.uploadVariantImage(id, bytes, mime)
+                  } ?: variantImageUrl
                   val existing = VendorService.listVariants(id)
                   val inventory = VendorService.listInventory()
                   val rows = JSONArray()
@@ -593,17 +632,22 @@ fun VendorAdvancedPanel(application: VendorApplication, products: JSONArray, onR
                     rows.put(JSONObject().put("id", old.optString("id"))
                       .put("option_label", if (editingThis) variantLabel.trim() else old.optString("option_label"))
                       .put("option_value", if (editingThis) variantValue.trim() else old.optString("option_value"))
-                      .put("sku", old.opt("sku") ?: JSONObject.NULL)
-                      .put("price_override", if (editingThis) variantPrice.toIntOrNull() ?: JSONObject.NULL else old.opt("price_override") ?: JSONObject.NULL)
+                      .put("sku", if (editingThis) variantSku.trim().ifBlank { JSONObject.NULL } else (old.opt("sku") ?: JSONObject.NULL))
+                      .put("price_override", if (editingThis) parsedPrice else (old.opt("price_override") ?: JSONObject.NULL))
+                      .put("image_url", if (editingThis) (resolvedImgUrl ?: JSONObject.NULL) else (old.opt("image_url") ?: JSONObject.NULL))
                       .put("attributes", old.optJSONObject("attributes") ?: JSONObject()).put("quantity", if (editingThis) qty else oldQty))
                   }
                   if (selectedVariantId == null) rows.put(JSONObject().put("id", JSONObject.NULL).put("option_label", variantLabel.trim())
-                    .put("option_value", variantValue.trim()).put("sku", JSONObject.NULL)
-                    .put("price_override", variantPrice.toIntOrNull() ?: JSONObject.NULL)
+                    .put("option_value", variantValue.trim()).put("sku", variantSku.trim().ifBlank { JSONObject.NULL })
+                    .put("price_override", parsedPrice)
+                    .put("image_url", resolvedImgUrl ?: JSONObject.NULL)
                     .put("attributes", JSONObject()).put("quantity", qty))
                   VendorService.saveVariants(id, rows)
+                  variantRows = VendorService.listVariants(id)
                   message = if (selectedVariantId == null) AppLanguageManager.tr("Variant added.", "قسم شامل کر دی گئی۔") else AppLanguageManager.tr("Variant updated.", "قسم اپڈیٹ ہو گئی۔")
-                  selectedVariantId = null; variantProductId = null
+                  selectedVariantId = null
+                  variantValue = ""; variantSku = ""; variantPrice = ""; variantStock = "0"
+                  variantImageUrl = null; variantImageUri = null
                 } catch (e: Exception) { errorMessage = e.message ?: AppLanguageManager.tr("Variant could not be saved.", "قسم محفوظ نہیں ہو سکی۔") }
                 finally { saving = false }
               }

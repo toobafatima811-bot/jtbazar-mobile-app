@@ -272,49 +272,60 @@ fun PublicShopWeeklyHoursCard(
       val days = weeklyHours.orderedDays()
       days.forEachIndexed { index, dayHours ->
         val isToday = dayHours.day == status.todayDay
-        Row(
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = if (isToday) JTOrangeContainer else Color.Transparent,
+          border = if (isToday) BorderStroke(1.dp, JTOrangeBorder) else null,
           modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isToday) JTSurfaceVariant else Color.Transparent)
-            .padding(horizontal = 8.dp, vertical = 6.dp)
             .semantics(mergeDescendants = true) {}
-            .testTag("public_shop_hours_row_${dayHours.day.key}"),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween
+            .testTag("public_shop_hours_row_${dayHours.day.key}")
         ) {
           Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.weight(1f)
+            horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text(
-              text = dayHours.day.localizedName(),
-              style = MaterialTheme.typography.bodyMedium,
-              fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-              color = JTTextPrimary
-            )
-            if (isToday) {
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = JTOrangeContainer
-              ) {
-                Text(
-                  text = appText("Today", "آج"),
-                  style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.Bold,
-                  color = JTOrangeDark,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              modifier = Modifier.weight(1f)
+            ) {
+              Text(
+                text = dayHours.day.localizedName(),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                color = if (isToday) JTOrangeDark else JTTextPrimary
+              )
+              if (isToday) {
+                Surface(
+                  shape = RoundedCornerShape(6.dp),
+                  color = JTOrange,
+                  modifier = Modifier.testTag("public_shop_hours_today_badge")
+                ) {
+                  Text(
+                    text = appText("Today", "آج"),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  )
+                }
               }
             }
+            Text(
+              text = dayHours.formattedRange(),
+              style = MaterialTheme.typography.bodySmall,
+              fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+              color = when {
+                !dayHours.isOpen -> JTRed
+                isToday -> JTOrangeDark
+                else -> JTTextPrimary
+              }
+            )
           }
-          Text(
-            text = dayHours.formattedRange(),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-            color = if (dayHours.isOpen) JTTextPrimary else JTRed
-          )
         }
         if (index < days.lastIndex) {
           HorizontalDivider(color = JTBorder.copy(alpha = 0.55f))

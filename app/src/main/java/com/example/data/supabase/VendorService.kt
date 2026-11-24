@@ -434,7 +434,26 @@ object VendorService {
   }
 
   suspend fun listVariants(productId: String): JSONArray =
-    JSONArray(fail(SupabaseClient.get("product_variants?product_id=eq.$productId&select=id,option_label,option_value,sku,price_override,attributes,sort_order&order=sort_order.asc&limit=100")))
+    JSONArray(fail(SupabaseClient.get("product_variants?product_id=eq.$productId&select=id,product_id,option_label,option_value,sku,price_override,image_url,attributes,is_active,sort_order&order=sort_order.asc&limit=100")))
+
+  suspend fun uploadVariantImage(productId: String, bytes: ByteArray, mime: String): String {
+    val user = SupabaseClient.currentUser.value ?: throw IOException("Please sign in again.")
+    require(productId.isNotBlank()) { "Product ID is missing; variant image cannot be attached." }
+    require(bytes.isNotEmpty()) { "The selected variant image is empty. Choose the image again." }
+    require(bytes.size <= 10 * 1024 * 1024) { "Variant images must be 10 MB or smaller." }
+    val normalizedMime = when (mime.lowercase().substringBefore(';').trim()) {
+      "image/jpg", "image/pjpeg" -> "image/jpeg"
+      "image/jpeg", "image/png", "image/webp", "image/avif" -> mime.lowercase().substringBefore(';').trim()
+      else -> throw IOException("Unsupported image type ($mime). Choose JPG, PNG, WebP or AVIF.")
+    }
+    val ext = when (normalizedMime) { "image/jpeg" -> "jpg"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "avif" }
+    val path = "${user.id}/$productId/variants/${System.currentTimeMillis()}-${UUID.randomUUID()}.$ext"
+    return try {
+      SupabaseClient.uploadPublicFile("product-images", path, bytes, normalizedMime, upsert = false).getOrThrow()
+    } catch (e: Exception) {
+      throw IOException("Variant image upload failed (${e.message ?: "unknown storage error"}).", e)
+    }
+  }
 
   suspend fun setDailyAvailability(productId: String, isDailyItem: Boolean, quantity: Int, minimumQuantity: Int = 1, minimumOrderValue: Int? = null, shopIsOpen: Boolean? = null) {
     require(quantity >= 0 && minimumQuantity >= 1) { "Enter valid daily quantities." }

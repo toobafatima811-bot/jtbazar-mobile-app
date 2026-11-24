@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,13 +15,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,8 +46,9 @@ import com.example.ui.theme.JTOrange
  * Renders admin-approved promotional banner images for a specific homepage placement.
  * Strictly renders pure banner images (no border, no card wrapper, no white background,
  * no shadow, no external title/description block), auto-adjusts height to each image's
- * original aspect ratio, keeps 8dp horizontal margins & 8dp spacing between banners,
- * and overlays an optional orange/white CTA button inside the bottom-left image bounds.
+ * original aspect ratio, applies consistent responsive 16-22dp vertical spacing above/below
+ * and 16-20dp spacing between multiple banners, and overlays an optional CTA button inside
+ * the bottom-left image bounds.
  */
 @Composable
 fun PromotionBannerSection(
@@ -54,20 +57,60 @@ fun PromotionBannerSection(
   onDestinationClick: (String?) -> Unit,
   modifier: Modifier = Modifier
 ) {
-  if (promotions.isEmpty()) return
+  val renderablePromotions = remember(promotions) {
+    promotions.filter { it.primaryBannerImageUrl() != null }
+  }
+  if (renderablePromotions.isEmpty()) return
 
-  Column(
+  var failedIds by remember(renderablePromotions) { mutableStateOf(emptySet<String>()) }
+  val visiblePromotions = remember(renderablePromotions, failedIds) {
+    renderablePromotions.filterNot { it.id in failedIds }
+  }
+  if (visiblePromotions.isEmpty()) return
+
+  BoxWithConstraints(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = 8.dp, vertical = 4.dp)
-      .testTag("promo_placement_${placement.canonicalKey}"),
-    verticalArrangement = Arrangement.spacedBy(8.dp)
+      .clipToBounds(),
+    contentAlignment = Alignment.Center
   ) {
-    promotions.forEach { promotion ->
-      PromotionBannerItem(
-        promotion = promotion,
-        onDestinationClick = onDestinationClick
-      )
+    val isExpanded = maxWidth >= 840.dp
+    val isMedium = maxWidth >= 600.dp
+    val horizontalPadding = when {
+      isExpanded -> 24.dp
+      isMedium -> 20.dp
+      else -> 14.dp
+    }
+    val verticalPadding = when {
+      isExpanded -> 22.dp
+      isMedium -> 20.dp
+      else -> 18.dp
+    }
+    val interBannerSpacing = when {
+      isExpanded -> 20.dp
+      isMedium -> 18.dp
+      else -> 16.dp
+    }
+
+    Column(
+      modifier = Modifier
+        .widthIn(max = 960.dp)
+        .fillMaxWidth()
+        .padding(horizontal = horizontalPadding, vertical = verticalPadding)
+        .testTag("promo_placement_${placement.canonicalKey}"),
+      verticalArrangement = Arrangement.spacedBy(interBannerSpacing)
+    ) {
+      visiblePromotions.forEach { promotion ->
+        key(promotion.id) {
+          PromotionBannerItem(
+            promotion = promotion,
+            onDestinationClick = onDestinationClick,
+            onLoadFailed = {
+              failedIds = failedIds + promotion.id
+            }
+          )
+        }
+      }
     }
   }
 }
@@ -76,7 +119,8 @@ fun PromotionBannerSection(
 fun PromotionBannerItem(
   promotion: SupabasePromotionDto,
   onDestinationClick: (String?) -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onLoadFailed: (() -> Unit)? = null
 ) {
   val imageUrl = promotion.primaryBannerImageUrl() ?: return
   val context = LocalContext.current
@@ -154,6 +198,7 @@ fun PromotionBannerItem(
       onError = {
         isLoading = false
         isFailed = true
+        onLoadFailed?.invoke()
       },
       modifier = Modifier
         .then(if (intrinsicAspectRatio != null) Modifier.fillMaxSize() else Modifier.fillMaxWidth().wrapContentHeight())

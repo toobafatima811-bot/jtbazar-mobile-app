@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.CategoryItem
 import com.example.data.model.Product
@@ -495,7 +496,29 @@ internal fun PublicShopDetailScreen(
                 if (shop.city.isNotBlank()) Text(shop.city, style = MaterialTheme.typography.bodySmall)
               }
             }
-            if (shop.description.isNotBlank()) Text(shop.description, style = MaterialTheme.typography.bodyMedium)
+            if (shop.description.isNotBlank()) {
+              HorizontalDivider(color = JTBorder.copy(alpha = 0.7f))
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+              ) {
+                Text(
+                  text = appText("About this shop", "اس دکان کے بارے میں"),
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = JTTextSecondary
+                )
+                Text(
+                  text = shop.description.trim(),
+                  style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
+                  color = JTTextPrimary,
+                  maxLines = Int.MAX_VALUE,
+                  modifier = Modifier.testTag("public_shop_description")
+                )
+              }
+            }
           }
         }
       }

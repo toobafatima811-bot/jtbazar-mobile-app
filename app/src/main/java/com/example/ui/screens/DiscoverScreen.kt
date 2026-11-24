@@ -305,26 +305,35 @@ fun DiscoverScreen(
             videos = productVideos,
             onProductClick = onProductClick,
             onAddToCart = { prod ->
-              MarketplaceRepository.addToCart(prod, 1)
-              Toast.makeText(
-                context,
-                AppLanguageManager.tr("Added ${prod.title} to cart!", "${prod.title} ٹوکری میں شامل ہو گیا!"),
-                Toast.LENGTH_SHORT
-              ).show()
+              if (prod.variants.isNotEmpty() || prod.variantIds.isNotEmpty()) {
+                Toast.makeText(
+                  context,
+                  AppLanguageManager.tr(
+                    "Please choose a variant option first.",
+                    "براہ کرم پہلے ویرینٹ آپشن منتخب کریں۔"
+                  ),
+                  Toast.LENGTH_SHORT
+                ).show()
+                onProductClick(prod)
+              } else {
+                MarketplaceRepository.addToCart(prod, 1)
+                Toast.makeText(
+                  context,
+                  AppLanguageManager.tr("Added ${prod.title} to cart!", "${prod.title} ٹوکری میں شامل ہو گیا!"),
+                  Toast.LENGTH_SHORT
+                ).show()
+              }
             },
             onToggleWishlist = { prod ->
               MarketplaceRepository.toggleWishlist(prod.id, prod)
             },
             onShare = { prod ->
-              val sendIntent = Intent().apply {
-                action = Intent.ACTION_SEND
-                putExtra(
-                  Intent.EXTRA_TEXT,
-                  AppLanguageManager.tr("Check out ${prod.title} on JTBazar: Rs. ${prod.price}", "جے ٹی بازار پر ${prod.title} دیکھیں: ${prod.price} روپے")
-                )
-                type = "text/plain"
-              }
-              context.startActivity(Intent.createChooser(sendIntent, AppLanguageManager.tr("Share Product", "مصنوعہ شیئر کریں")))
+              com.example.util.ProductShareHelper.shareProduct(
+                context = context,
+                product = prod,
+                selectedVariant = null,
+                scope = locationScope
+              )
             }
           )
         }

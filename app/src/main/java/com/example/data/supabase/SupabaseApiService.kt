@@ -206,7 +206,7 @@ object SupabaseApiService {
     }
     val variantsDeferred = async {
       SupabaseClient.get(
-        "product_variants?select=id,product_id,option_label,option_value,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
+        "product_variants?select=id,product_id,option_label,option_value,sku,price_override,image_url,attributes,is_active,sort_order&product_id=in.($idFilter)&is_active=eq.true&order=sort_order.asc"
       ).getOrNull() ?: "[]"
     }
     val inventoryDeferred = async {
@@ -260,10 +260,16 @@ object SupabaseApiService {
       row.put("category", categoriesById[row.optString("category_id")] ?: JSONObject())
     }
     val quantities = mutableMapOf<String, Int>()
+    val variantQuantities = mutableMapOf<String, Int>()
     if (inventory != null) for (i in 0 until inventory.length()) {
       val row = inventory.getJSONObject(i)
       val pid = row.optString("product_id")
-      quantities[pid] = (quantities[pid] ?: 0) + row.optInt("available_quantity", 0)
+      val qty = row.optInt("available_quantity", 0)
+      quantities[pid] = (quantities[pid] ?: 0) + qty
+      val vid = row.optNonNullString("variant_id", "").trim()
+      if (vid.isNotBlank()) {
+        variantQuantities[vid] = qty
+      }
     }
     val available = mutableMapOf<String, Boolean>()
     if (availability != null) for (i in 0 until availability.length()) {
@@ -271,10 +277,39 @@ object SupabaseApiService {
       val pid = row.optString("product_id")
       available[pid] = (available[pid] ?: false) || row.optBoolean("is_available", false)
     }
-    parseProductsJson(products.toString(), quantities, available, availability != null, availability)
+    parseProductsJson(
+      jsonStr = products.toString(),
+      quantities = quantities,
+      variantQuantities = variantQuantities,
+      availability = available,
+      availabilityKnown = availability != null,
+      availabilityRows = availability
+    )
   }
 
-  private fun parseProductsJson(jsonStr: String, quantities: Map<String, Int> = emptyMap(), availability: Map<String, Boolean> = emptyMap(), availabilityKnown: Boolean = false, availabilityRows: JSONArray? = null): List<SupabaseProductDto> {
+  private fun resolveStorageOrRemoteImageUrl(rawUrl: String?, storagePath: String? = null): String? {
+    val cleanUrl = rawUrl?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+    if (cleanUrl != null) {
+      if (cleanUrl.startsWith("https://", ignoreCase = true) || cleanUrl.startsWith("http://", ignoreCase = true)) {
+        return cleanUrl
+      }
+      val normalizedPath = cleanUrl.trimStart('/')
+      if (normalizedPath.isNotBlank()) {
+        return "${SupabaseConfig.storageUrl}/object/public/product-images/${normalizedPath.replace(" ", "%20")}"
+      }
+    }
+    val cleanPath = storagePath?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }?.trimStart('/')
+    return cleanPath?.let { "${SupabaseConfig.storageUrl}/object/public/product-images/${it.replace(" ", "%20")}" }
+  }
+
+  private fun parseProductsJson(
+    jsonStr: String,
+    quantities: Map<String, Int> = emptyMap(),
+    variantQuantities: Map<String, Int> = emptyMap(),
+    availability: Map<String, Boolean> = emptyMap(),
+    availabilityKnown: Boolean = false,
+    availabilityRows: JSONArray? = null
+  ): List<SupabaseProductDto> {
     val rows = JSONArray(jsonStr)
     return (0 until rows.length()).mapNotNull { index ->
       val obj = rows.optJSONObject(index) ?: return@mapNotNull null
@@ -284,40 +319,144 @@ object SupabaseApiService {
       val discount = obj.optDouble("discount_percent", 0.0).toInt().coerceIn(0, 100)
       val price = (basePrice * (100 - discount) / 100.0).toInt()
       val imageRows = obj.optJSONArray("images")
-      val primaryImage = if (imageRows == null) null else (0 until imageRows.length()).mapNotNull { imageRows.optJSONObject(it) }.sortedWith(compareByDescending<JSONObject> { it.optBoolean("is_primary") }.thenBy { it.optInt("sort_order") }).firstOrNull()
-      val directImage = primaryImage?.optString("image_url", "") ?: ""
-      val storagePath = primaryImage?.optString("storage_path", "") ?: ""
-      val imageUrl = directImage.takeIf { it.startsWith("https://") } ?: storagePath.takeIf { it.isNotBlank() }?.let { "${SupabaseConfig.storageUrl}/object/public/product-images/${it.replace(" ", "%20")}" }
-      val palettes = mutableListOf<String>(); val sizes = mutableListOf<String>(); val variantIds = mutableMapOf<String, String>(); val variants = obj.optJSONArray("variants")
-      if (variants != null) for (i in 0 until variants.length()) {
-        val variant = variants.optJSONObject(i) ?: continue
-        if (!variant.optBoolean("is_active", true)) continue
-        val label = variant.optString("option_label"); val value = variant.optString("option_value")
-        val rawVariantId = variant.optString("id").takeIf { !variant.isNull("id") && it.isNotBlank() && it != "null" }
-        val validVariantId = rawVariantId?.takeIf { UUID_REGEX.matches(it) }
-        if (label.contains("color", true) || label.contains("colour", true)) {
-          palettes.add(value)
-          if (validVariantId != null) variantIds["color:" + value] = validVariantId
-        }
-        if (label.contains("size", true)) {
-          sizes.add(value)
-          if (validVariantId != null) variantIds["size:" + value] = validVariantId
-        }
-      }
-      val highlights = mutableListOf<String>(); val specs = obj.optJSONArray("specifications")
-      if (specs != null) for (i in 0 until specs.length()) {
-        val spec = specs.optJSONObject(i) ?: continue
-        if (spec.optString("label").isNotBlank() && spec.optString("value").isNotBlank()) highlights.add(spec.optString("label") + ": " + spec.optString("value"))
-      }
-      val id = obj.optString("id"); val known = availabilityKnown && availability.containsKey(id); val stock = known && availability[id] == true
+      val sortedImageObjects = if (imageRows == null) emptyList() else (0 until imageRows.length())
+        .mapNotNull { imageRows.optJSONObject(it) }
+        .sortedWith(compareByDescending<JSONObject> { it.optBoolean("is_primary") }.thenBy { it.optInt("sort_order") })
+      val allImageUrls = sortedImageObjects.mapNotNull { img ->
+        resolveStorageOrRemoteImageUrl(img.optNonNullString("image_url", ""), img.optNonNullString("storage_path", ""))
+      }.distinct()
+      val imageUrl = allImageUrls.firstOrNull()
+
+      val id = obj.optString("id")
+      val known = availabilityKnown && availability.containsKey(id)
+      val stock = known && availability[id] == true
       val variantAvailability = mutableMapOf<String, Boolean>()
       if (availabilityRows != null) for (availabilityIndex in 0 until availabilityRows.length()) {
         val availabilityRow = availabilityRows.optJSONObject(availabilityIndex) ?: continue
-        if (availabilityRow.optString("product_id") == id && !availabilityRow.isNull("variant_id")) variantAvailability[availabilityRow.optString("variant_id")] = availabilityRow.optBoolean("is_available", false)
+        if (availabilityRow.optString("product_id") == id && !availabilityRow.isNull("variant_id")) {
+          val vid = availabilityRow.optNonNullString("variant_id", "").trim()
+          if (vid.isNotBlank()) {
+            variantAvailability[vid] = availabilityRow.optBoolean("is_available", false)
+          }
+        }
       }
+
+      val palettes = mutableListOf<String>()
+      val sizes = mutableListOf<String>()
+      val variantIds = mutableMapOf<String, String>()
+      val structuredVariants = mutableListOf<SupabaseProductVariantDto>()
+      val variants = obj.optJSONArray("variants")
+      if (variants != null) for (i in 0 until variants.length()) {
+        val variant = variants.optJSONObject(i) ?: continue
+        if (!variant.optBoolean("is_active", true)) continue
+        var label = variant.optNonNullString("option_label", "").trim()
+        var value = variant.optNonNullString("option_value", "").trim()
+        if (label.isBlank() && value.isBlank()) {
+          val attrs = variant.optJSONObject("attributes")
+          if (attrs != null && attrs.length() > 0) {
+            val firstKey = attrs.keys().next()
+            label = firstKey
+            value = attrs.optNonNullString(firstKey, "").trim()
+          }
+        }
+        if (value.isBlank()) continue
+        if (label.isBlank()) label = "Option"
+
+        val rawVariantId = variant.optNonNullString("id", "").trim()
+        val validVariantId = rawVariantId.takeIf { UUID_REGEX.matches(it) }
+        val variantIdForDto = validVariantId ?: rawVariantId.ifBlank { "var_${id}_$i" }
+        val sku = variant.optNonNullString("sku", "").takeIf { it.isNotBlank() }
+        val rawPriceOverride = if (!variant.isNull("price_override")) variant.optDouble("price_override", Double.NaN) else Double.NaN
+        val priceOverride = if (!rawPriceOverride.isNaN() && rawPriceOverride > 0.0) {
+          kotlin.math.round(rawPriceOverride).toInt()
+        } else null
+        val variantImageUrl = resolveStorageOrRemoteImageUrl(variant.optNonNullString("image_url", ""))
+        val variantStock = variantQuantities[variantIdForDto] ?: 0
+        val variantAvailable = when {
+          validVariantId != null && variantAvailability.containsKey(validVariantId) ->
+            variantAvailability[validVariantId] == true
+          variantAvailability.isNotEmpty() -> false
+          else -> stock
+        }
+
+        structuredVariants.add(
+          SupabaseProductVariantDto(
+            id = variantIdForDto,
+            optionLabel = label,
+            optionValue = value,
+            sku = sku,
+            priceOverride = priceOverride,
+            imageUrl = variantImageUrl,
+            isAvailable = variantAvailable,
+            stockQuantity = variantStock,
+            sortOrder = variant.optInt("sort_order", i)
+          )
+        )
+
+        if (label.contains("color", true) || label.contains("colour", true)) {
+          palettes.add(value)
+          if (validVariantId != null) variantIds["color:$value"] = validVariantId
+        }
+        if (label.contains("size", true)) {
+          sizes.add(value)
+          if (validVariantId != null) variantIds["size:$value"] = validVariantId
+        }
+        if (validVariantId != null) {
+          variantIds["$label:$value"] = validVariantId
+        }
+      }
+
+      val highlights = mutableListOf<String>()
+      val specs = obj.optJSONArray("specifications")
+      if (specs != null) for (i in 0 until specs.length()) {
+        val spec = specs.optJSONObject(i) ?: continue
+        if (spec.optString("label").isNotBlank() && spec.optString("value").isNotBlank()) {
+          highlights.add(spec.optString("label") + ": " + spec.optString("value"))
+        }
+      }
+
       val foodUnit = obj.optString("food_selling_unit").takeIf { it.isNotBlank() && it != "null" }
       val dailyStatus = obj.optString("daily_status").takeIf { it.isNotBlank() && it != "null" }
-      SupabaseProductDto(id=id,sellerId=obj.optString("seller_id").takeIf { it.isNotBlank() && it != "null" },title=obj.optString("name",""),vendor=seller?.optString("shop_name")?.takeIf{it.isNotBlank()}?:"",createdAt=obj.optString("created_at",""),category=category?.optString("name")?:"",categoryId=category?.optString("id")?:"",price=price,originalPrice=basePrice.toInt(),discountPercent=discount,rating=0.0,reviewCount=0,imageUrl=imageUrl,badge=if(discount>0)"$discount% OFF" else null,inStock=stock,stockQuantity=quantities[id]?:0,inStockText=if(!known)"Availability not verified" else if(stock)"In Stock" else "Out of Stock",vendorVerified=false,vendorRating="",vendorSales="",vendorAvatarText="",deliveryText="Delivered by JTBazar",paymentInfo="Cash on Delivery",craftStory=obj.optString("description",""),highlights=highlights,palettes=palettes.distinct(),sizes=sizes.distinct(),variantIds=variantIds,isArtisanCollection=false,isFeatured=obj.optBoolean("is_featured",false),isBestSeller=false,isNewArrival=obj.optBoolean("is_new_arrival",false),availabilityKnown=known,dailyStatus=dailyStatus,foodSellingUnit=foodUnit,variantAvailability=variantAvailability)
+      SupabaseProductDto(
+        id = id,
+        sellerId = obj.optString("seller_id").takeIf { it.isNotBlank() && it != "null" },
+        title = obj.optString("name", ""),
+        vendor = seller?.optString("shop_name")?.takeIf { it.isNotBlank() } ?: "",
+        createdAt = obj.optString("created_at", ""),
+        category = category?.optString("name") ?: "",
+        categoryId = category?.optString("id") ?: "",
+        price = price,
+        originalPrice = basePrice.toInt(),
+        discountPercent = discount,
+        rating = 0.0,
+        reviewCount = 0,
+        imageUrl = imageUrl,
+        imageUrls = allImageUrls,
+        badge = if (discount > 0) "$discount% OFF" else null,
+        inStock = stock,
+        stockQuantity = quantities[id] ?: 0,
+        inStockText = if (!known) "Availability not verified" else if (stock) "In Stock" else "Out of Stock",
+        vendorVerified = false,
+        vendorRating = "",
+        vendorSales = "",
+        vendorAvatarText = "",
+        deliveryText = "Delivered by JTBazar",
+        paymentInfo = "Cash on Delivery",
+        craftStory = obj.optString("description", ""),
+        highlights = highlights,
+        palettes = palettes.distinct(),
+        sizes = sizes.distinct(),
+        variants = structuredVariants,
+        variantIds = variantIds,
+        isArtisanCollection = false,
+        isFeatured = obj.optBoolean("is_featured", false),
+        isBestSeller = false,
+        isNewArrival = obj.optBoolean("is_new_arrival", false),
+        availabilityKnown = known,
+        dailyStatus = dailyStatus,
+        foodSellingUnit = foodUnit,
+        variantAvailability = variantAvailability
+      )
     }
   }
 
@@ -340,6 +479,100 @@ object SupabaseApiService {
         )
       }
     } catch (e: Exception) { Result.failure(e) }
+  }
+
+  private fun JSONObject.optDoubleNullable(vararg keys: String): Double? {
+    for (key in keys) {
+      if (has(key) && !isNull(key)) {
+        val value = optDouble(key, Double.NaN)
+        if (!value.isNaN()) return value
+      }
+    }
+    return null
+  }
+
+  suspend fun fetchDeliveryPricingSettings(): Result<DeliveryPricingSettingsDto?> = withContext(Dispatchers.IO) {
+    try {
+      SupabaseClient.get("delivery_pricing_settings?select=*&limit=1").mapCatching { json ->
+        val rows = JSONArray(json)
+        if (rows.length() == 0) return@mapCatching null
+        val row = rows.getJSONObject(0)
+        DeliveryPricingSettingsDto(
+          originLat = row.optDoubleNullable("origin_lat", "base_lat", "store_lat", "warehouse_lat", "latitude", "lat"),
+          originLng = row.optDoubleNullable("origin_lng", "base_lng", "store_lng", "warehouse_lng", "longitude", "lng"),
+          maxDeliveryRadiusKm = row.optDoubleNullable("max_delivery_radius_km", "delivery_radius_km", "max_radius_km", "radius_km"),
+          isActive = if (row.has("is_active") && !row.isNull("is_active")) row.optBoolean("is_active", true) else true
+        )
+      }
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+  }
+
+  suspend fun fetchDeliveryFeeQuote(
+    latitude: Double,
+    longitude: Double
+  ): Result<DeliveryFeeQuoteDto> = withContext(Dispatchers.IO) {
+    try {
+      val paramCandidates = listOf(
+        JSONObject().put("p_delivery_lat", latitude).put("p_delivery_lng", longitude),
+        JSONObject().put("p_lat", latitude).put("p_lng", longitude),
+        JSONObject().put("lat", latitude).put("lng", longitude)
+      )
+      var lastError: Throwable? = null
+      for (params in paramCandidates) {
+        val res = SupabaseClient.rpc("get_delivery_fee_quote", params.toString(), requireAuth = false)
+        if (res.isSuccess) {
+          val raw = res.getOrThrow().trim()
+          val row = when {
+            raw.startsWith("[") -> JSONArray(raw).optJSONObject(0)
+            raw.startsWith("{") -> JSONObject(raw)
+            else -> null
+          } ?: throw IOException("Delivery quote response was empty.")
+
+          val feeDouble = row.optDoubleNullable("delivery_fee", "fee", "quoted_fee", "amount")
+          val distanceKm = row.optDoubleNullable("distance_km", "distance", "km")
+          val serviceable = when {
+            row.has("is_serviceable") && !row.isNull("is_serviceable") -> row.optBoolean("is_serviceable", true)
+            row.has("serviceable") && !row.isNull("serviceable") -> row.optBoolean("serviceable", true)
+            row.has("within_range") && !row.isNull("within_range") -> row.optBoolean("within_range", true)
+            row.has("allowed") && !row.isNull("allowed") -> row.optBoolean("allowed", true)
+            row.has("in_range") && !row.isNull("in_range") -> row.optBoolean("in_range", true)
+            else -> true
+          }
+          val msg = row.optNonNullString("message", "").ifBlank {
+            row.optNonNullString("reason", "").ifBlank { row.optNonNullString("error", "") }
+          }.takeIf { it.isNotBlank() }
+
+          if (feeDouble == null && serviceable) {
+            throw IOException(msg ?: "Delivery fee could not be calculated for this location.")
+          }
+
+          return@withContext Result.success(
+            DeliveryFeeQuoteDto(
+              deliveryFee = kotlin.math.round(feeDouble ?: 0.0).toInt().coerceAtLeast(0),
+              distanceKm = distanceKm,
+              isServiceable = serviceable,
+              originLat = row.optDoubleNullable("origin_lat", "base_lat", "store_lat", "warehouse_lat"),
+              originLng = row.optDoubleNullable("origin_lng", "base_lng", "store_lng", "warehouse_lng"),
+              maxRadiusKm = row.optDoubleNullable("max_delivery_radius_km", "delivery_radius_km", "max_radius_km", "radius_km"),
+              message = msg
+            )
+          )
+        }
+        val err = res.exceptionOrNull()
+        lastError = err
+        val errMsg = err?.message.orEmpty()
+        val isSignatureMismatch = errMsg.contains("PGRST202", ignoreCase = true) ||
+          errMsg.contains("error 404", ignoreCase = true) ||
+          errMsg.contains("Could not find the function", ignoreCase = true)
+        if (!isSignatureMismatch) break
+      }
+      Result.failure(lastError ?: IOException("Delivery fee quote is unavailable."))
+    } catch (e: Exception) {
+      runCatching { Log.w(TAG, "get_delivery_fee_quote RPC failed: ${e.message}") }
+      Result.failure(e)
+    }
   }
 
   // LIVE HOMEPAGE CONTENT (same published rows as the website)

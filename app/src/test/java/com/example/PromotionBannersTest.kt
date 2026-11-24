@@ -3,12 +3,23 @@ package com.example
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import coil.Coil
 import coil.ImageLoader
@@ -247,5 +258,103 @@ class PromotionBannersTest {
     composeTestRule.onNodeWithTag("promo_banner_cta_with_cta").performClick()
     composeTestRule.waitForIdle()
     assertEquals("/categories", clickedDest)
+  }
+
+  @Test
+  fun singleBannerHasConsistentTopAndBottomSpacingFromAdjacentSections() {
+    val sellerBanner = samplePromo(
+      id = "seller_single",
+      position = "seller_banner",
+      ctaText = "Become a Seller",
+      ctaDestination = "/vendor/apply"
+    )
+
+    composeTestRule.setContent {
+      JTBazarTheme(darkTheme = false) {
+        Box(modifier = Modifier.width(360.dp)) {
+          LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            item {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(48.dp)
+                  .testTag("section_above")
+              ) { Text("Above Section") }
+            }
+            item {
+              PromotionBannerSection(
+                placement = BannerPlacement.SELLER_BANNER,
+                promotions = listOf(sellerBanner),
+                onDestinationClick = {}
+              )
+            }
+            item {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(48.dp)
+                  .testTag("section_below")
+              ) { Text("Below Section") }
+            }
+          }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    val aboveBounds = composeTestRule.onNodeWithTag("section_above").getUnclippedBoundsInRoot()
+    val bannerBounds = composeTestRule.onNodeWithTag("promo_banner_item_seller_single").getUnclippedBoundsInRoot()
+    val belowBounds = composeTestRule.onNodeWithTag("section_below").getUnclippedBoundsInRoot()
+
+    val topGap = bannerBounds.top - aboveBounds.bottom
+    val bottomGap = belowBounds.top - bannerBounds.bottom
+    assertTrue("Expected >= 16dp top gap, got $topGap", topGap >= 16.dp)
+    assertTrue("Expected <= 24dp top gap, got $topGap", topGap <= 24.dp)
+    assertTrue("Expected >= 16dp bottom gap, got $bottomGap", bottomGap >= 16.dp)
+    assertTrue("Expected <= 24dp bottom gap, got $bottomGap", bottomGap <= 24.dp)
+  }
+
+  @Test
+  @Config(qualifiers = "w1080dp-h1000dp")
+  fun multipleBannersHaveConsistentSpacingBetweenEachOtherAndResponsiveTabletBounds() {
+    val b1 = samplePromo(id = "multi_1", position = "offer_section")
+    val b2 = samplePromo(id = "multi_2", position = "offer_section")
+
+    composeTestRule.setContent {
+      JTBazarTheme(darkTheme = false) {
+        Column(modifier = Modifier.width(1080.dp)) {
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(40.dp)
+              .testTag("tablet_above")
+          ) { Text("Above Tablet") }
+
+          PromotionBannerSection(
+            placement = BannerPlacement.OFFER_SECTION,
+            promotions = listOf(b1, b2),
+            onDestinationClick = {}
+          )
+
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(40.dp)
+              .testTag("tablet_below")
+          ) { Text("Below Tablet") }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    val aboveBounds = composeTestRule.onNodeWithTag("tablet_above").getUnclippedBoundsInRoot()
+    val b1Bounds = composeTestRule.onNodeWithTag("promo_banner_item_multi_1").getUnclippedBoundsInRoot()
+    val b2Bounds = composeTestRule.onNodeWithTag("promo_banner_item_multi_2").getUnclippedBoundsInRoot()
+    val belowBounds = composeTestRule.onNodeWithTag("tablet_below").getUnclippedBoundsInRoot()
+
+    assertTrue("Expected >= 20dp top gap on tablet, got ${b1Bounds.top - aboveBounds.bottom}", (b1Bounds.top - aboveBounds.bottom) >= 20.dp)
+    assertTrue("Expected >= 20dp gap between multiple banners on tablet, got ${b2Bounds.top - b1Bounds.bottom}", (b2Bounds.top - b1Bounds.bottom) >= 20.dp)
+    assertTrue("Expected >= 20dp bottom gap on tablet, got ${belowBounds.top - b2Bounds.bottom}", (belowBounds.top - b2Bounds.bottom) >= 20.dp)
+    assertTrue("Banner width should be capped cleanly on large tablets, got ${b1Bounds.right - b1Bounds.left}", (b1Bounds.right - b1Bounds.left) <= 960.dp)
   }
 }

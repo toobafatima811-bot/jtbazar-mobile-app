@@ -85,6 +85,9 @@ import com.example.ui.components.VendorOutlinedTextField
 import com.example.ui.theme.VendorColors
 import com.example.ui.theme.VendorShapes
 import com.example.ui.theme.VendorSpacing
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Style
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -92,6 +95,18 @@ import java.util.Locale
 
 private fun JSONObject.vendorEditCleanString(key: String, fallback: String = ""): String =
   optString(key, fallback).takeUnless { it == "null" } ?: fallback
+
+private data class EditableProductVariant(
+  val id: String? = null,
+  val optionLabel: String = "Size",
+  val optionValue: String = "",
+  val sku: String = "",
+  val priceOverride: String = "",
+  val stock: String = "0",
+  val imageUrl: String? = null,
+  val localImageUri: Uri? = null,
+  val attributesJson: String = "{}"
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,6 +164,12 @@ fun VendorProductEditScreen(
   var dailyItem by remember(id) { mutableStateOf(product.optBoolean("is_daily_item", false)) }
   var dailyStatus by remember(id) { mutableStateOf(product.vendorEditCleanString("daily_status", "available").ifBlank { "available" }) }
   var dailyQuantity by remember(id) { mutableStateOf(product.vendorEditCleanString("daily_available_quantity", "0").ifBlank { "0" }) }
+  var variants by remember(id) { mutableStateOf<List<EditableProductVariant>>(emptyList()) }
+  var variantsLoading by remember(id) { mutableStateOf(true) }
+  var variantsLoadedSuccessfully by remember(id) { mutableStateOf(false) }
+  var variantsLoadError by remember(id) { mutableStateOf("") }
+  var variantsDirty by remember(id) { mutableStateOf(false) }
+  var activeVariantImageIndex by remember(id) { mutableStateOf<Int?>(null) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
   var message by remember { mutableStateOf("") }
@@ -167,8 +188,54 @@ fun VendorProductEditScreen(
           )
         }
       imagesLoading = false
+
+      variantsLoading = true
+      variantsLoadError = ""
+      runCatching {
+        val rawVariants = VendorService.listVariants(id)
+        val inventoryRows = runCatching { VendorService.listInventory() }.getOrDefault(JSONArray())
+        val stockByVariantId = mutableMapOf<String, Int>()
+        for (j in 0 until inventoryRows.length()) {
+          val inv = inventoryRows.optJSONObject(j) ?: continue
+          val vid = inv.vendorEditCleanString("variant_id")
+          if (vid.isNotBlank()) {
+            stockByVariantId[vid] = inv.optInt("quantity", 0)
+          }
+        }
+        (0 until rawVariants.length()).mapNotNull { idx ->
+          val row = rawVariants.optJSONObject(idx) ?: return@mapNotNull null
+          val vid = row.vendorEditCleanString("id").ifBlank { null }
+          val priceStr = if (row.isNull("price_override")) "" else row.vendorEditCleanString("price_override")
+          val imgUrl = row.vendorEditCleanString("image_url").ifBlank { null }
+          val attrs = row.optJSONObject("attributes")?.toString() ?: "{}"
+          EditableProductVariant(
+            id = vid,
+            optionLabel = row.vendorEditCleanString("option_label", "Option").ifBlank { "Option" },
+            optionValue = row.vendorEditCleanString("option_value"),
+            sku = row.vendorEditCleanString("sku"),
+            priceOverride = priceStr,
+            stock = (vid?.let { stockByVariantId[it] } ?: 0).toString(),
+            imageUrl = imgUrl,
+            localImageUri = null,
+            attributesJson = attrs
+          )
+        }
+      }.onSuccess { loaded ->
+        variants = loaded
+        variantsLoadedSuccessfully = true
+        variantsDirty = false
+      }.onFailure { err ->
+        variantsLoadedSuccessfully = false
+        variantsLoadError = err.message ?: AppLanguageManager.tr(
+          "Product variants could not be loaded.",
+          "پروڈکٹ ویرینٹس لوڈ نہیں ہو سکے۔"
+        )
+      }
+      variantsLoading = false
     } else {
       imagesLoading = false
+      variantsLoading = false
+      variantsLoadedSuccessfully = true
     }
   }
 
@@ -183,6 +250,16 @@ fun VendorProductEditScreen(
         "ایک پروڈکٹ کی زیادہ سے زیادہ 8 تصاویر ہو سکتی ہیں۔"
       )
     }
+  }
+  val variantImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { selectedUri ->
+    val idx = activeVariantImageIndex
+    if (selectedUri != null && idx != null && idx in variants.indices) {
+      variants = variants.toMutableList().also {
+        it[idx] = it[idx].copy(localImageUri = selectedUri)
+      }
+      variantsDirty = true
+    }
+    activeVariantImageIndex = null
   }
 
   Column(
@@ -530,6 +607,218 @@ fun VendorProductEditScreen(
         }
       }
 
+      // Product Variants
+      item {
+        AppCard {
+          Column(verticalArrangement = Arrangement.spacedBy(VendorSpacing.sm)) {
+            SectionHeader(
+              title = appText("Product variants (${variants.size})", "پروڈکٹ ویرینٹس (${variants.size})"),
+              subtitle = appText(
+                "View, add, edit or remove variants with dedicated price, stock and image.",
+                "الگ قیمت، اسٹاک اور تصویر کے ساتھ ویرینٹس دیکھیں، شامل کریں، ترمیم کریں یا ہٹائیں۔"
+              ),
+              actionLabel = appText("Add variant", "ویرینٹ شامل کریں"),
+              actionIcon = Icons.Rounded.Add,
+              onActionClick = {
+                if (!saving) {
+                  variants = variants + EditableProductVariant()
+                  variantsDirty = true
+                }
+              }
+            )
+            if (variantsLoading) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(20.dp),
+                  color = VendorColors.PrimaryOrange,
+                  strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(VendorSpacing.xs))
+                Text(
+                  appText("Loading existing variants...", "موجودہ ویرینٹس لوڈ ہو رہے ہیں..."),
+                  style = MaterialTheme.typography.bodySmall
+                )
+              }
+            }
+            if (variantsLoadError.isNotBlank()) {
+              VendorAlertBanner(message = variantsLoadError, isError = true)
+            }
+            if (!variantsLoading && variants.isEmpty() && variantsLoadError.isBlank()) {
+              Text(
+                text = appText(
+                  "No variants added yet. Tap Add variant if this product has colours, sizes, weights or packs.",
+                  "ابھی کوئی ویرینٹ شامل نہیں۔ اگر اس پروڈکٹ کے رنگ، سائز، وزن یا پیک ہیں تو ویرینٹ شامل کریں۔"
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = VendorColors.TextSecondary
+              )
+            }
+            variants.forEachIndexed { index, variant ->
+              Surface(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("vendor_edit_variant_card_$index"),
+                shape = VendorShapes.input,
+                color = VendorColors.Background,
+                border = BorderStroke(1.dp, VendorColors.BorderSubtle)
+              ) {
+                Column(
+                  modifier = Modifier.padding(VendorSpacing.sm),
+                  verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
+                ) {
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Text(
+                      text = appText("Variant ${index + 1}", "ویرینٹ ${index + 1}"),
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.Bold
+                    )
+                    TextButton(
+                      enabled = !saving,
+                      onClick = {
+                        variants = variants.filterIndexed { i, _ -> i != index }
+                        variantsDirty = true
+                      }
+                    ) {
+                      Icon(
+                        imageVector = Icons.Rounded.Delete,
+                        contentDescription = appText("Remove variant", "ویرینٹ ہٹائیں"),
+                        tint = VendorColors.DangerRed,
+                        modifier = Modifier.size(18.dp)
+                      )
+                      Text(appText("Remove", "ہٹائیں"), color = VendorColors.DangerRed)
+                    }
+                  }
+                  VendorOutlinedTextField(
+                    value = variant.optionLabel,
+                    onValueChange = { v ->
+                      variants = variants.toMutableList().also { it[index] = variant.copy(optionLabel = v) }
+                      variantsDirty = true
+                    },
+                    label = appText("Option name (e.g. Size, Color, Pack)", "آپشن کا نام (مثلاً سائز، رنگ، پیک)"),
+                    leadingIcon = Icons.Rounded.Style
+                  )
+                  VendorOutlinedTextField(
+                    value = variant.optionValue,
+                    onValueChange = { v ->
+                      variants = variants.toMutableList().also { it[index] = variant.copy(optionValue = v) }
+                      variantsDirty = true
+                    },
+                    label = appText("Option value *", "آپشن کی قدر *"),
+                    leadingIcon = Icons.Rounded.Style
+                  )
+                  VendorOutlinedTextField(
+                    value = variant.sku,
+                    onValueChange = { v ->
+                      variants = variants.toMutableList().also { it[index] = variant.copy(sku = v) }
+                      variantsDirty = true
+                    },
+                    label = appText("Variant SKU", "ویرینٹ SKU"),
+                    leadingIcon = Icons.Rounded.QrCode2
+                  )
+                  VendorOutlinedTextField(
+                    value = variant.priceOverride,
+                    onValueChange = { v ->
+                      val clean = v.filter { ch -> ch.isDigit() || ch == '.' }
+                      variants = variants.toMutableList().also { it[index] = variant.copy(priceOverride = clean) }
+                      variantsDirty = true
+                    },
+                    label = appText("Price override (optional PKR)", "مخصوص قیمت (اختیاری روپے)"),
+                    leadingIcon = Icons.Rounded.AttachMoney,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                  )
+                  VendorOutlinedTextField(
+                    value = variant.stock,
+                    onValueChange = { v ->
+                      variants = variants.toMutableList().also { it[index] = variant.copy(stock = v.filter(Char::isDigit)) }
+                      variantsDirty = true
+                    },
+                    label = appText("Variant stock quantity", "ویرینٹ اسٹاک مقدار"),
+                    leadingIcon = Icons.Rounded.Inventory2,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                  )
+                  val previewModel: Any? = variant.localImageUri ?: variant.imageUrl?.takeIf { it.isNotBlank() }
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+                  ) {
+                    if (previewModel != null) {
+                      AsyncImage(
+                        model = previewModel,
+                        contentDescription = appText("Variant image", "ویرینٹ تصویر"),
+                        modifier = Modifier
+                          .size(56.dp)
+                          .clip(VendorShapes.badge),
+                        contentScale = ContentScale.Crop
+                      )
+                    } else {
+                      Surface(
+                        modifier = Modifier.size(56.dp),
+                        shape = VendorShapes.badge,
+                        color = VendorColors.CardWhite,
+                        border = BorderStroke(1.dp, VendorColors.BorderSubtle)
+                      ) {
+                        Icon(
+                          imageVector = Icons.Rounded.Image,
+                          contentDescription = null,
+                          tint = VendorColors.TextSecondary,
+                          modifier = Modifier.padding(14.dp)
+                        )
+                      }
+                    }
+                    Row(
+                      modifier = Modifier.weight(1f),
+                      horizontalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
+                    ) {
+                      TextButton(
+                        enabled = !saving,
+                        onClick = {
+                          activeVariantImageIndex = index
+                          variantImagePicker.launch("image/*")
+                        },
+                        modifier = Modifier.testTag("vendor_edit_variant_pick_image_$index")
+                      ) {
+                        Icon(
+                          imageVector = Icons.Rounded.AddPhotoAlternate,
+                          contentDescription = null,
+                          modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                          if (previewModel == null) appText("Variant image", "ویرینٹ تصویر")
+                          else appText("Change image", "تصویر تبدیل کریں")
+                        )
+                      }
+                      if (previewModel != null) {
+                        TextButton(
+                          enabled = !saving,
+                          onClick = {
+                            variants = variants.toMutableList().also {
+                              it[index] = variant.copy(imageUrl = null, localImageUri = null)
+                            }
+                            variantsDirty = true
+                          }
+                        ) {
+                          Text(appText("Clear", "ہٹائیں"), color = VendorColors.DangerRed)
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       // Food & Groceries (conditional)
       if (showFoodFields) {
         item {
@@ -805,6 +1094,82 @@ fun VendorProductEditScreen(
                 }
                 existingImageUrls = VendorService.listProductImageUrls(id)
                 newImages = emptyList()
+                if (variantsDirty || variants.any { it.localImageUri != null }) {
+                  if (!variantsLoadedSuccessfully && variantsLoadError.isNotBlank() && variants.isEmpty()) {
+                    error(AppLanguageManager.tr("Existing variants failed to load; reload before saving variants.", "موجودہ ویرینٹس لوڈ نہیں ہو سکے؛ ویرینٹس محفوظ کرنے سے پہلے دوبارہ لوڈ کریں۔"))
+                  }
+                  val seenPairs = mutableSetOf<String>()
+                  val variantJson = JSONArray()
+                  for (v in variants) {
+                    val labelClean = v.optionLabel.trim()
+                    val valueClean = v.optionValue.trim()
+                    require(labelClean.isNotBlank() && valueClean.isNotBlank()) {
+                      AppLanguageManager.tr("Complete every variant option name and value.", "ہر ویرینٹ آپشن کا نام اور قدر مکمل کریں۔")
+                    }
+                    require(seenPairs.add("${labelClean.lowercase(Locale.ROOT)}::${valueClean.lowercase(Locale.ROOT)}")) {
+                      AppLanguageManager.tr("Duplicate variant option: $labelClean ($valueClean).", "دہرایا گیا ویرینٹ آپشن: $labelClean ($valueClean)۔")
+                    }
+                    val stockQty = v.stock.toIntOrNull()
+                      ?: error(AppLanguageManager.tr("Enter valid stock for variant $valueClean.", "ویرینٹ $valueClean کے لیے درست اسٹاک درج کریں۔"))
+                    require(stockQty >= 0) {
+                      AppLanguageManager.tr("Variant stock cannot be negative.", "ویرینٹ اسٹاک منفی نہیں ہو سکتا۔")
+                    }
+                    val overridePrice: Any = if (v.priceOverride.isBlank()) {
+                      JSONObject.NULL
+                    } else {
+                      val parsedPrice = v.priceOverride.toDoubleOrNull()
+                        ?: error(AppLanguageManager.tr("Enter valid price for variant $valueClean.", "ویرینٹ $valueClean کے لیے درست قیمت درج کریں۔"))
+                      require(parsedPrice > 0.0) {
+                        AppLanguageManager.tr("Variant price override must be greater than zero.", "ویرینٹ کی مخصوص قیمت صفر سے زیادہ ہونی چاہیے۔")
+                      }
+                      parsedPrice
+                    }
+                    val resolvedVariantImageUrl = if (v.localImageUri != null) {
+                      val mime = context.contentResolver.getType(v.localImageUri) ?: "image/jpeg"
+                      val bytes = context.contentResolver.openInputStream(v.localImageUri)?.use { it.readBytes() }
+                        ?: error(AppLanguageManager.tr("Variant image could not be read.", "ویرینٹ تصویر پڑھی نہیں جا سکی۔"))
+                      VendorService.uploadVariantImage(id, bytes, mime)
+                    } else {
+                      v.imageUrl?.takeIf { it.isNotBlank() }
+                    }
+                    val attrsObj = runCatching { JSONObject(v.attributesJson) }.getOrDefault(JSONObject())
+                    val row = JSONObject()
+                      .put("id", v.id ?: JSONObject.NULL)
+                      .put("option_label", labelClean)
+                      .put("option_value", valueClean)
+                      .put("sku", v.sku.trim().ifBlank { JSONObject.NULL })
+                      .put("price_override", overridePrice)
+                      .put("image_url", resolvedVariantImageUrl ?: JSONObject.NULL)
+                      .put("attributes", attrsObj)
+                      .put("quantity", stockQty)
+                    variantJson.put(row)
+                  }
+                  VendorService.saveVariants(id, variantJson)
+                  val reloaded = VendorService.listVariants(id)
+                  val invAfter = runCatching { VendorService.listInventory() }.getOrDefault(JSONArray())
+                  val stockAfter = mutableMapOf<String, Int>()
+                  for (j in 0 until invAfter.length()) {
+                    val inv = invAfter.optJSONObject(j) ?: continue
+                    val vid = inv.vendorEditCleanString("variant_id")
+                    if (vid.isNotBlank()) stockAfter[vid] = inv.optInt("quantity", 0)
+                  }
+                  variants = (0 until reloaded.length()).mapNotNull { idx ->
+                    val row = reloaded.optJSONObject(idx) ?: return@mapNotNull null
+                    val vid = row.vendorEditCleanString("id").ifBlank { null }
+                    EditableProductVariant(
+                      id = vid,
+                      optionLabel = row.vendorEditCleanString("option_label", "Option"),
+                      optionValue = row.vendorEditCleanString("option_value"),
+                      sku = row.vendorEditCleanString("sku"),
+                      priceOverride = if (row.isNull("price_override")) "" else row.vendorEditCleanString("price_override"),
+                      stock = (vid?.let { stockAfter[it] } ?: 0).toString(),
+                      imageUrl = row.vendorEditCleanString("image_url").ifBlank { null },
+                      localImageUri = null,
+                      attributesJson = row.optJSONObject("attributes")?.toString() ?: "{}"
+                    )
+                  }
+                  variantsDirty = false
+                }
                 val outcome = VendorService.finalizeProductSubmission(
                   productId = id,
                   allowDirectPublish = allowDirectPublish,

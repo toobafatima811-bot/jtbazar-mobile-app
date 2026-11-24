@@ -346,6 +346,7 @@ fun HomeScreen(
           modifier = Modifier
             .fillMaxWidth()
             .padding(top = 10.dp)
+            .testTag("home_shop_by_category_section")
         ) {
           Row(
             modifier = Modifier
@@ -445,7 +446,10 @@ fun HomeScreen(
         }
         item(key = "trusted_shops_strip", contentType = "horizontal_strip") {
           Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(top = 14.dp)
+              .testTag("home_trusted_shops_section"),
             verticalArrangement = Arrangement.spacedBy(10.dp)
           ) {
             Row(
@@ -670,7 +674,8 @@ fun HomeScreen(
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 16.dp),
+              .padding(horizontal = 16.dp)
+              .testTag("home_popular_header"),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
@@ -797,7 +802,7 @@ fun HomeScreen(
           val chunkedNewArrivals = remember(newArrivals, productGridColumns) {
             newArrivals.chunked(productGridColumns)
           }
-          Column(modifier = Modifier.fillMaxWidth().padding(top = 22.dp)) {
+          Column(modifier = Modifier.fillMaxWidth().padding(top = 22.dp).testTag("home_new_arrivals_section")) {
             Row(
               modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
               horizontalArrangement = Arrangement.SpaceBetween,
@@ -870,14 +875,14 @@ fun HomeScreen(
           }
         }
 
-        item(key = "below_new_arrivals_banners") {
+        item(key = "below_new_arrivals_banners", contentType = "promo_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.BELOW_NEW_ARRIVALS,
             promotions = promotionsFor(BannerPlacement.BELOW_NEW_ARRIVALS),
             onDestinationClick = handleBannerClick
           )
         }
-        item(key = "offer_section_banners") {
+        item(key = "offer_section_banners", contentType = "promo_banner") {
           PromotionBannerSection(
             placement = BannerPlacement.OFFER_SECTION,
             promotions = promotionsFor(BannerPlacement.OFFER_SECTION),

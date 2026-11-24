@@ -85,12 +85,15 @@ import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
 
+import androidx.compose.material.icons.rounded.Image
+
 private data class ListingVariant(
   val optionName: String = "Size",
   val optionValue: String = "",
   val sku: String = "",
   val price: String = "",
-  val stock: String = "0"
+  val stock: String = "0",
+  val imageUri: Uri? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,6 +133,7 @@ fun VendorListingEditor(
   var foodDailyStatus by remember { mutableStateOf("available") }
   var foodDailyQuantity by remember { mutableStateOf("0") }
   var variants by remember { mutableStateOf(listOf<ListingVariant>()) }
+  var activeVariantImageIndex by remember { mutableStateOf<Int?>(null) }
   var images by remember { mutableStateOf<List<Uri>>(emptyList()) }
   var saving by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
@@ -154,6 +158,15 @@ fun VendorListingEditor(
     if (selected.size > remaining) {
       errorMessage = AppLanguageManager.tr("You can add up to 8 images total.", "آپ کل 8 تصاویر تک شامل کر سکتے ہیں۔")
     }
+  }
+  val variantImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { selectedUri ->
+    val idx = activeVariantImageIndex
+    if (selectedUri != null && idx != null && idx in variants.indices) {
+      variants = variants.toMutableList().also {
+        it[idx] = it[idx].copy(imageUri = selectedUri)
+      }
+    }
+    activeVariantImageIndex = null
   }
 
   fun fieldNumber(value: String, labelEn: String, labelUr: String, allowDecimal: Boolean = true): Double {
@@ -615,6 +628,55 @@ fun VendorListingEditor(
                     leadingIcon = Icons.Rounded.Inventory2,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                   )
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+                  ) {
+                    if (variant.imageUri != null) {
+                      AsyncImage(
+                        model = variant.imageUri,
+                        contentDescription = appText("Variant image", "ویرینٹ تصویر"),
+                        modifier = Modifier.size(56.dp).clip(VendorShapes.badge),
+                        contentScale = ContentScale.Crop
+                      )
+                    } else {
+                      Surface(
+                        modifier = Modifier.size(56.dp),
+                        shape = VendorShapes.badge,
+                        color = VendorColors.CardWhite,
+                        border = BorderStroke(1.dp, VendorColors.BorderSubtle)
+                      ) {
+                        Icon(
+                          imageVector = Icons.Rounded.Image,
+                          contentDescription = null,
+                          tint = VendorColors.TextSecondary,
+                          modifier = Modifier.padding(14.dp)
+                        )
+                      }
+                    }
+                    TextButton(
+                      enabled = !saving,
+                      onClick = {
+                        activeVariantImageIndex = index
+                        variantImagePicker.launch("image/*")
+                      }
+                    ) {
+                      Icon(imageVector = Icons.Rounded.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
+                      Text(
+                        if (variant.imageUri == null) appText("Variant image", "ویرینٹ تصویر")
+                        else appText("Change image", "تصویر تبدیل کریں")
+                      )
+                    }
+                    if (variant.imageUri != null) {
+                      TextButton(
+                        enabled = !saving,
+                        onClick = { variants = variants.toMutableList().also { it[index] = variant.copy(imageUri = null) } }
+                      ) {
+                        Text(appText("Clear", "ہٹائیں"), color = VendorColors.DangerRed)
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -820,27 +882,18 @@ fun VendorListingEditor(
                     "فروخت کی قیمت میں سپلائر لاگت، پیکنگ خرچ اور کم از کم منافع پورا ہونا چاہیے۔"
                   )
                 }
-                val variantJson = JSONArray()
-                val seen = mutableSetOf<String>()
-                variants.forEach { v ->
+                val preparedVariants = variants.map { v ->
                   require(v.optionName.isNotBlank() && v.optionValue.isNotBlank()) {
                     AppLanguageManager.tr("Complete every variant option.", "ہر ویرینٹ آپشن مکمل کریں۔")
                   }
-                  require(seen.add("${v.optionName.trim().lowercase()}::${v.optionValue.trim().lowercase()}")) {
+                  val seenKey = "${v.optionName.trim().lowercase()}::${v.optionValue.trim().lowercase()}"
+                  seenKey to v
+                }
+                val seen = mutableSetOf<String>()
+                preparedVariants.forEach { (key, _) ->
+                  require(seen.add(key)) {
                     AppLanguageManager.tr("Duplicate variant option and value.", "ویرینٹ آپشن اور قدر دہرائی گئی ہے۔")
                   }
-                  val stock = fieldNumber(v.stock, "variant stock", "ویرینٹ اسٹاک", false).toInt()
-                  val row = JSONObject()
-                    .put("option_label", v.optionName.trim())
-                    .put("option_value", v.optionValue.trim())
-                    .put("sku", if (v.sku.isBlank()) JSONObject.NULL else v.sku.trim())
-                    .put(
-                      "price_override",
-                      if (v.price.isBlank()) JSONObject.NULL else fieldNumber(v.price, "variant price", "ویرینٹ قیمت")
-                    )
-                    .put("attributes", JSONObject())
-                    .put("quantity", stock)
-                  variantJson.put(row)
                 }
                 val specs = JSONArray(specifications)
                 val dims = JSONObject(dimensions)
@@ -891,7 +944,31 @@ fun VendorListingEditor(
                     fieldNumber(foodDailyQuantity, "today's available quantity", "آج دستیاب مقدار", false).toInt()
                   )
                 }
-                if (variantJson.length() > 0) VendorService.saveVariants(id, variantJson)
+                if (variants.isNotEmpty()) {
+                  val variantJson = JSONArray()
+                  for (v in variants) {
+                    val stock = fieldNumber(v.stock, "variant stock", "ویرینٹ اسٹاک", false).toInt()
+                    val uploadedVariantImageUrl = v.imageUri?.let { uri ->
+                      val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                      val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: error(AppLanguageManager.tr("Variant image could not be read.", "ویرینٹ تصویر پڑھی نہیں جا سکی۔"))
+                      VendorService.uploadVariantImage(id, bytes, mime)
+                    }
+                    val row = JSONObject()
+                      .put("option_label", v.optionName.trim())
+                      .put("option_value", v.optionValue.trim())
+                      .put("sku", if (v.sku.isBlank()) JSONObject.NULL else v.sku.trim())
+                      .put(
+                        "price_override",
+                        if (v.price.isBlank()) JSONObject.NULL else fieldNumber(v.price, "variant price", "ویرینٹ قیمت")
+                      )
+                      .put("image_url", uploadedVariantImageUrl ?: JSONObject.NULL)
+                      .put("attributes", JSONObject())
+                      .put("quantity", stock)
+                    variantJson.put(row)
+                  }
+                  VendorService.saveVariants(id, variantJson)
+                }
                 val outcome = VendorService.finalizeProductSubmission(
                   productId = id,
                   allowDirectPublish = allowDirectPublish,

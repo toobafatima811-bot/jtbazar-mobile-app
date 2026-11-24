@@ -26,6 +26,18 @@ data class SupabaseProfile(
   val city: String = ""
 )
 
+data class SupabaseProductVariantDto(
+  val id: String,
+  val optionLabel: String,
+  val optionValue: String,
+  val sku: String? = null,
+  val priceOverride: Int? = null,
+  val imageUrl: String? = null,
+  val isAvailable: Boolean = true,
+  val stockQuantity: Int = 0,
+  val sortOrder: Int = 0
+)
+
 data class SupabaseProductDto(
   val sellerId: String? = null,
   val id: String,
@@ -40,6 +52,7 @@ data class SupabaseProductDto(
   val rating: Double = 0.0,
   val reviewCount: Int = 0,
   val imageUrl: String? = null,
+  val imageUrls: List<String> = emptyList(),
   val badge: String? = null,
   val inStock: Boolean = false,
   val stockQuantity: Int = 0,
@@ -55,6 +68,7 @@ data class SupabaseProductDto(
   val highlights: List<String> = emptyList(),
   val palettes: List<String> = emptyList(),
   val sizes: List<String> = emptyList(),
+  val variants: List<SupabaseProductVariantDto> = emptyList(),
   val variantIds: Map<String, String> = emptyMap(),
   val isArtisanCollection: Boolean = false,
   val isFeatured: Boolean = false,
@@ -219,6 +233,23 @@ data class SupabaseStoreSettingsDto(
   val effectiveDeliveryFee: Int
     get() = if (freeDeliveryEnabled) 0 else (deliveryFee + additionalDeliveryFee)
 }
+
+data class DeliveryPricingSettingsDto(
+  val originLat: Double? = null,
+  val originLng: Double? = null,
+  val maxDeliveryRadiusKm: Double? = null,
+  val isActive: Boolean = true
+)
+
+data class DeliveryFeeQuoteDto(
+  val deliveryFee: Int,
+  val distanceKm: Double? = null,
+  val isServiceable: Boolean = true,
+  val originLat: Double? = null,
+  val originLng: Double? = null,
+  val maxRadiusKm: Double? = null,
+  val message: String? = null
+)
 
 
 /** Published homepage hero content configured by the JTBazar website/admin tools. */

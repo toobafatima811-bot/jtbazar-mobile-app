@@ -57,12 +57,56 @@ import com.example.ui.components.JTBazarTopBar
 import com.example.ui.components.QuantityStepper
 import com.example.ui.components.rememberSizedImageRequest
 import com.example.ui.theme.*
+import android.view.MotionEvent
+import androidx.compose.ui.viewinterop.AndroidView
+import com.example.data.repository.MarketplaceRepository.DeliveryFeeQuoteState
+import com.example.data.supabase.DeliveryPricingSettingsDto
 import com.example.location.AddressReverseGeocoder
 import com.example.location.LocationFetchResult
 import com.example.location.LocationResolver
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
 import kotlinx.coroutines.launch
+import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
+import java.util.Locale
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+
+internal fun shouldAutoFillCheckoutAddress(
+  hasUserEditedAddress: Boolean,
+  selectedSavedAddressId: String?,
+  currentStreetAddress: String
+): Boolean = !hasUserEditedAddress && (selectedSavedAddressId == null || currentStreetAddress.isBlank())
+
+internal fun buildDeliveryRadiusCirclePoints(
+  centerLat: Double,
+  centerLng: Double,
+  radiusKm: Double,
+  steps: Int = 72
+): List<GeoPoint> {
+  val earthRadiusKm = 6371.0
+  val radiusRadians = radiusKm.coerceAtLeast(0.1) / earthRadiusKm
+  val latRad = Math.toRadians(centerLat)
+  val lngRad = Math.toRadians(centerLng)
+  return (0..steps).map { step ->
+    val bearing = 2.0 * Math.PI * step / steps.toDouble()
+    val lat = asin(sin(latRad) * cos(radiusRadians) + cos(latRad) * sin(radiusRadians) * cos(bearing))
+    val lng = lngRad + atan2(
+      sin(bearing) * sin(radiusRadians) * cos(latRad),
+      cos(radiusRadians) - sin(latRad) * sin(lat)
+    )
+    GeoPoint(Math.toDegrees(lat), Math.toDegrees(lng))
+  }
+}
 
 enum class CartCheckoutStage {
   CART,
@@ -85,8 +129,8 @@ fun CartCheckoutScreen(
   val currentLocation by MarketplaceRepository.currentLocation.collectAsState()
   val addresses by MarketplaceRepository.addresses.collectAsState()
   val selectedAddress by MarketplaceRepository.selectedAddress.collectAsState()
-  val configuredDeliveryFee by MarketplaceRepository.deliveryFee.collectAsState()
-  val freeDeliveryEnabled by MarketplaceRepository.freeDeliveryEnabled.collectAsState()
+  val deliveryFeeQuoteState by MarketplaceRepository.deliveryFeeQuoteState.collectAsState()
+  val deliveryPricingSettings by MarketplaceRepository.deliveryPricingSettings.collectAsState()
   val homepagePromotions by MarketplaceRepository.homepagePromotions.collectAsState()
   val codEnabled by MarketplaceRepository.codEnabled.collectAsState()
   val isPlacingOrder by MarketplaceRepository.isPlacingOrder.collectAsState()
@@ -157,33 +201,61 @@ fun CartCheckoutScreen(
     }
   }
 
+  LaunchedEffect(deliveryLat, deliveryLng) {
+    val lat = deliveryLat
+    val lng = deliveryLng
+    if (lat != null && lng != null) {
+      MarketplaceRepository.refreshDeliveryFeeQuote(lat, lng)
+    } else {
+      MarketplaceRepository.clearDeliveryFeeQuote()
+    }
+  }
+
   var isLocatingPin by remember { mutableStateOf(false) }
 
-  suspend fun applyCheckoutLocation(loc: android.location.Location) {
-    deliveryLat = loc.latitude
-    deliveryLng = loc.longitude
-    locationCapturedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+  suspend fun applyCheckoutCoordinates(
+    latitude: Double,
+    longitude: Double,
+    showToast: Boolean = true
+  ) {
+    val allowAutoFill = shouldAutoFillCheckoutAddress(
+      hasUserEditedAddress = hasUserEditedAddress,
+      selectedSavedAddressId = selectedSavedAddressId,
+      currentStreetAddress = streetAddress
+    )
+    deliveryLat = latitude
+    deliveryLng = longitude
+    locationCapturedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
       timeZone = java.util.TimeZone.getTimeZone("UTC")
     }.format(java.util.Date())
     isPinConfirmed = true
-    val resolved = AddressReverseGeocoder.resolve(context, loc.latitude, loc.longitude)
-    if (resolved != null) {
+    val resolved = AddressReverseGeocoder.resolve(context, latitude, longitude)
+    if (allowAutoFill && resolved != null) {
       if (resolved.street.isNotBlank()) streetAddress = resolved.street
       if (resolved.area.isNotBlank()) areaLocality = resolved.area
       if (resolved.city.isNotBlank()) city = resolved.city
-      Toast.makeText(
-        context,
-        if (resolved.street.isNotBlank()) AppLanguageManager.tr("Location and street detected. Please verify your house number.", "مقام اور گلی کا پتہ مل گیا۔ براہ کرم اپنا گھر نمبر تصدیق کریں۔")
-        else AppLanguageManager.tr("Location captured. Please enter your street and house number.", "مقام محفوظ ہو گیا۔ براہ کرم اپنی گلی اور گھر نمبر درج کریں۔"),
-        Toast.LENGTH_LONG
-      ).show()
-    } else {
-      Toast.makeText(
-        context,
-        AppLanguageManager.tr("Location captured. Please enter your street and house number.", "مقام محفوظ ہو گیا۔ براہ کرم اپنی گلی اور گھر نمبر درج کریں۔"),
-        Toast.LENGTH_LONG
-      ).show()
     }
+    if (showToast) {
+      val toastText = when {
+        !allowAutoFill -> AppLanguageManager.tr(
+          "Location pin updated. Your manual address was kept.",
+          "لوکیشن پن اپڈیٹ ہو گیا۔ آپ کا درج کردہ پتہ برقرار رکھا گیا ہے۔"
+        )
+        resolved != null && resolved.street.isNotBlank() -> AppLanguageManager.tr(
+          "Location and street detected. Please verify your house number.",
+          "مقام اور گلی کا پتہ مل گیا۔ براہ کرم اپنا گھر نمبر تصدیق کریں۔"
+        )
+        else -> AppLanguageManager.tr(
+          "Location captured. Please enter your street and house number.",
+          "مقام محفوظ ہو گیا۔ براہ کرم اپنی گلی اور گھر نمبر درج کریں۔"
+        )
+      }
+      Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
+    }
+  }
+
+  suspend fun applyCheckoutLocation(loc: android.location.Location) {
+    applyCheckoutCoordinates(loc.latitude, loc.longitude, showToast = true)
   }
 
   lateinit var startCheckoutLocationFetch: () -> Unit
@@ -266,11 +338,17 @@ fun CartCheckoutScreen(
     }
   }
 
-  // Server-aligned Calculations with Free Delivery and Coupon Discounts
+  // KM-based Delivery Fee & Coupon Totals
   val subtotal = cartItems.sumOf { it.totalPrice }
-  val deliveryCharges = if (subtotal == 0 || freeDeliveryEnabled) 0 else configuredDeliveryFee
+  val quotedDeliveryFee: Int? = when {
+    subtotal == 0 -> 0
+    deliveryLat == null || deliveryLng == null -> null
+    else -> (deliveryFeeQuoteState as? DeliveryFeeQuoteState.Quoted)
+      ?.takeIf { it.isServiceable }
+      ?.deliveryFee
+  }
   val discountAmount = if (appliedDiscountPercent > 0) (subtotal * (appliedDiscountPercent / 100.0)).toInt() else 0
-  val grandTotal = (subtotal - discountAmount + deliveryCharges).coerceAtLeast(0)
+  val grandTotal = (subtotal - discountAmount + (quotedDeliveryFee ?: 0)).coerceAtLeast(0)
 
   fun applyCoupon() {
     val clean = couponCodeInput.trim()
@@ -368,7 +446,8 @@ fun CartCheckoutScreen(
             items = cartItems,
             subtotal = subtotal,
             discountAmount = discountAmount,
-            deliveryFee = deliveryCharges,
+            quotedDeliveryFee = quotedDeliveryFee,
+            deliveryQuoteState = deliveryFeeQuoteState,
             grandTotal = grandTotal,
             couponCodeInput = couponCodeInput,
             onCouponCodeChange = { couponCodeInput = it },
@@ -386,7 +465,9 @@ fun CartCheckoutScreen(
             items = cartItems,
             subtotal = subtotal,
             discountAmount = discountAmount,
-            deliveryFee = deliveryCharges,
+            quotedDeliveryFee = quotedDeliveryFee,
+            deliveryQuoteState = deliveryFeeQuoteState,
+            deliveryPricingSettings = deliveryPricingSettings,
             grandTotal = grandTotal,
             couponCodeInput = couponCodeInput,
             onCouponCodeChange = { couponCodeInput = it },
@@ -433,15 +514,30 @@ fun CartCheckoutScreen(
               deliveryLng = null
               isPinConfirmed = false
               saveAddressToAccount = true
+              MarketplaceRepository.clearDeliveryFeeQuote()
             },
             deliveryLat = deliveryLat,
             deliveryLng = deliveryLng,
             isPinConfirmed = isPinConfirmed,
+            isLocatingPin = isLocatingPin,
             onRequestPin = { requestCheckoutLocationPin() },
+            onSelectMapPin = { lat, lng ->
+              coroutineScope.launch {
+                applyCheckoutCoordinates(lat, lng, showToast = false)
+              }
+            },
             onChangePin = {
               isPinConfirmed = false
               deliveryLat = null
               deliveryLng = null
+              MarketplaceRepository.clearDeliveryFeeQuote()
+            },
+            onRetryDeliveryQuote = {
+              val lat = deliveryLat
+              val lng = deliveryLng
+              if (lat != null && lng != null) {
+                MarketplaceRepository.refreshDeliveryFeeQuote(lat, lng)
+              }
             },
             isPlacingOrder = isPlacingOrder,
             orderErrorMessage = orderErrorMessage,
@@ -468,10 +564,17 @@ fun CartCheckoutScreen(
                 return@CheckoutView
               }
               val unavailableCartItem = cartItems.firstOrNull { item ->
+                val requiresVariant = item.product.variants.isNotEmpty() || item.product.variantIds.isNotEmpty()
+                val variantOk = if (item.variantId.isNullOrBlank()) {
+                  true
+                } else {
+                  val matched = item.product.variants.firstOrNull { it.id == item.variantId }
+                  if (matched != null) matched.isAvailable else (item.product.variantAvailability[item.variantId] == true)
+                }
                 (!item.product.availabilityKnown || !item.product.isAvailable) ||
                   (item.product.foodSellingUnit != null && item.product.dailyStatus != null && item.product.dailyStatus != "available") ||
-                  (item.product.variantIds.isNotEmpty() && item.variantId.isNullOrBlank()) ||
-                  (!item.variantId.isNullOrBlank() && item.product.variantAvailability[item.variantId] != true)
+                  (requiresVariant && item.variantId.isNullOrBlank()) ||
+                  !variantOk
               }
               if (unavailableCartItem != null) {
                 Toast.makeText(
@@ -485,8 +588,30 @@ fun CartCheckoutScreen(
                 return@CheckoutView
               }
               if (deliveryLat == null || deliveryLng == null || !isPinConfirmed) {
-                Toast.makeText(context, AppLanguageManager.tr("Add your current location pin to confirm the 5 km food delivery area.", "5 کلومیٹر فوڈ ڈیلیوری ایریا کی تصدیق کے لیے اپنا موجودہ لوکیشن پن شامل کریں۔"), Toast.LENGTH_LONG).show()
+                Toast.makeText(context, AppLanguageManager.tr("Select your delivery location pin on the map or via GPS.", "نقشے یا GPS کے ذریعے اپنا ڈیلیوری لوکیشن پن منتخب کریں۔"), Toast.LENGTH_LONG).show()
                 return@CheckoutView
+              }
+              when (val q = deliveryFeeQuoteState) {
+                is DeliveryFeeQuoteState.Loading, is DeliveryFeeQuoteState.Idle -> {
+                  orderErrorMessage = AppLanguageManager.tr(
+                    "Distance delivery fee is still calculating. Please wait a moment and try again.",
+                    "فاصلے کے مطابق ڈیلیوری چارجز حساب ہو رہے ہیں۔ براہ کرم چند لمحے انتظار کریں۔"
+                  )
+                  return@CheckoutView
+                }
+                is DeliveryFeeQuoteState.Unavailable -> {
+                  orderErrorMessage = q.reason
+                  return@CheckoutView
+                }
+                is DeliveryFeeQuoteState.Quoted -> {
+                  if (!q.isServiceable) {
+                    orderErrorMessage = q.message?.takeIf { it.isNotBlank() } ?: AppLanguageManager.tr(
+                      "Your selected delivery pin is outside our delivery radius. Please move the pin closer.",
+                      "آپ کا منتخب کردہ ڈیلیوری پن ہماری ترسیل کی حد سے باہر ہے۔ براہ کرم پن کو قریب کریں۔"
+                    )
+                    return@CheckoutView
+                  }
+                }
               }
 
               val matchedSaved = addresses.firstOrNull { it.id == selectedSavedAddressId }
@@ -585,7 +710,8 @@ private fun CartView(
   items: List<CartItem>,
   subtotal: Int,
   discountAmount: Int = 0,
-  deliveryFee: Int,
+  quotedDeliveryFee: Int?,
+  deliveryQuoteState: DeliveryFeeQuoteState,
   grandTotal: Int,
   couponCodeInput: String = "",
   onCouponCodeChange: (String) -> Unit = {},
@@ -678,7 +804,7 @@ private fun CartView(
                 .background(JTSurfaceVariant),
               contentAlignment = Alignment.Center
             ) {
-              val remoteUrl = item.product.imageUrl?.takeIf { it.isNotBlank() }
+              val remoteUrl = item.resolvedImageUrl?.takeIf { it.isNotBlank() }
               when {
                 remoteUrl != null -> {
                   AsyncImage(
@@ -719,9 +845,10 @@ private fun CartView(
                 overflow = TextOverflow.Ellipsis
               )
 
-              if (!item.selectedSize.isNullOrBlank() || !item.selectedPalette.isNullOrBlank()) {
+              val variantLabelText = item.variantDisplayText
+              if (!variantLabelText.isNullOrBlank()) {
                 Text(
-                  text = listOfNotNull(item.selectedSize, item.selectedPalette).joinToString(" • "),
+                  text = variantLabelText,
                   fontSize = 11.sp,
                   color = JTPurplePrimary,
                   fontWeight = FontWeight.SemiBold
@@ -729,7 +856,7 @@ private fun CartView(
               }
 
               Text(
-                text = "PKR ${String.format("%,d", item.product.price)}",
+                text = "PKR ${String.format("%,d", item.resolvedUnitPrice)}",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = JTTextPrimary
@@ -823,12 +950,26 @@ private fun CartView(
               }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-              Text(appText("Delivery Charges", "ڈیلیوری چارجز"), fontSize = 13.sp, color = JTTextSecondary)
+              val distSuffix = (deliveryQuoteState as? DeliveryFeeQuoteState.Quoted)?.distanceKm?.let {
+                " (${String.format(Locale.US, "%.1f", it)} km)"
+              }.orEmpty()
+              Text(appText("Delivery Charges$distSuffix", "ڈیلیوری چارجز$distSuffix"), fontSize = 13.sp, color = JTTextSecondary)
+              val deliveryFeeText = when {
+                quotedDeliveryFee == 0 -> appText("Free", "مفت")
+                quotedDeliveryFee != null -> "PKR ${String.format("%,d", quotedDeliveryFee)}"
+                deliveryQuoteState is DeliveryFeeQuoteState.Loading -> appText("Calculating...", "حساب جاری ہے...")
+                deliveryQuoteState is DeliveryFeeQuoteState.Unavailable -> appText("Unavailable", "دستیاب نہیں")
+                else -> appText("Calculated at checkout", "چیک آؤٹ پر حساب ہوگا")
+              }
               Text(
-                if (deliveryFee == 0) appText("Free", "مفت") else "PKR ${String.format("%,d", deliveryFee)}",
+                deliveryFeeText,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (deliveryFee == 0) Color(0xFF03543F) else JTTextPrimary
+                color = when {
+                  quotedDeliveryFee == 0 -> Color(0xFF03543F)
+                  quotedDeliveryFee != null -> JTTextPrimary
+                  else -> JTOrangeDark
+                }
               )
             }
             HorizontalDivider(color = Color.LightGray)
@@ -855,7 +996,9 @@ private fun CheckoutView(
   items: List<CartItem>,
   subtotal: Int,
   discountAmount: Int = 0,
-  deliveryFee: Int,
+  quotedDeliveryFee: Int?,
+  deliveryQuoteState: DeliveryFeeQuoteState,
+  deliveryPricingSettings: DeliveryPricingSettingsDto?,
   grandTotal: Int,
   couponCodeInput: String = "",
   onCouponCodeChange: (String) -> Unit = {},
@@ -885,8 +1028,11 @@ private fun CheckoutView(
   deliveryLat: Double?,
   deliveryLng: Double?,
   isPinConfirmed: Boolean,
+  isLocatingPin: Boolean,
   onRequestPin: () -> Unit,
+  onSelectMapPin: (Double, Double) -> Unit,
   onChangePin: () -> Unit,
+  onRetryDeliveryQuote: () -> Unit,
   isPlacingOrder: Boolean,
   orderErrorMessage: String? = null,
   onPlaceOrder: () -> Unit
@@ -1030,82 +1176,19 @@ private fun CheckoutView(
       modifier = Modifier.fillMaxWidth().testTag("checkout_instructions_input")
     )
 
-    // Location Pin Section (GPS)
-    Surface(
-      shape = RoundedCornerShape(12.dp),
-      color = if (isPinConfirmed) Color(0xFFDEF7EC) else JTSurfaceVariant,
-      border = androidx.compose.foundation.BorderStroke(1.dp, if (isPinConfirmed) Color(0xFF0E9F6E) else JTBorder),
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Column(modifier = Modifier.padding(14.dp)) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              imageVector = Icons.Filled.LocationOn,
-              contentDescription = null,
-              tint = if (isPinConfirmed) Color(0xFF03543F) else JTOrange,
-              modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = if (isPinConfirmed) appText("Delivery Location Confirmed", "ڈیلیوری مقام کی تصدیق ہو گئی")
-              else appText("Delivery Location Pin", "ڈیلیوری لوکیشن پن"),
-              fontWeight = FontWeight.Bold,
-              fontSize = 13.sp,
-              color = if (isPinConfirmed) Color(0xFF03543F) else JTTextPrimary
-            )
-          }
-
-          if (isPinConfirmed) {
-            Text(
-              text = appText("Change Pin", "پن تبدیل کریں"),
-              fontSize = 11.sp,
-              fontWeight = FontWeight.Bold,
-              color = JTOrange,
-              modifier = Modifier.clickable(onClick = onChangePin)
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        if (isPinConfirmed && deliveryLat != null && deliveryLng != null) {
-          Text(
-            text = appText(
-              "Your delivery pin is saved securely for JTBazar delivery.",
-              "جے ٹی بازار ڈیلیوری کے لیے آپ کا لوکیشن پن محفوظ کر لیا گیا ہے۔"
-            ),
-            fontSize = 11.sp,
-            color = Color(0xFF03543F)
-          )
-        } else {
-          Text(
-            text = appText(
-              "Confirm your delivery location pin. It is required for every order so the driver and Admin can find your address accurately.",
-              "اپنے ڈیلیوری لوکیشن پن کی تصدیق کریں۔ ہر آرڈر کے لیے یہ ضروری ہے تاکہ ڈرائیور آپ کا پتہ درست تلاش کر سکے۔"
-            ),
-            fontSize = 11.sp,
-            color = JTTextSecondary
-          )
-          Spacer(modifier = Modifier.height(8.dp))
-          Button(
-            onClick = onRequestPin,
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-            modifier = Modifier.height(34.dp).testTag("capture_location_pin_btn")
-          ) {
-            Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(14.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(appText("Confirm My Delivery Location", "اپنے ڈیلیوری مقام کی تصدیق کریں"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-          }
-        }
-      }
-    }
+    // Interactive Location Map & GPS Pin Section + KM Delivery Fee Quote
+    CheckoutLocationMapCard(
+      deliveryLat = deliveryLat,
+      deliveryLng = deliveryLng,
+      isPinConfirmed = isPinConfirmed,
+      isLocatingPin = isLocatingPin,
+      deliveryQuoteState = deliveryQuoteState,
+      deliveryPricingSettings = deliveryPricingSettings,
+      onRequestGpsPin = onRequestPin,
+      onSelectMapPin = onSelectMapPin,
+      onClearPin = onChangePin,
+      onRetryQuote = onRetryDeliveryQuote
+    )
 
     // Payment Method: Cash on Delivery (COD)
     Surface(
@@ -1186,12 +1269,31 @@ private fun CheckoutView(
           }
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text(appText("Delivery Charges", "ڈیلیوری چارجز"), fontSize = 12.sp, color = JTTextSecondary)
+          val distKm = (deliveryQuoteState as? DeliveryFeeQuoteState.Quoted)?.distanceKm
+          val chargeLabel = if (distKm != null) {
+            appText("Delivery Charges (${String.format(Locale.US, "%.1f", distKm)} km)", "ڈیلیوری چارجز (${String.format(Locale.US, "%.1f", distKm)} کلومیٹر)")
+          } else {
+            appText("Delivery Charges", "ڈیلیوری چارجز")
+          }
+          Text(chargeLabel, fontSize = 12.sp, color = JTTextSecondary)
+          val chargeValue = when {
+            quotedDeliveryFee == 0 -> appText("Free", "مفت")
+            quotedDeliveryFee != null -> "PKR ${String.format("%,d", quotedDeliveryFee)}"
+            deliveryQuoteState is DeliveryFeeQuoteState.Loading -> appText("Calculating...", "حساب جاری ہے...")
+            deliveryQuoteState is DeliveryFeeQuoteState.Quoted && !deliveryQuoteState.isServiceable -> appText("Out of range", "حد سے باہر")
+            deliveryQuoteState is DeliveryFeeQuoteState.Unavailable -> appText("Unavailable", "دستیاب نہیں")
+            else -> appText("Set map pin", "پن منتخب کریں")
+          }
           Text(
-            if (deliveryFee == 0) appText("Free", "مفت") else "PKR ${String.format("%,d", deliveryFee)}",
+            chargeValue,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = if (deliveryFee == 0) Color(0xFF03543F) else JTTextPrimary
+            color = when {
+              quotedDeliveryFee == 0 -> Color(0xFF03543F)
+              quotedDeliveryFee != null -> JTTextPrimary
+              else -> Color(0xFFB42318)
+            },
+            modifier = Modifier.testTag("checkout_delivery_charge_value")
           )
         }
         HorizontalDivider(color = Color.LightGray)
@@ -1522,6 +1624,387 @@ internal fun SavedAddressDropdown(
               onUseNewAddress()
             }
           )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+internal fun CheckoutLocationMapCard(
+  deliveryLat: Double?,
+  deliveryLng: Double?,
+  isPinConfirmed: Boolean,
+  isLocatingPin: Boolean,
+  deliveryQuoteState: DeliveryFeeQuoteState,
+  deliveryPricingSettings: DeliveryPricingSettingsDto?,
+  onRequestGpsPin: () -> Unit,
+  onSelectMapPin: (Double, Double) -> Unit,
+  onClearPin: () -> Unit,
+  onRetryQuote: () -> Unit,
+  modifier: Modifier = Modifier
+) {
+  val latestOnSelectMapPin by rememberUpdatedState(onSelectMapPin)
+  var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+
+  val quoteOriginLat = when (deliveryQuoteState) {
+    is DeliveryFeeQuoteState.Quoted -> deliveryQuoteState.originLat
+    is DeliveryFeeQuoteState.Unavailable -> deliveryQuoteState.originLat
+    else -> null
+  } ?: deliveryPricingSettings?.originLat
+
+  val quoteOriginLng = when (deliveryQuoteState) {
+    is DeliveryFeeQuoteState.Quoted -> deliveryQuoteState.originLng
+    is DeliveryFeeQuoteState.Unavailable -> deliveryQuoteState.originLng
+    else -> null
+  } ?: deliveryPricingSettings?.originLng
+
+  val maxRadiusKm = when (deliveryQuoteState) {
+    is DeliveryFeeQuoteState.Quoted -> deliveryQuoteState.maxRadiusKm
+    is DeliveryFeeQuoteState.Unavailable -> deliveryQuoteState.maxRadiusKm
+    else -> null
+  } ?: deliveryPricingSettings?.maxDeliveryRadiusKm
+
+  val hasPin = isPinConfirmed && deliveryLat != null && deliveryLng != null
+  val initialCenter = when {
+    deliveryLat != null && deliveryLng != null -> GeoPoint(deliveryLat, deliveryLng)
+    quoteOriginLat != null && quoteOriginLng != null -> GeoPoint(quoteOriginLat, quoteOriginLng)
+    else -> GeoPoint(30.1575, 71.5249)
+  }
+
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    color = if (hasPin) Color(0xFFECFDF5) else JTSurfaceVariant,
+    border = androidx.compose.foundation.BorderStroke(
+      1.dp,
+      when {
+        deliveryQuoteState is DeliveryFeeQuoteState.Quoted && !deliveryQuoteState.isServiceable -> Color(0xFFDC2626)
+        hasPin -> Color(0xFF0E9F6E)
+        else -> JTBorder
+      }
+    ),
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag("checkout_location_map_card")
+  ) {
+    Column(
+      modifier = Modifier.padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.weight(1f)
+        ) {
+          Icon(
+            imageVector = Icons.Filled.LocationOn,
+            contentDescription = null,
+            tint = if (hasPin) Color(0xFF03543F) else JTOrange,
+            modifier = Modifier.size(20.dp)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = if (hasPin) {
+              appText("Delivery Location Pin Set", "ڈیلیوری لوکیشن پن سیٹ ہو گیا")
+            } else {
+              appText("Delivery Location & Map Pin", "ڈیلیوری لوکیشن اور نقشہ پن")
+            },
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = if (hasPin) Color(0xFF03543F) else JTTextPrimary
+          )
+        }
+        if (hasPin) {
+          TextButton(
+            onClick = onClearPin,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier
+              .heightIn(min = 36.dp)
+              .testTag("clear_location_pin_btn")
+          ) {
+            Text(
+              text = appText("Clear Pin", "پن صاف کریں"),
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              color = JTOrange
+            )
+          }
+        }
+      }
+
+      Text(
+        text = appText(
+          "Tap anywhere on the map or drag the pin to mark your doorstep, or use GPS. Editing your street address manually will not be overwritten.",
+          "اپنا مقام منتخب کرنے کے لیے نقشے پر ٹیپ کریں یا پن کو کھینچیں، یا GPS استعمال کریں۔ آپ کا دستی لکھا ہوا پتہ تبدیل نہیں ہوگا۔"
+        ),
+        fontSize = 11.5.sp,
+        lineHeight = 16.sp,
+        color = JTTextSecondary
+      )
+
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(220.dp)
+          .clip(RoundedCornerShape(12.dp))
+          .border(1.dp, JTBorder, RoundedCornerShape(12.dp))
+          .testTag("checkout_delivery_map")
+      ) {
+        AndroidView(
+          modifier = Modifier.fillMaxSize(),
+          factory = { ctx ->
+            runCatching { Configuration.getInstance().userAgentValue = ctx.packageName }
+            MapView(ctx).apply {
+              setTileSource(TileSourceFactory.MAPNIK)
+              setMultiTouchControls(true)
+              controller.setZoom(if (hasPin || (quoteOriginLat != null && quoteOriginLng != null)) 13.5 else 6.0)
+              controller.setCenter(initialCenter)
+              setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                  MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE ->
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                  MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+                false
+              }
+              mapViewRef = this
+            }
+          },
+          update = { map ->
+            mapViewRef = map
+            map.overlays.clear()
+
+            val receiver = object : MapEventsReceiver {
+              override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                latestOnSelectMapPin(p.latitude, p.longitude)
+                return true
+              }
+
+              override fun longPressHelper(p: GeoPoint): Boolean = false
+            }
+            map.overlays.add(MapEventsOverlay(receiver))
+
+            if (quoteOriginLat != null && quoteOriginLng != null) {
+              val originGeo = GeoPoint(quoteOriginLat, quoteOriginLng)
+              val radiusKm = maxRadiusKm
+              if (radiusKm != null && radiusKm > 0.0) {
+                Polygon(map).apply {
+                  points = buildDeliveryRadiusCirclePoints(quoteOriginLat, quoteOriginLng, radiusKm)
+                  fillPaint.color = android.graphics.Color.argb(26, 255, 115, 0)
+                  outlinePaint.color = android.graphics.Color.argb(190, 255, 115, 0)
+                  outlinePaint.strokeWidth = 3f
+                  map.overlays.add(this)
+                }
+              }
+              Marker(map).apply {
+                position = originGeo
+                title = AppLanguageManager.tr("JTBazar Dispatch Hub", "جے ٹی بازار ڈسپیچ مرکز")
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                map.overlays.add(this)
+              }
+            }
+
+            if (deliveryLat != null && deliveryLng != null) {
+              val pinPoint = GeoPoint(deliveryLat, deliveryLng)
+              Marker(map).apply {
+                position = pinPoint
+                title = AppLanguageManager.tr("Delivery Pin", "ڈیلیوری پن")
+                snippet = "${String.format(Locale.US, "%.5f", deliveryLat)}, ${String.format(Locale.US, "%.5f", deliveryLng)}"
+                isDraggable = true
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                setOnMarkerDragListener(object : Marker.OnMarkerDragListener {
+                  override fun onMarkerDrag(marker: Marker?) {}
+                  override fun onMarkerDragStart(marker: Marker?) {}
+                  override fun onMarkerDragEnd(marker: Marker?) {
+                    val pos = marker?.position ?: return
+                    latestOnSelectMapPin(pos.latitude, pos.longitude)
+                  }
+                })
+                map.overlays.add(this)
+              }
+              val previousPin = map.tag as? GeoPoint
+              if (previousPin == null || previousPin.latitude != pinPoint.latitude || previousPin.longitude != pinPoint.longitude) {
+                map.controller.animateTo(pinPoint)
+                if (map.zoomLevelDouble < 13.0) {
+                  map.controller.setZoom(14.5)
+                }
+                map.tag = pinPoint
+              }
+            }
+            map.invalidate()
+          }
+        )
+
+        if (deliveryLat != null && deliveryLng != null) {
+          Surface(
+            color = Color.White.copy(alpha = 0.94f),
+            shape = RoundedCornerShape(8.dp),
+            shadowElevation = 2.dp,
+            modifier = Modifier
+              .align(Alignment.BottomStart)
+              .padding(8.dp)
+          ) {
+            Text(
+              text = "${String.format(Locale.US, "%.5f", deliveryLat)}, ${String.format(Locale.US, "%.5f", deliveryLng)}",
+              fontSize = 10.5.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = JTTextPrimary,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+          }
+        }
+      }
+
+      DisposableEffect(Unit) {
+        onDispose {
+          runCatching { mapViewRef?.onDetach() }
+          mapViewRef = null
+        }
+      }
+
+      Button(
+        onClick = onRequestGpsPin,
+        enabled = !isLocatingPin,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = JTPurplePrimary),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(min = 48.dp)
+          .testTag("capture_location_pin_btn")
+      ) {
+        if (isLocatingPin) {
+          CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(appText("Detecting GPS Location...", "GPS مقام تلاش کیا جا رہا ہے..."), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        } else {
+          Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(appText("Use My Current GPS Location", "میرا موجودہ GPS مقام استعمال کریں"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+      }
+
+      // Live Distance-Based Delivery Quote Banner
+      Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = when (deliveryQuoteState) {
+          is DeliveryFeeQuoteState.Quoted -> if (deliveryQuoteState.isServiceable) Color.White else Color(0xFFFFF1F0)
+          is DeliveryFeeQuoteState.Unavailable -> Color(0xFFFFF1F0)
+          else -> Color.White
+        },
+        border = androidx.compose.foundation.BorderStroke(
+          1.dp,
+          when (deliveryQuoteState) {
+            is DeliveryFeeQuoteState.Quoted -> if (deliveryQuoteState.isServiceable) Color(0xFF0E9F6E) else Color(0xFFF2B8B5)
+            is DeliveryFeeQuoteState.Unavailable -> Color(0xFFF2B8B5)
+            else -> JTBorder
+          }
+        ),
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("checkout_delivery_quote_card")
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+          when (deliveryQuoteState) {
+            is DeliveryFeeQuoteState.Loading -> {
+              CircularProgressIndicator(modifier = Modifier.size(18.dp), color = JTOrange, strokeWidth = 2.dp)
+              Text(
+                text = appText("Calculating KM-based delivery fee...", "کلومیٹر کے مطابق ڈیلیوری چارجز حساب ہو رہے ہیں..."),
+                fontSize = 12.sp,
+                color = JTTextSecondary,
+                modifier = Modifier.weight(1f)
+              )
+            }
+            is DeliveryFeeQuoteState.Quoted -> {
+              if (deliveryQuoteState.isServiceable) {
+                Icon(Icons.Filled.LocalShipping, contentDescription = null, tint = Color(0xFF03543F), modifier = Modifier.size(20.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                  val distText = deliveryQuoteState.distanceKm?.let {
+                    appText("${String.format(Locale.US, "%.1f", it)} km from hub", "مرکز سے ${String.format(Locale.US, "%.1f", it)} کلومیٹر")
+                  } ?: appText("Distance verified", "فاصلے کی تصدیق ہو گئی")
+                  val feeText = if (deliveryQuoteState.deliveryFee == 0) {
+                    appText("Free delivery", "مفت ڈیلیوری")
+                  } else {
+                    "PKR ${String.format("%,d", deliveryQuoteState.deliveryFee)}"
+                  }
+                  Text(
+                    text = appText("Delivery Fee: $feeText", "ڈیلیوری چارجز: $feeText"),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.5.sp,
+                    color = Color(0xFF03543F)
+                  )
+                  Text(
+                    text = distText,
+                    fontSize = 11.sp,
+                    color = JTTextSecondary
+                  )
+                }
+              } else {
+                Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = Color(0xFFB42318), modifier = Modifier.size(20.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                  Text(
+                    text = appText("Outside Delivery Area", "ترسیل کی حد سے باہر"),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.5.sp,
+                    color = Color(0xFFB42318)
+                  )
+                  Text(
+                    text = deliveryQuoteState.message?.takeIf { it.isNotBlank() } ?: appText(
+                      "Move the map pin closer to our service zone.",
+                      "براہ کرم نقشے کا پن سروس ایریا کے قریب منتقل کریں۔"
+                    ),
+                    fontSize = 11.sp,
+                    color = Color(0xFF7A271A)
+                  )
+                }
+              }
+            }
+            is DeliveryFeeQuoteState.Unavailable -> {
+              Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = Color(0xFFB42318), modifier = Modifier.size(20.dp))
+              Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                  text = appText("Delivery quote unavailable", "ڈیلیوری چارجز دستیاب نہیں"),
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 12.sp,
+                  color = Color(0xFFB42318)
+                )
+                Text(
+                  text = deliveryQuoteState.reason,
+                  fontSize = 11.sp,
+                  color = Color(0xFF7A271A)
+                )
+              }
+              TextButton(
+                onClick = onRetryQuote,
+                modifier = Modifier.testTag("retry_delivery_quote_btn")
+              ) {
+                Text(appText("Retry", "دوبارہ"), fontWeight = FontWeight.Bold, color = JTOrange)
+              }
+            }
+            is DeliveryFeeQuoteState.Idle -> {
+              Icon(Icons.Filled.PinDrop, contentDescription = null, tint = JTOrange, modifier = Modifier.size(18.dp))
+              Text(
+                text = appText(
+                  "Drop a pin on the map or tap GPS above to calculate distance-based delivery charges.",
+                  "فاصلے کے مطابق ڈیلیوری چارجز جاننے کے لیے نقشے پر پن لگائیں یا اوپر GPS بٹن دبائیں۔"
+                ),
+                fontSize = 11.5.sp,
+                color = JTTextSecondary,
+                modifier = Modifier.weight(1f)
+              )
+            }
+          }
         }
       }
     }

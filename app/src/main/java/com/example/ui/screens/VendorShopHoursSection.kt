@@ -54,10 +54,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.supabase.DailyShopHours
+import com.example.data.supabase.PAKISTAN_ZONE_ID
 import com.example.data.supabase.ShopDayOfWeek
 import com.example.data.supabase.ShopScheduleInfo
 import com.example.data.supabase.ShopTimeParser
 import com.example.data.supabase.WeeklyShopHours
+import java.time.ZonedDateTime
 import com.example.localization.AppLanguageManager
 import com.example.localization.appText
 import com.example.ui.components.AppCard
@@ -234,10 +236,14 @@ fun VendorShopAvailabilityAndHoursSection(
           } else null
         )
 
+        val todayDay = remember {
+          ShopDayOfWeek.fromJavaDay(ZonedDateTime.now(PAKISTAN_ZONE_ID).dayOfWeek)
+        }
         val orderedDays = weeklyHours.orderedDays()
         orderedDays.forEachIndexed { index, dayHours ->
           VendorDayScheduleRow(
             dayHours = dayHours,
+            isToday = dayHours.day == todayDay,
             enabled = enabled,
             onToggleOpen = { open ->
               onWeeklyHoursChange(weeklyHours.withDayUpdated(dayHours.day, isOpen = open))
@@ -298,6 +304,7 @@ fun VendorShopAvailabilityAndHoursSection(
 @Composable
 private fun VendorDayScheduleRow(
   dayHours: DailyShopHours,
+  isToday: Boolean,
   enabled: Boolean,
   onToggleOpen: (Boolean) -> Unit,
   onEditOpenTime: () -> Unit,
@@ -309,7 +316,9 @@ private fun VendorDayScheduleRow(
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(vertical = 4.dp)
+      .clip(VendorShapes.input)
+      .background(if (isToday) VendorColors.PrimaryOrangeTint else Color.Transparent)
+      .padding(horizontal = if (isToday) 8.dp else 0.dp, vertical = 6.dp)
       .testTag("vendor_hours_day_$dayKey"),
     verticalArrangement = Arrangement.spacedBy(VendorSpacing.xs)
   ) {
@@ -327,8 +336,22 @@ private fun VendorDayScheduleRow(
           text = dayHours.day.localizedName(),
           style = MaterialTheme.typography.titleSmall,
           fontWeight = FontWeight.Bold,
-          color = VendorColors.TextPrimary
+          color = if (isToday) VendorColors.PrimaryOrange else VendorColors.TextPrimary
         )
+        if (isToday) {
+          Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = VendorColors.PrimaryOrange
+          ) {
+            Text(
+              text = appText("Today", "آج"),
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Bold,
+              color = Color.White,
+              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+          }
+        }
         StatusBadge(
           text = if (dayHours.isOpen) appText("Open", "کھلا") else appText("Closed", "بند"),
           tone = if (dayHours.isOpen) StatusTone.SUCCESS else StatusTone.NEUTRAL
