@@ -78,7 +78,6 @@ fun VendorGuideDialog(onDismiss: () -> Unit) {
     "roman" -> roman
     else -> english
   }
-  val isUrdu = language == "ur"
 
   AlertDialog(
     onDismissRequest = onDismiss,
