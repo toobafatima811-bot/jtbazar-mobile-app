@@ -124,10 +124,10 @@ class MainActivity : ComponentActivity() {
   private fun captureNotificationTap(source: Intent?) {
     if (source == null) return
     val id = source.getStringExtra("notification_id")
-    val kind = source.getStringExtra("notification_kind")
+    val kind = source.getStringExtra("notification_kind") ?: source.getStringExtra("kind")
     val orderId = source.getStringExtra("related_order_id")
-    val link = source.getStringExtra("notification_link")
-    val audience = source.getStringExtra("notification_audience")
+    val link = source.getStringExtra("notification_link") ?: source.getStringExtra("link")
+    val audience = source.getStringExtra("notification_audience") ?: source.getStringExtra("audience")
     if (id != null || kind != null || orderId != null || link != null || audience != null) {
       notificationTap.value = NotificationNavigation(
         id = id,
@@ -142,6 +142,9 @@ class MainActivity : ComponentActivity() {
       source.removeExtra("related_order_id")
       source.removeExtra("notification_link")
       source.removeExtra("notification_audience")
+      source.removeExtra("link")
+      source.removeExtra("kind")
+      source.removeExtra("audience")
     }
   }
 
