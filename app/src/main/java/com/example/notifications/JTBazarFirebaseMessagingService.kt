@@ -5,6 +5,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.net.URL
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.MainActivity
@@ -65,13 +68,38 @@ class JTBazarFirebaseMessagingService : FirebaseMessagingService() {
     val stableKey = message.data["notification_id"] ?: message.messageId ?: message.data["related_order_id"] ?: title
     val requestCode = stableKey.hashCode()
     val pending = PendingIntent.getActivity(this, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-    val notification = NotificationCompat.Builder(this, channelId)
+    val builder = NotificationCompat.Builder(this, channelId)
       .setSmallIcon(R.mipmap.ic_launcher)
       .setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
-      .setAutoCancel(true).setContentIntent(pending).build()
+      .setAutoCancel(true).setContentIntent(pending)
     if (FirebasePushManager.hasNotificationPermission(this)) {
-      // A stable ID updates an already displayed copy instead of creating duplicates.
-      NotificationManagerCompat.from(this).notify(requestCode, notification)
+      // Show text immediately; update the same notification with a large product image when downloaded.
+      NotificationManagerCompat.from(this).notify(requestCode, builder.build())
+      val imageUrl = message.notification?.imageUrl?.toString() ?: message.data["image_url"]
+      if (!imageUrl.isNullOrBlank() && imageUrl.startsWith("https://")) {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+          try {
+            val connection = URL(imageUrl).openConnection().apply {
+              connectTimeout = 6000
+              readTimeout = 6000
+            }
+            val bitmap = connection.getInputStream().use { BitmapFactory.decodeStream(it) }
+            if (bitmap != null && FirebasePushManager.hasNotificationPermission(this@JTBazarFirebaseMessagingService)) {
+              val imageNotification = NotificationCompat.Builder(this@JTBazarFirebaseMessagingService, channelId)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigPictureStyle().bigPicture(bitmap).bigLargeIcon(null as Bitmap?))
+                .setAutoCancel(true)
+                .setContentIntent(pending)
+                .build()
+              NotificationManagerCompat.from(this@JTBazarFirebaseMessagingService).notify(requestCode, imageNotification)
+            }
+          } catch (error: Exception) {
+            android.util.Log.w("JTBazarFCM", "Could not load push notification image", error)
+          }
+        }
+      }
     }
   }
 }
