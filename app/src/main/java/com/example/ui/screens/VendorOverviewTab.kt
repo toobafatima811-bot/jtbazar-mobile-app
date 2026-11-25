@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LocalShipping
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.ReceiptLong
@@ -93,6 +94,7 @@ fun VendorOverviewContent(
   onOpenOrders: () -> Unit = {},
   onOpenOrderDetails: (VendorOrderGroupUiModel) -> Unit = {},
   onOpenNotifications: () -> Unit = {},
+  onOpenGuide: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val numberFormatter = remember { NumberFormat.getIntegerInstance(Locale.US) }
@@ -113,6 +115,28 @@ fun VendorOverviewContent(
         isRefreshing = uiState.isRefreshing,
         onRefresh = onRefresh
       )
+    }
+
+    item {
+      AppCard(
+        onClick = onOpenGuide,
+        containerColor = VendorColors.CardWhite,
+        borderColor = VendorColors.Border.copy(alpha = 0.75f),
+        modifier = Modifier.testTag("vendor_dashboard_guide")
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(VendorSpacing.sm)
+        ) {
+          Icon(Icons.Rounded.Info, contentDescription = appText("Vendor guide", "وینڈر رہنمائی"), tint = VendorColors.NavyHeader, modifier = Modifier.size(22.dp))
+          Column(modifier = Modifier.weight(1f)) {
+            Text(appText("Vendor guide & product help", "وینڈر رہنمائی اور پروڈکٹ مدد"), fontWeight = FontWeight.Bold, color = VendorColors.TextPrimary)
+            Text(appText("Step-by-step instructions for every dashboard section and product field.", "ڈیش بورڈ کے ہر حصے اور پروڈکٹ فیلڈ کی مرحلہ وار ہدایات۔"), style = MaterialTheme.typography.bodySmall, color = VendorColors.TextSecondary)
+          }
+          Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = appText("Open guide", "رہنمائی کھولیں"), tint = VendorColors.TextSecondary)
+        }
+      }
     }
 
     // Optional live unread notifications banner
