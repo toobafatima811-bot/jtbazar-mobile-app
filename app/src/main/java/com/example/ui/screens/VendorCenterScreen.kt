@@ -198,6 +198,7 @@ fun VendorCenterScreen(
   var latitude by remember { mutableStateOf("") }
   var longitude by remember { mutableStateOf("") }
   var showMapPicker by remember { mutableStateOf(false) }
+  var showVendorGuide by remember { mutableStateOf(false) }
   var verificationPath by remember { mutableStateOf<String?>(null) }
   var frontPath by remember { mutableStateOf<String?>(null) }
   var backPath by remember { mutableStateOf<String?>(null) }
@@ -909,7 +910,8 @@ fun VendorCenterScreen(
                         selectedOrderId = group.orderId
                         activeSubScreen = "order_details"
                       },
-                      onOpenNotifications = onOpenNotifications
+                      onOpenNotifications = onOpenNotifications,
+                      onOpenGuide = { showVendorGuide = true }
                     )
                   }
 
@@ -1551,6 +1553,10 @@ fun VendorCenterScreen(
         }
       }
     }
+  }
+
+  if (showVendorGuide) {
+    VendorGuideDialog(onDismiss = { showVendorGuide = false })
   }
 
   if (showMapPicker) {
