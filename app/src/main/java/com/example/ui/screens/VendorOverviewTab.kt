@@ -121,7 +121,7 @@ fun VendorOverviewContent(
       AppCard(
         onClick = onOpenGuide,
         containerColor = VendorColors.CardWhite,
-        borderColor = VendorColors.Border.copy(alpha = 0.75f),
+        borderColor = VendorColors.BorderSubtle,
         modifier = Modifier.testTag("vendor_dashboard_guide")
       ) {
         Row(
