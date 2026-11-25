@@ -176,7 +176,7 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
   var vendorInitialTab by remember { mutableStateOf<VendorBottomTab?>(null) }
   var vendorInitialOrderId by remember { mutableStateOf<String?>(null) }
 
-  LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link, notificationTap?.audience) {
+  LaunchedEffect(notificationTap?.id, notificationTap?.kind, notificationTap?.link, notificationTap?.audience, products.size) {
     val tap = notificationTap ?: return@LaunchedEffect
     if (!tap.id.isNullOrBlank()) MarketplaceRepository.markNotificationRead(tap.id)
     backStack.clear()
@@ -186,6 +186,17 @@ fun MainApp(notificationTap: NotificationNavigation? = null) {
         vendorInitialTab = VendorBottomTab.ORDERS
         vendorInitialOrderId = tap.relatedOrderId
         currentScreen = AppScreen.VENDOR_CENTER
+      }
+      tap.link?.contains("/products/", ignoreCase = true) == true -> {
+        if (products.isEmpty()) return@LaunchedEffect
+        val productId = runCatching { android.net.Uri.parse(tap.link).getQueryParameter("product_id") }.getOrNull()
+        val product = products.firstOrNull { it.id == productId }
+        if (product != null) {
+          selectedProduct = product
+          currentScreen = AppScreen.PRODUCT_DETAIL
+        } else {
+          currentScreen = AppScreen.HOME
+        }
       }
       tap.kind.equals("order", ignoreCase = true) || !tap.relatedOrderId.isNullOrBlank() -> currentScreen = AppScreen.MY_ORDERS
       tap.kind.equals("account", ignoreCase = true) || tap.link?.contains("account", true) == true -> currentScreen = AppScreen.ACCOUNT
