@@ -228,15 +228,15 @@ fun ProductDetailScreen(
   val unitPrice = selectedVariant?.priceOverride ?: liveProduct.price
   val totalPrice = unitPrice * quantity
   val activeImageUrl = remember(galleryOverrideUrl, selectedVariant, liveProduct.imageUrl) {
-    galleryOverrideUrl
-      ?: selectedVariant?.imageUrl?.takeIf { it.isNotBlank() }
-      ?: liveProduct.imageUrl?.takeIf { it.isNotBlank() }
+    galleryOverrideUrl?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+      ?: selectedVariant?.imageUrl?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+      ?: liveProduct.imageUrl?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
   }
   val galleryImages = remember(liveProduct.imageUrl, liveProduct.imageUrls, liveProduct.variants) {
     buildList {
-      liveProduct.imageUrl?.takeIf { it.isNotBlank() }?.let { add(it) }
-      addAll(liveProduct.imageUrls.filter { it.isNotBlank() })
-      addAll(liveProduct.variants.mapNotNull { it.imageUrl?.takeIf(String::isNotBlank) })
+      liveProduct.imageUrl?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }?.let { add(it) }
+      addAll(liveProduct.imageUrls.map { it.trim() }.filter { it.isNotBlank() && !it.equals("null", ignoreCase = true) })
+      addAll(liveProduct.variants.mapNotNull { it.imageUrl?.trim()?.takeIf { url -> url.isNotBlank() && !url.equals("null", ignoreCase = true) } })
     }.distinct()
   }
   val hasVariants = liveProduct.variants.isNotEmpty() || liveProduct.variantIds.isNotEmpty()
@@ -430,14 +430,16 @@ fun ProductDetailScreen(
         ) {
           when {
             activeImageUrl != null -> {
-              AsyncImage(
-                model = rememberSizedImageRequest(data = activeImageUrl, widthPx = 900, heightPx = 900),
-                contentDescription = selectedVariant?.let { "${liveProduct.title} - ${it.optionValue}" } ?: liveProduct.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                  .fillMaxSize()
-                  .testTag("product_hero_image")
-              )
+              key(activeImageUrl) {
+                AsyncImage(
+                  model = rememberSizedImageRequest(data = activeImageUrl, widthPx = 900, heightPx = 900),
+                  contentDescription = selectedVariant?.let { "${liveProduct.title} - ${it.optionValue}" } ?: liveProduct.title,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("product_hero_image")
+                )
+              }
             }
             liveProduct.drawableRes != 0 -> {
               Image(
@@ -626,8 +628,13 @@ fun ProductDetailScreen(
                     else -> JTAmber
                   }
                   val stockText = when {
-                    selectedVariant != null && !selectedVariant.isAvailable -> appText("Out of Stock", "اسٹاک ختم")
-                    selectedVariant?.stockQuantity != null -> appText("${selectedVariant.stockQuantity} in stock", "${selectedVariant.stockQuantity} دستیاب")
+                    selectedVariant != null -> {
+                      if (selectedVariant.isAvailable && liveProduct.isAvailable) {
+                        appText("In Stock", "اسٹاک میں دستیاب")
+                      } else {
+                        appText("Out of Stock", "اسٹاک ختم")
+                      }
+                    }
                     else -> localizedStockBadgeText(liveProduct.inStockText)
                   }
                   Box(
@@ -641,7 +648,8 @@ fun ProductDetailScreen(
                     text = stockText,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = JTTextPrimary
+                    color = JTTextPrimary,
+                    modifier = Modifier.testTag("product_detail_stock_badge")
                   )
                 }
               }
@@ -669,61 +677,7 @@ fun ProductDetailScreen(
         }
       }
 
-      // Seller information is loaded from the live public shop directory.
-      if (liveProduct.sellerId != null && sellerShop != null) {
-        item {
-          Spacer(modifier = Modifier.height(14.dp))
-          Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = JTCardBg,
-            border = androidx.compose.foundation.BorderStroke(1.dp, JTBorder),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-          ) {
-            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-              Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (!sellerShop.logoUrl.isNullOrBlank()) {
-                  AsyncImage(
-                    model = rememberSizedImageRequest(data = sellerShop.logoUrl, widthPx = 160, heightPx = 160),
-                    contentDescription = sellerShop.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp))
-                  )
-                } else {
-                  Box(
-                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(JTSurfaceVariant),
-                    contentAlignment = Alignment.Center
-                  ) { Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTTextSecondary) }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(sellerShop.name, fontWeight = FontWeight.Bold, color = JTTextPrimary, maxLines = 1)
-                    if (sellerShop.isVerified) {
-                      Spacer(Modifier.width(4.dp))
-                      Icon(Icons.Filled.Verified, contentDescription = appText("Verified shop", "تصدیق شدہ دکان"), tint = JTOrange, modifier = Modifier.size(16.dp))
-                    }
-                  }
-                  if (sellerShop.city.isNotBlank()) {
-                    Text(sellerShop.city, style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
-                  }
-                }
-                TextButton(onClick = { onVisitShop(sellerShop.id) }) { Text(appText("Visit Shop", "دکان دیکھیں"), color = JTOrange) }
-              }
-              if (sellerShop.address.isNotBlank()) {
-                HorizontalDivider(color = JTBorder)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Icon(Icons.Filled.LocationOn, contentDescription = null, tint = JTOrange, modifier = Modifier.size(16.dp))
-                  Spacer(Modifier.width(8.dp))
-                  Text(sellerShop.address, style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
-                }
-              }
-              if (sellerShop.description.isNotBlank()) {
-                Text(sellerShop.description, style = MaterialTheme.typography.bodySmall, color = JTTextSecondary)
-              }
-            }
-          }
-        }
-      }
+      // Variants are placed directly below title & price so options can be selected immediately.
 
       // 8. Product Variants (All option types; starts unselected)
       if (liveProduct.variants.isNotEmpty()) {
@@ -735,7 +689,8 @@ fun ProductDetailScreen(
           Column(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 16.dp),
+              .padding(horizontal = 16.dp)
+              .testTag("product_variants_section"),
             verticalArrangement = Arrangement.spacedBy(12.dp)
           ) {
             Row(
@@ -1016,7 +971,7 @@ fun ProductDetailScreen(
       }
 
       // 11. Product details and real customer reviews
-      if (liveProduct.craftStory.isNotBlank() || liveProduct.highlights.isNotEmpty()) item {
+      if (liveProduct.craftStory.isNotBlank() || liveProduct.highlights.isNotEmpty()) item(key = "product_description_section") {
         Spacer(modifier = Modifier.height(18.dp))
 
         // Accordion 1: Product Highlights & Craft Story
@@ -1027,6 +982,7 @@ fun ProductDetailScreen(
           modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .testTag("product_description_section")
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -1091,6 +1047,81 @@ fun ProductDetailScreen(
                     )
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+
+      // Vendor summary card shown at the end of the product description without shop description or location.
+      if (liveProduct.sellerId != null && sellerShop != null) {
+        item(key = "product_vendor_section") {
+          Spacer(modifier = Modifier.height(14.dp))
+          Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = JTCardBg,
+            border = BorderStroke(1.dp, JTBorder),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp)
+              .testTag("product_vendor_section")
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              if (!sellerShop.logoUrl.isNullOrBlank()) {
+                AsyncImage(
+                  model = rememberSizedImageRequest(data = sellerShop.logoUrl, widthPx = 160, heightPx = 160),
+                  contentDescription = sellerShop.name,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp))
+                )
+              } else {
+                Box(
+                  modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(JTSurfaceVariant),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(Icons.Filled.Storefront, contentDescription = null, tint = JTTextSecondary)
+                }
+              }
+              Spacer(Modifier.width(12.dp))
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = appText("Sold by", "فروخت کنندہ"),
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Medium,
+                  color = JTTextSecondary
+                )
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Text(
+                    text = sellerShop.name,
+                    fontWeight = FontWeight.Bold,
+                    color = JTTextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                  )
+                  if (sellerShop.isVerified) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                      imageVector = Icons.Filled.Verified,
+                      contentDescription = appText("Verified shop", "تصدیق شدہ دکان"),
+                      tint = JTOrange,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  }
+                }
+              }
+              Spacer(Modifier.width(8.dp))
+              TextButton(
+                onClick = { onVisitShop(sellerShop.id) },
+                modifier = Modifier.heightIn(min = 48.dp)
+              ) {
+                Text(appText("Visit Shop", "دکان دیکھیں"), color = JTOrange, fontWeight = FontWeight.Bold)
               }
             }
           }

@@ -704,4 +704,116 @@ class AuditFeaturesVerificationTest {
     composeTestRule.onNodeWithTag("public_shop_description").assertTextContains("Line 3: Custom bridal crockery sets", substring = true)
     composeTestRule.onNodeWithText("About this shop").assertIsDisplayed()
   }
+
+  @Test
+  fun productDetailPlacesVariantsAboveDescriptionVendorAtEndHidesShopDescLocationAndStockQuantityAndLoadsVariantImage() = runBlocking {
+    val requestedHeroImages = CopyOnWriteArrayList<String>()
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val trackingLoader = ImageLoader.Builder(context)
+      .components {
+        add(coil.intercept.Interceptor { chain ->
+          val widthPx = (chain.request.sizeResolver as? coil.size.SizeResolver)?.let { 0 } ?: 0
+          chain.request.data?.toString()?.let { requestedHeroImages.add(it) }
+          val bitmap = Bitmap.createBitmap(120, 120, Bitmap.Config.ARGB_8888)
+          SuccessResult(
+            drawable = BitmapDrawable(context.resources, bitmap),
+            request = chain.request,
+            dataSource = DataSource.MEMORY
+          )
+        })
+      }
+      .build()
+    Coil.setImageLoader(trackingLoader)
+
+    val (server, _) = startStubServer { _, target, _ ->
+      when {
+        target.startsWith("/rest/v1/rpc/list_public_shops") -> 200 to JSONArray().put(
+          JSONObject()
+            .put("id", "seller-audit-1")
+            .put("shop_name", "Multan Tech Hub")
+            .put("slug", JSONObject.NULL)
+            .put("description", "Secret internal shop description should not show on product page")
+            .put("shop_location_label", JSONObject.NULL)
+            .put("is_verified", true)
+            .put("product_count", 12)
+        ).toString()
+        else -> 200 to "[]"
+      }
+    }
+    SupabaseConfig.projectUrlOverride = "http://127.0.0.1:${server.localPort}"
+    SupabaseApiService.clearCaches()
+
+    val shops = SupabaseApiService.fetchShops(forceRefresh = true).getOrThrow()
+    assertEquals(1, shops.size)
+    assertEquals("", shops.first().city)
+    assertEquals("", shops.first().address)
+    MarketplaceRepository.refreshShops(force = true)
+    composeTestRule.waitUntil(timeoutMillis = 3_000) {
+      MarketplaceRepository.shops.value.any { it.id == "seller-audit-1" }
+    }
+
+    val v256 = sampleVariantProduct().variants[1].copy(stockQuantity = 100)
+    val productWithHundredStock = sampleVariantProduct().copy(
+      variants = listOf(sampleVariantProduct().variants[0].copy(stockQuantity = 100), v256, sampleVariantProduct().variants[2])
+    )
+
+    composeTestRule.setContent {
+      JTBazarTheme(darkTheme = false) {
+        ProductDetailScreen(
+          product = productWithHundredStock,
+          onBackClick = {},
+          onCartClick = {},
+          onBuyNowClick = {},
+          onAccountClick = {},
+          onVisitShop = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. Initial stock badge never contains numeric stock quantity
+    composeTestRule.onNodeWithTag("product_detail_stock_badge").assertTextContains("In Stock")
+
+    // 2. Variants section appears above Product Description (compare in the same viewport)
+    composeTestRule.onNodeWithTag("product_detail_lazy_list")
+      .performScrollToNode(hasTestTag("product_description_section"))
+    composeTestRule.waitForIdle()
+    val variantsBounds = composeTestRule.onNodeWithTag("product_variants_section").fetchSemanticsNode().boundsInRoot
+    val descriptionBoundsAtMid = composeTestRule.onNodeWithTag("product_description_section").fetchSemanticsNode().boundsInRoot
+    assertTrue(
+      "Variants must render above description (variants.top=${variantsBounds.top}, desc.top=${descriptionBoundsAtMid.top})",
+      variantsBounds.top < descriptionBoundsAtMid.top
+    )
+
+    // And Vendor card appears at the end AFTER Product Description (compare in the same viewport)
+    composeTestRule.onNodeWithTag("product_detail_lazy_list")
+      .performScrollToNode(hasTestTag("product_vendor_section"))
+    composeTestRule.waitForIdle()
+    val descriptionBoundsAtBottom = composeTestRule.onNodeWithTag("product_description_section").fetchSemanticsNode().boundsInRoot
+    val vendorBounds = composeTestRule.onNodeWithTag("product_vendor_section").fetchSemanticsNode().boundsInRoot
+    assertTrue(
+      "Vendor card must render after description (desc.bottom=${descriptionBoundsAtBottom.bottom}, vendor.top=${vendorBounds.top})",
+      vendorBounds.top >= descriptionBoundsAtBottom.bottom - 1f
+    )
+
+    // 3. Shop description and null location must NOT appear on ProductDetailScreen
+    composeTestRule.onNodeWithText("Secret internal shop description", substring = true).assertDoesNotExist()
+    composeTestRule.onNodeWithText("null", ignoreCase = true).assertDoesNotExist()
+    composeTestRule.onNodeWithTag("product_vendor_section").assertIsDisplayed()
+
+    // 4. Selecting 256GB variant loads its image and still hides numeric stock count ("100 in stock")
+    composeTestRule.onNodeWithTag("product_detail_lazy_list")
+      .performScrollToNode(hasTestTag("variant_option_${v256.id}"))
+    composeTestRule.onNodeWithTag("variant_option_${v256.id}").performClick()
+    composeTestRule.waitForIdle()
+
+    assertTrue(
+      "Expected Coil to load selected variant image, got: $requestedHeroImages",
+      requestedHeroImages.any { it == "https://cdn.example.com/phone-256.jpg" }
+    )
+    composeTestRule.onNodeWithTag("product_detail_lazy_list")
+      .performScrollToNode(hasTestTag("product_detail_stock_badge"))
+    composeTestRule.onNodeWithTag("product_detail_stock_badge").assertTextContains("In Stock")
+    composeTestRule.onNodeWithText("100 in stock", substring = true).assertDoesNotExist()
+  }
 }
